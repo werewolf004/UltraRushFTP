@@ -1,0 +1,21 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+*.pdb
+
+# Binaires tiers : ne pas redistribuer (archives et DLL compilées)
+/thirdparty_source/**/*.zip
+/thirdparty_source/**/*.dll
+/thirdparty_source/**/*.exe
+
+# Éditeurs / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Données locales de l'application (sites, mots de passe, logs)
+*.log
+/config.local.*
