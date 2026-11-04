@@ -1,0 +1,16 @@
+[package]
+name = "urftp-cli"
+description = "Ligne de commande d'UltraRushFTP."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "urftp"
+path = "src/main.rs"
+
+[dependencies]
+urftp-core.workspace = true
+urftp-proto.workspace = true

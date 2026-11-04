@@ -1,0 +1,15 @@
+[package]
+name = "rushmirc"
+description = "DLL mIRC compatible rushmirc.dll pour piloter UltraRushFTP."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "rushmirc"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+urftp-ipc.workspace = true

@@ -1,0 +1,18 @@
+[package]
+name = "urftp-gui"
+description = "Interface graphique Windows d'UltraRushFTP (onglets, panneaux, file d'attente)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "UltraRushFTP"
+path = "src/main.rs"
+
+[dependencies]
+urftp-core.workspace = true
+urftp-proto.workspace = true
+urftp-script.workspace = true
+urftp-ipc.workspace = true

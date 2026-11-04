@@ -1,0 +1,11 @@
+[package]
+name = "urftp-proto"
+description = "Moteurs de protocole d'UltraRushFTP : FTP, FTPS, SFTP et FXP site à site."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+urftp-core.workspace = true

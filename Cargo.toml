@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/urftp-core",
+    "crates/urftp-proto",
+    "crates/urftp-script",
+    "crates/urftp-ipc",
+    "crates/rushmirc",
+    "crates/urftp-cli",
+    "crates/urftp-gui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["werewolf004"]
+repository = "https://github.com/werewolf004/UltraRushFTP"
+
+[workspace.dependencies]
+urftp-core = { path = "crates/urftp-core" }
+urftp-proto = { path = "crates/urftp-proto" }
+urftp-script = { path = "crates/urftp-script" }
+urftp-ipc = { path = "crates/urftp-ipc" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
