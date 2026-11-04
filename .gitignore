@@ -8,6 +8,10 @@
 /thirdparty_source/**/*.dll
 /thirdparty_source/**/*.exe
 
+# Applications FTPRush d'origine (référence locale uniquement, non redistribuables)
+/thirdparty_source/ftprushv2/
+/thirdparty_source/FTPRushv3/
+
 # Éditeurs / OS
 .vscode/
 .idea/
