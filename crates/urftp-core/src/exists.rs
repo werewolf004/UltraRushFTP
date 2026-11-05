@@ -1,21 +1,21 @@
-//! Règles « fichier existant » : que faire quand la cible existe déjà, selon qu'elle est
-//! plus petite, de même taille ou plus grande que la source.
+//! "Existing file" rules: what to do when the target already exists, depending on whether
+//! it is smaller than, the same size as, or larger than the source.
 
-/// Action configurée pour un cas.
+/// Action configured for one case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ExistsAction {
     Resume,
     Skip,
     Rename,
     Overwrite,
-    /// Demander à l'utilisateur (l'élément attend sa décision).
+    /// Ask the user (the item waits for a decision).
     Ask,
 }
 
-/// Décision pour un transfert donné.
+/// Decision for a given transfer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExistsDecision {
-    /// Transférer à partir de cet octet (0 = depuis le début, en écrasant).
+    /// Transfer from this byte (0 = from the start, overwriting).
     Transfer {
         offset: u64,
     },
@@ -30,7 +30,7 @@ pub struct ExistsRules {
     pub smaller: ExistsAction,
     pub same: ExistsAction,
     pub larger: ExistsAction,
-    /// Si la reprise échoue (serveur sans `REST`…), recommencer depuis le début.
+    /// When resuming fails (server without `REST`...), start over from the beginning.
     pub overwrite_if_resume_fails: bool,
 }
 
@@ -41,13 +41,13 @@ impl Default for ExistsRules {
 }
 
 impl ExistsRules {
-    /// `source` / `target` : tailles connues ; `target = None` si la cible n'existe pas.
+    /// `source` / `target`: known sizes; `target = None` when the target does not exist.
     pub fn decide(&self, source: Option<u64>, target: Option<u64>) -> ExistsDecision {
         let Some(t) = target else {
             return ExistsDecision::Transfer { offset: 0 };
         };
         let Some(s) = source else {
-            // Taille source inconnue : on ne peut pas comparer, on remplace.
+            // Unknown source size: nothing to compare, replace.
             return ExistsDecision::Transfer { offset: 0 };
         };
         let action = match t.cmp(&s) {
@@ -57,7 +57,7 @@ impl ExistsRules {
         };
         match action {
             ExistsAction::Resume if t < s => ExistsDecision::Transfer { offset: t },
-            // Reprendre un fichier complet ou plus grand n'a pas de sens.
+            // Resuming a complete or larger file makes no sense.
             ExistsAction::Resume if t == s => ExistsDecision::Skip,
             ExistsAction::Resume | ExistsAction::Overwrite => ExistsDecision::Transfer { offset: 0 },
             ExistsAction::Skip => ExistsDecision::Skip,
@@ -67,7 +67,7 @@ impl ExistsRules {
     }
 }
 
-/// Nom renommé : `film.mkv` → `film (1).mkv` ; `README` → `README (1)`.
+/// Renamed name: `film.mkv` → `film (1).mkv`; `README` → `README (1)`.
 pub fn renamed(name: &str, n: u32) -> String {
     match name.rfind('.') {
         Some(i) if i > 0 => format!("{} ({n}){}", &name[..i], &name[i..]),

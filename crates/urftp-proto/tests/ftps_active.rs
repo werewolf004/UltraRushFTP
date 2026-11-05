@@ -13,7 +13,7 @@ fn config(security: Security) -> FtpConfig {
     FtpConfig { security, ..FtpConfig::default() }
 }
 
-/// Envoi, listing et téléchargement complets ; renvoie le client pour d'autres vérifications.
+/// Full upload, listing and download; returns the client for further checks.
 async fn roundtrip(srv: &MockServer, cfg: FtpConfig) -> FtpClient {
     let mut c = FtpClient::connect("127.0.0.1", srv.addr.port(), cfg).await.unwrap();
     c.login("test", "secret").await.unwrap();
@@ -53,7 +53,7 @@ async fn implicit_tls() {
 
 #[tokio::test]
 async fn data_channels_reuse_the_tls_session() {
-    // Comme vsftpd avec require_ssl_reuse=YES.
+    // Like vsftpd with require_ssl_reuse=YES.
     let srv = MockServer::start(MockConfig { tls: MockTls::Explicit, require_session_reuse: true, ..MockConfig::default() }).await;
     roundtrip(&srv, config(Security::Explicit(tls(TlsVerify::AcceptAny)))).await;
     let channels = srv.data_channels();
@@ -80,7 +80,7 @@ async fn pinned_fingerprint_accepts_only_the_right_certificate() {
     let err = FtpClient::connect("127.0.0.1", srv.addr.port(), config(Security::Explicit(tls(TlsVerify::Fingerprint(wrong)))))
         .await
         .err()
-        .expect("le mauvais certificat doit être refusé");
+        .expect("the wrong certificate must be refused");
     match err {
         FtpError::Certificate { fingerprint, .. } => assert_eq!(Some(fingerprint), srv.fingerprint),
         other => panic!("erreur inattendue : {other}"),
@@ -93,7 +93,7 @@ async fn system_verification_rejects_self_signed_and_reports_fingerprint() {
     let err = FtpClient::connect("127.0.0.1", srv.addr.port(), config(Security::Implicit(tls(TlsVerify::System))))
         .await
         .err()
-        .expect("un certificat auto-signé ne doit pas passer la vérification système");
+        .expect("a self-signed certificate must not pass the system verification");
     match err {
         FtpError::Certificate { fingerprint, reason } => {
             assert_eq!(Some(fingerprint), srv.fingerprint);
@@ -109,7 +109,7 @@ async fn auth_tls_refused_by_plain_server() {
     let err = FtpClient::connect("127.0.0.1", srv.addr.port(), config(Security::Explicit(tls(TlsVerify::AcceptAny))))
         .await
         .err()
-        .expect("AUTH TLS doit échouer");
+        .expect("AUTH TLS must fail");
     assert_eq!(err.reply_code(), Some(502));
     let cmds = srv.received();
     assert_eq!(cmds, ["AUTH TLS", "AUTH SSL"]);
@@ -138,8 +138,8 @@ async fn active_mode_port_range_and_external_ip() {
     let n: Vec<u16> = port_cmd[5..].split(',').map(|s| s.parse().unwrap()).collect();
     assert!((50_100..=50_200).contains(&(n[4] * 256 + n[5])), "{port_cmd}");
 
-    // L'IP externe annoncée est envoyée telle quelle (ici volontairement injoignable : seul
-    // le texte de la commande est vérifié).
+    // The announced external IP is sent as is (deliberately unreachable here: only the
+    // text of the command is checked).
     let mut c = FtpClient::connect(
         "127.0.0.1",
         srv.addr.port(),

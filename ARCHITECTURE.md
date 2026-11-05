@@ -13,10 +13,11 @@ référence que pour les types de connexion.
 | `urftp-script` | Interpréteur du Pascal Script de FTPRush (`RushApp.*`, constantes `RS_*`) |
 | `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : protocole rushmirc côté application (fenêtre `TfmRush`, mémoire `FTPRush`, `WM_COPYDATA`), DPAPI, exports de la DLL (fonctionnalité `mirc-dll`). Chaque bloc `unsafe` porte un commentaire `SAFETY:` (lint refusé sinon) |
 | `rushmirc` | DLL mIRC compatible (`Invoke`, `RushScript`, `RushCommand`, callbacks) : réexporte `urftp_sys::mirc`, sans code propre |
+| `urftp-i18n` | Traductions de l'interface et de la CLI (catalogues `locales/en.json`, `locales/fr.json`, macro `t!`), langue de Windows par défaut ; tests de cohérence des catalogues et des clés utilisées |
 | `urftp-cli` | Ligne de commande `urftp` |
 | `urftp-gui` | Interface Windows `UltraRushFTP.exe` |
 
-Dépendances : `gui` → `core`, `proto`, `script`, `sys` ; `cli` → `core`, `proto` ; `core` → `sys`
+Dépendances : `gui` → `core`, `proto`, `script`, `sys`, `i18n` ; `cli` → `core`, `proto`, `i18n` ; `core` → `sys`
 (DPAPI) ; `rushmirc` → `sys` seulement (la DLL reste légère et ne charge pas le moteur).
 
 Règles de qualité imposées par le compilateur (`[workspace.lints]`) : `unsafe_code = "forbid"`

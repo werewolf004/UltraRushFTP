@@ -1,14 +1,14 @@
-//! Serveur Ident (RFC 1413).
+//! Ident server (RFC 1413).
 //!
-//! Beaucoup de serveurs FTP (glftpd notamment) interrogent le port 113 du client au moment
-//! de la connexion. Le serveur répond avec le nom enregistré pour le site interrogé, ou avec
-//! le nom global (`URUSHFTP` par défaut).
+//! Many FTP servers (glftpd in particular) query port 113 of the client when it connects.
+//! The server answers with the name registered for the queried site, or with the global
+//! name (`URUSHFTP` by default).
 //!
-//! Requête : `<port local du client FTP> , <port du serveur FTP>`
-//! Réponse : `<même paire> : USERID : UNIX : <nom>`.
+//! Request: `<local port of the FTP client> , <port of the FTP server>`
+//! Reply: `<same pair> : USERID : UNIX : <name>`.
 //!
-//! L'option « seulement pendant la connexion » de la v2 revient à démarrer le serveur avant
-//! la connexion et à le libérer (drop) une fois le login terminé.
+//! The v2 option "only while connecting" means starting the server before the
+//! connection and dropping it once the login is done.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -21,19 +21,19 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 
-/// Longueur maximale d'une requête (RFC 1413 : 1000 caractères).
+/// Maximum length of a request (RFC 1413: 1000 characters).
 const MAX_QUERY: u64 = 1000;
-/// Délai maximal d'une connexion Ident.
+/// Maximum duration of an Ident connection.
 const CONN_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Réglages du serveur Ident.
+/// Settings of the Ident server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentConfig {
-    /// Nom répondu quand le site n'a pas de nom propre.
+    /// Name answered when the site has no name of its own.
     pub name: String,
-    /// Système annoncé (« UNIX » sauf besoin particulier).
+    /// Announced system ("UNIX" unless needed otherwise).
     pub system: String,
-    /// Adresse d'écoute (port TCP 113 par défaut ; à changer derrière un NAT).
+    /// Listen address (TCP port 113 by default; change it behind NAT).
     pub bind: SocketAddr,
 }
 
@@ -49,14 +49,14 @@ impl Default for IdentConfig {
 
 type Registry = Arc<Mutex<HashMap<(IpAddr, u16), String>>>;
 
-/// Serveur Ident en cours d'exécution ; il s'arrête quand on le libère.
+/// Running Ident server; it stops when dropped.
 pub struct IdentServer {
     local: SocketAddr,
     registry: Registry,
     task: JoinHandle<()>,
 }
 
-/// Nom propre à un site, actif tant que cette valeur existe.
+/// Name specific to a site, active as long as this value exists.
 pub struct IdentRegistration {
     registry: Registry,
     key: (IpAddr, u16),
@@ -90,8 +90,8 @@ impl IdentServer {
         self.local
     }
 
-    /// Répond `name` aux requêtes venant de `server_ip` pour le port FTP `server_port`.
-    /// À appeler avant la connexion : le serveur FTP interroge dès l'ouverture TCP.
+    /// Answers `name` to requests coming from `server_ip` for the FTP port `server_port`.
+    /// Call it before connecting: the FTP server queries as soon as TCP is open.
     pub fn register(&self, server_ip: IpAddr, server_port: u16, name: impl Into<String>) -> IdentRegistration {
         let key = (canonical(server_ip), server_port);
         self.registry.lock().insert(key, sanitize(&name.into()));
@@ -121,7 +121,7 @@ async fn serve(stream: TcpStream, peer: IpAddr, reg: Registry, config: Arc<Ident
     }
 }
 
-/// Construit la réponse à une requête Ident.
+/// Builds the reply to an Ident request.
 fn answer(query: &str, peer: IpAddr, reg: &Registry, config: &IdentConfig) -> String {
     let ports: Option<(u16, u16)> = query.split_once(',').and_then(|(a, b)| {
         let a: u16 = a.trim().parse().ok()?;
@@ -135,7 +135,7 @@ fn answer(query: &str, peer: IpAddr, reg: &Registry, config: &IdentConfig) -> St
     format!("{local} , {remote} : USERID : {} : {name}", sanitize(&config.system))
 }
 
-/// Une IPv4 vue en IPv6 (`::ffff:a.b.c.d`) est ramenée à IPv4.
+/// An IPv4 address seen as IPv6 (`::ffff:a.b.c.d`) is mapped back to IPv4.
 fn canonical(ip: IpAddr) -> IpAddr {
     match ip {
         IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(ip, IpAddr::V4),
@@ -143,7 +143,7 @@ fn canonical(ip: IpAddr) -> IpAddr {
     }
 }
 
-/// Retire ce qui casserait le format de réponse (`:`, `,`, fins de ligne).
+/// Removes what would break the reply format (`:`, `,`, line ends).
 fn sanitize(s: &str) -> String {
     let out: String = s.chars().filter(|c| !matches!(c, ':' | ',' | '\r' | '\n')).collect();
     let out = out.trim();

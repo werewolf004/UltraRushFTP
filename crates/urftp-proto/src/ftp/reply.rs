@@ -1,4 +1,4 @@
-//! Lecture des réponses du serveur FTP (RFC 959 § 4.2), y compris multi-lignes.
+//! Reading FTP server replies (RFC 959 § 4.2), multi-line ones included.
 
 use std::fmt;
 
@@ -6,10 +6,10 @@ use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt};
 
 use super::FtpError;
 
-/// Nombre maximal de lignes acceptées dans une réponse multi-lignes.
+/// Maximum number of lines accepted in a multi-line reply.
 const MAX_REPLY_LINES: usize = 10_000;
 
-/// Réponse complète du serveur : code à trois chiffres et lignes brutes (sans fin de ligne).
+/// Complete server reply: three-digit code and raw lines (without line ends).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reply {
     pub code: u16,
@@ -17,33 +17,33 @@ pub struct Reply {
 }
 
 impl Reply {
-    /// 1xx : réponse préliminaire positive (le transfert commence).
+    /// 1xx: positive preliminary reply (the transfer starts).
     pub fn is_preliminary(&self) -> bool {
         (100..200).contains(&self.code)
     }
-    /// 2xx : commande terminée avec succès.
+    /// 2xx: command completed successfully.
     pub fn is_completion(&self) -> bool {
         (200..300).contains(&self.code)
     }
-    /// 3xx : la commande attend une suite (ex. `331` après `USER`).
+    /// 3xx: the command expects more (e.g. `331` after `USER`).
     pub fn is_intermediate(&self) -> bool {
         (300..400).contains(&self.code)
     }
-    /// 4xx : échec temporaire.
+    /// 4xx: transient failure.
     pub fn is_transient_negative(&self) -> bool {
         (400..500).contains(&self.code)
     }
-    /// 5xx : échec définitif.
+    /// 5xx: permanent failure.
     pub fn is_permanent_negative(&self) -> bool {
         (500..600).contains(&self.code)
     }
 
-    /// Texte de la dernière ligne, sans le code.
+    /// Text of the last line, without the code.
     pub fn text(&self) -> &str {
         self.lines.last().map(|l| strip_code(l)).unwrap_or("")
     }
 
-    /// Texte complet, une ligne par ligne de la réponse, sans les codes.
+    /// Full text, one line per reply line, without the codes.
     pub fn message(&self) -> String {
         self.lines.iter().map(|l| strip_code(l)).collect::<Vec<_>>().join("\n")
     }
@@ -59,7 +59,7 @@ fn strip_code(line: &str) -> &str {
     if parse_code(line).is_some() { line.get(4..).unwrap_or("") } else { line.trim_start() }
 }
 
-/// Code en tête de ligne si celle-ci a la forme `ddd`, `ddd ` ou `ddd-`.
+/// Code at the start of the line when it has the form `ddd`, `ddd ` or `ddd-`.
 fn parse_code(line: &str) -> Option<u16> {
     let b = line.as_bytes();
     if b.len() < 3 || !b[..3].iter().all(u8::is_ascii_digit) {
@@ -71,7 +71,7 @@ fn parse_code(line: &str) -> Option<u16> {
     line[..3].parse().ok()
 }
 
-/// Lit une ligne terminée par `\n` (au plus `max_len` octets), sans `\r\n`.
+/// Reads a line ending with `\n` (at most `max_len` bytes), without `\r\n`.
 pub(crate) async fn read_line<R>(r: &mut R, max_len: usize) -> Result<String, FtpError>
 where
     R: AsyncBufRead + Unpin + ?Sized,
@@ -83,7 +83,7 @@ where
     }
     if buf.last() != Some(&b'\n') {
         return Err(if buf.len() >= max_len {
-            FtpError::Protocol(format!("ligne de réponse trop longue (> {max_len} octets)"))
+            FtpError::Protocol(format!("reply line too long (> {max_len} bytes)"))
         } else {
             FtpError::Closed
         });
@@ -94,14 +94,14 @@ where
     Ok(String::from_utf8_lossy(&buf).into_owned())
 }
 
-/// Lit une réponse complète. Une réponse multi-lignes commence par `ddd-` et se termine
-/// par une ligne `ddd ` portant le même code.
+/// Reads a complete reply. A multi-line reply starts with `ddd-` and ends with a
+/// `ddd ` line carrying the same code.
 pub(crate) async fn read_reply<R>(r: &mut R, max_line: usize) -> Result<Reply, FtpError>
 where
     R: AsyncBufRead + Unpin + ?Sized,
 {
     let first = read_line(r, max_line).await?;
-    let code = parse_code(&first).ok_or_else(|| FtpError::Protocol(format!("réponse invalide : {first:?}")))?;
+    let code = parse_code(&first).ok_or_else(|| FtpError::Protocol(format!("invalid reply: {first:?}")))?;
     let multi = first.as_bytes().get(3) == Some(&b'-');
     let mut lines = vec![first];
     if multi {
@@ -114,7 +114,7 @@ where
                 break;
             }
             if lines.len() > MAX_REPLY_LINES {
-                return Err(FtpError::Protocol("réponse multi-lignes trop longue".into()));
+                return Err(FtpError::Protocol("multi-line reply too long".into()));
             }
         }
     }
@@ -140,7 +140,7 @@ mod tests {
 
     #[tokio::test]
     async fn multi_line_with_inner_codes() {
-        let r = parse("211-Features:\r\n MDTM\r\n211-ceci n'est pas la fin\r\n PRET\r\n211 End\r\n").await.unwrap();
+        let r = parse("211-Features:\r\n MDTM\r\n211-this is not the end\r\n PRET\r\n211 End\r\n").await.unwrap();
         assert_eq!(r.code, 211);
         assert_eq!(r.lines.len(), 5);
         assert_eq!(r.text(), "End");

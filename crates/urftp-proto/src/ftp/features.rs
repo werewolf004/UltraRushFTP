@@ -1,17 +1,17 @@
-//! Capacités annoncées par le serveur via `FEAT` (RFC 2389).
+//! Capabilities announced by the server with `FEAT` (RFC 2389).
 
 use std::collections::HashMap;
 
 use super::Reply;
 
-/// Ensemble des fonctionnalités annoncées (`MLST`, `EPSV`, `PRET`, `AUTH`, `SSCN`, `CPSV`…).
+/// Set of announced features (`MLST`, `EPSV`, `PRET`, `AUTH`, `SSCN`, `CPSV`...).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Features {
     map: HashMap<String, String>,
 }
 
 impl Features {
-    /// Analyse une réponse `211` à `FEAT` : chaque ligne intermédiaire est `NOM [paramètres]`.
+    /// Parses a `211` reply to `FEAT`: every intermediate line is `NAME [parameters]`.
     pub fn parse(reply: &Reply) -> Self {
         let mut map = HashMap::new();
         let n = reply.lines.len();
@@ -28,12 +28,12 @@ impl Features {
         Self { map }
     }
 
-    /// Le serveur annonce-t-il cette fonctionnalité (nom insensible à la casse) ?
+    /// Does the server announce this feature (case-insensitive name)?
     pub fn has(&self, name: &str) -> bool {
         self.map.contains_key(&name.to_ascii_uppercase())
     }
 
-    /// Paramètres annoncés pour une fonctionnalité (ex. `TLS` pour `AUTH`).
+    /// Parameters announced for a feature (e.g. `TLS` for `AUTH`).
     pub fn param(&self, name: &str) -> Option<&str> {
         self.map.get(&name.to_ascii_uppercase()).map(String::as_str)
     }

@@ -19,7 +19,7 @@ async fn login(srv: &MockServer, cfg: FtpConfig) -> FtpClient {
     c
 }
 
-/// Deux serveurs, un fichier sur la source.
+/// Two servers, one file on the source.
 async fn pair(src_cfg: MockConfig, dst_cfg: MockConfig, data: &[u8]) -> (MockServer, MockServer) {
     let src = MockServer::start(src_cfg).await;
     let dst = MockServer::start(dst_cfg).await;
@@ -89,13 +89,13 @@ async fn secure_fxp_with_sscn() {
     assert!(out.encrypted);
     assert_eq!(dst_file(&d), data);
     let cmds = s.received();
-    let on = cmds.iter().position(|l| l == "SSCN ON").expect("SSCN ON sur la source passive");
-    let off = cmds.iter().position(|l| l == "SSCN OFF").expect("SSCN OFF après le transfert");
+    let on = cmds.iter().position(|l| l == "SSCN ON").expect("SSCN ON on the passive source");
+    let off = cmds.iter().position(|l| l == "SSCN OFF").expect("SSCN OFF after the transfer");
     assert!(on < off);
     assert_eq!(s.stats.lock().unwrap().tls_client_channels, 1);
     assert!(d.data_channels().iter().all(|(enc, _)| *enc));
 
-    // Après le FXP, un téléchargement normal depuis la source fonctionne (SSCN désactivé).
+    // After the FXP, a normal download from the source works (SSCN disabled).
     let mut back = Vec::new();
     a.retr("/pub/release.rar", 0, &mut back, |_| {}).await.unwrap();
     assert_eq!(back, data);
@@ -123,13 +123,13 @@ async fn no_secure_method_fails_or_falls_back_to_clear() {
 
     let err = fxp(&mut a, "/pub/release.rar", &mut b, "/incoming/release.rar", &FxpOptions::default()).await.unwrap_err();
     assert_eq!(err.reply_code(), Some(502), "{err}");
-    assert!(a.is_data_protected() && b.is_data_protected(), "PROT P restauré après l'échec");
+    assert!(a.is_data_protected() && b.is_data_protected(), "PROT P restored after the failure");
 
     let opts = FxpOptions { allow_clear_fallback: true, ..FxpOptions::default() };
     let out = fxp(&mut a, "/pub/release.rar", &mut b, "/incoming/release.rar", &opts).await.unwrap();
     assert!(!out.encrypted);
     assert_eq!(dst_file(&d), data);
-    assert!(a.is_data_protected() && b.is_data_protected(), "PROT P restauré après le transfert");
+    assert!(a.is_data_protected() && b.is_data_protected(), "PROT P restored after the transfer");
     assert!(s.received().iter().any(|l| l == "PROT C"));
 }
 
@@ -179,7 +179,7 @@ async fn missing_source_file_aborts_destination() {
     assert!(d.received().iter().any(|l| l == "ABOR"));
     a.noop().await.unwrap();
     b.noop().await.unwrap();
-    // Les connexions restent synchronisées : un second FXP réussit.
+    // The connections stay in sync: a second FXP succeeds.
     fxp(&mut a, "/pub/release.rar", &mut b, "/incoming/release.rar", &FxpOptions::default()).await.unwrap();
     assert_eq!(dst_file(&d), b"x");
 }

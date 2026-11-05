@@ -1,8 +1,8 @@
-//! Analyse syntaxique : sous-ensemble du Pascal Script utilisé par les scripts FTPRush.
+//! Parsing: the Pascal Script subset used by FTPRush scripts.
 //!
-//! Programme : `uses …;` facultatif, déclarations `var` facultatives, puis instructions
-//! (`begin … end` facultatif, point final facultatif). Instructions : appel, affectation
-//! `:=`, `if/then/else`, `while/do`, `repeat/until`, `for … to|downto … do`, `exit`.
+//! Program: optional `uses …;`, optional `var` declarations, then statements (optional
+//! `begin … end`, optional final dot). Statements: call, assignment `:=`, `if/then/else`,
+//! `while/do`, `repeat/until`, `for … to|downto … do`, `exit`.
 
 use crate::ScriptError;
 use crate::lexer::{Tok, Token};
@@ -37,7 +37,7 @@ pub enum Expr {
     Str(String),
     Bool(bool),
     Nil,
-    /// Nom simple ou chemin pointé (`x`, `RushApp.Version`).
+    /// Plain name or dotted path (`x`, `RushApp.Version`).
     Name(Vec<String>, usize),
     Call(Vec<String>, Vec<Expr>, usize),
     Unary(UnOp, Box<Expr>),
@@ -100,22 +100,22 @@ impl Parser {
         ok
     }
     fn expect_kw(&mut self, k: &str) -> Result<(), ScriptError> {
-        if self.eat_kw(k) { Ok(()) } else { self.err(format!("« {k} » attendu")) }
+        if self.eat_kw(k) { Ok(()) } else { self.err(format!("\"{k}\" expected")) }
     }
     fn expect_sym(&mut self, s: &str) -> Result<(), ScriptError> {
-        if self.eat_sym(s) { Ok(()) } else { self.err(format!("« {s} » attendu")) }
+        if self.eat_sym(s) { Ok(()) } else { self.err(format!("\"{s}\" expected")) }
     }
     fn ident(&mut self) -> Result<String, ScriptError> {
         match self.next() {
             Tok::Ident(s) => Ok(s),
             _ => {
                 self.pos -= 1;
-                self.err("identifiant attendu")
+                self.err("identifier expected")
             }
         }
     }
 
-    // ------------------------------------------------------------------ programme
+    // ------------------------------------------------------------------ program
 
     fn program(&mut self) -> Result<Vec<Stmt>, ScriptError> {
         if self.eat_kw("uses") {
@@ -136,18 +136,18 @@ impl Parser {
         let stmts = self.statements(&[])?;
         self.eat_sym(".");
         if *self.peek() != Tok::Eof {
-            return self.err("fin du script attendue");
+            return self.err("end of script expected");
         }
         Ok(stmts)
     }
 
-    /// `var a, b: string; c: integer;` — les types sont lus puis ignorés.
+    /// `var a, b: string; c: integer;` — types are read then ignored.
     fn declarations(&mut self) -> Result<(), ScriptError> {
         let is_const = self.is_kw("const");
         self.next();
         while matches!(self.peek(), Tok::Ident(_)) {
             if is_const {
-                // `const NOM = valeur;` : non utilisé par les scripts FTPRush courants.
+                // `const NAME = value;`: not used by common FTPRush scripts.
                 return Err(ScriptError::new(self.line(), crate::ScriptErrorKind::Unsupported("constant declarations".into())));
             }
             loop {
@@ -163,7 +163,7 @@ impl Parser {
         Ok(())
     }
 
-    /// Instructions séparées par `;` jusqu'à l'un des mots-clés de fin (ou la fin du texte).
+    /// Statements separated by `;` until one of the ending keywords (or the end of the text).
     fn statements(&mut self, until: &[&str]) -> Result<Vec<Stmt>, ScriptError> {
         let mut out = Vec::new();
         loop {
@@ -178,7 +178,7 @@ impl Parser {
                 if *self.peek() == Tok::Eof || until.iter().any(|k| self.is_kw(k)) || self.is_sym(".") {
                     return Ok(out);
                 }
-                return self.err("« ; » attendu entre deux instructions");
+                return self.err("\";\" expected between two statements");
             }
         }
     }
@@ -259,7 +259,7 @@ impl Parser {
         }
     }
 
-    // ------------------------------------------------------------------ expressions (priorités du Pascal)
+    // ------------------------------------------------------------------ expressions (Pascal precedence)
 
     pub fn expr(&mut self) -> Result<Expr, ScriptError> {
         let left = self.simple()?;
@@ -352,7 +352,7 @@ impl Parser {
                 let path = self.path()?;
                 if self.is_sym("(") { Ok(Expr::Call(path, self.args()?, line)) } else { Ok(Expr::Name(path, line)) }
             }
-            _ => self.err("valeur attendue"),
+            _ => self.err("value expected"),
         }
     }
 }
@@ -361,13 +361,13 @@ pub fn parse_program(toks: Vec<Token>) -> Result<Vec<Stmt>, ScriptError> {
     Parser { toks, pos: 0 }.program()
 }
 
-/// Une seule expression (pour `Invoke`), `;` final toléré.
+/// A single expression (for `Invoke`), trailing `;` tolerated.
 pub fn parse_expression(toks: Vec<Token>) -> Result<Expr, ScriptError> {
     let mut p = Parser { toks, pos: 0 };
     let e = p.expr()?;
     p.eat_sym(";");
     if *p.peek() != Tok::Eof {
-        return p.err("une seule expression attendue");
+        return p.err("a single expression expected");
     }
     Ok(e)
 }

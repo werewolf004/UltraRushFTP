@@ -1,27 +1,27 @@
-//! FTPRush v3 : `site.json` (`RootItem` → `Children` → `Server`).
+//! FTPRush v3: `site.json` (`RootItem` → `Children` → `Server`).
 //!
-//! Mot de passe : `Base64Password`, simple base64 du mot de passe.
-//! Chiffrement FTP : `FTPEnryptMode` (valeurs de FluentFTP : 0 aucun, 1 implicite,
-//! 2 explicite, 3 auto). `Protocol` 1 = FTP ; les autres codes (SFTP, WebDAV, clouds…) ne
-//! sont pas encore identifiés avec certitude et donnent un avertissement.
+//! Password: `Base64Password`, plain base64 of the password.
+//! FTP encryption: `FTPEnryptMode` (FluentFTP values: 0 none, 1 implicit, 2 explicit,
+//! 3 auto). `Protocol` 1 = FTP; the other codes (SFTP, WebDAV, clouds...) are not yet
+//! identified with certainty and produce a warning.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use serde_json::Value;
 
-use super::{ImportError, ImportFormat, ImportResult};
+use super::{ImportError, ImportFormat, ImportResult, ImportWarning};
 use crate::site::{Bookmark, Site, SiteGroup, SiteProtocol};
 
 pub(super) fn import(text: &str) -> Result<ImportResult, ImportError> {
     let v: Value = serde_json::from_str(text).map_err(|e| ImportError::Invalid(ImportFormat::FtpRush3, e.to_string()))?;
-    let root = v.get("RootItem").ok_or_else(|| ImportError::Invalid(ImportFormat::FtpRush3, "RootItem absent".into()))?;
+    let root = v.get("RootItem").ok_or_else(|| ImportError::Invalid(ImportFormat::FtpRush3, "missing RootItem".into()))?;
     let mut warnings = Vec::new();
     let mut group = SiteGroup::new("Import FTPRush v3");
     for child in children(root) {
         walk(child, &mut group, &mut warnings);
     }
     if group.site_count() == 0 {
-        warnings.push("aucun site trouvé".into());
+        warnings.push(ImportWarning::NoSites);
     }
     Ok(ImportResult { format: ImportFormat::FtpRush3, group, warnings })
 }
@@ -34,7 +34,7 @@ fn s<'a>(v: &'a Value, key: &str) -> &'a str {
     v.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
-fn walk(item: &Value, parent: &mut SiteGroup, warnings: &mut Vec<String>) {
+fn walk(item: &Value, parent: &mut SiteGroup, warnings: &mut Vec<ImportWarning>) {
     let name = s(item, "Name").to_string();
     match item.get("Server").filter(|sv| !sv.is_null()) {
         Some(server) => parent.sites.push(site(&name, server, warnings)),
@@ -43,7 +43,7 @@ fn walk(item: &Value, parent: &mut SiteGroup, warnings: &mut Vec<String>) {
             for c in children(item) {
                 walk(c, &mut g, warnings);
             }
-            // Le dossier « Quick Connect » de la v3 est souvent vide : inutile de le recréer.
+            // The v3 "Quick Connect" folder is often empty: no need to recreate it.
             if g.site_count() > 0 || !g.name.eq_ignore_ascii_case("Quick Connect") {
                 parent.groups.push(g);
             }
@@ -51,13 +51,13 @@ fn walk(item: &Value, parent: &mut SiteGroup, warnings: &mut Vec<String>) {
     }
 }
 
-/// `/K:/dossier/` (notation de la v3) → `K:\dossier\`.
+/// `/K:/folder/` (v3 notation) → `K:\folder\`.
 fn local_path(p: &str) -> String {
     let b = p.as_bytes();
     if b.len() >= 3 && b[0] == b'/' && b[2] == b':' { p[1..].replace('/', "\\") } else { p.to_string() }
 }
 
-fn site(name: &str, sv: &Value, warnings: &mut Vec<String>) -> Site {
+fn site(name: &str, sv: &Value, warnings: &mut Vec<ImportWarning>) -> Site {
     let n = |k: &str| sv.get(k).and_then(Value::as_i64).unwrap_or(0);
     let label = if name.is_empty() { s(sv, "Host").to_string() } else { name.to_string() };
     let protocol = match (n("Protocol"), n("FTPEnryptMode")) {
@@ -65,14 +65,14 @@ fn site(name: &str, sv: &Value, warnings: &mut Vec<String>) -> Site {
         (1, 1) => SiteProtocol::FtpsImplicit,
         (1, _) => SiteProtocol::FtpsExplicit,
         (code, _) => {
-            warnings.push(format!("« {label} » : protocole v3 code {code} non identifié, importé en FTP — à vérifier"));
+            warnings.push(ImportWarning::UnknownCode { site: label.to_string(), code: code.to_string(), assumed: SiteProtocol::Ftp });
             SiteProtocol::Ftp
         }
     };
     let password = match STANDARD.decode(s(sv, "Base64Password")).ok().and_then(|b| String::from_utf8(b).ok()) {
         Some(p) => p,
         None => {
-            warnings.push(format!("« {label} » : mot de passe illisible"));
+            warnings.push(ImportWarning::PasswordUnreadable(label.to_string()));
             String::new()
         }
     };
@@ -104,7 +104,7 @@ fn site(name: &str, sv: &Value, warnings: &mut Vec<String>) -> Site {
 mod tests {
     use super::*;
 
-    // Structure identique au site.json de FTPRush v3, valeurs fictives.
+    // Same structure as the FTPRush v3 site.json, fictitious values.
     const SAMPLE: &str = r#"{
       "RootItem": { "Name": "Root", "Server": null, "Children": [
         { "Name": "Quick Connect", "Server": null, "Children": [] },
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn imports_v3_sites() {
         let r = import(SAMPLE).unwrap();
-        assert_eq!(r.group.groups.len(), 1, "Quick Connect vide non recréé");
+        assert_eq!(r.group.groups.len(), 1, "empty Quick Connect not recreated");
         let g = &r.group.groups[0];
         assert_eq!(g.name, "FTPRush Sites");
         let a = &g.sites[0];
@@ -138,12 +138,12 @@ mod tests {
         assert_eq!((a.local_dir.as_str(), a.remote_dir.as_str()), (r"K:\_PRE\TEST\", "/_PRE/TEST"));
         assert_eq!(a.bookmarks[0].remote_dir, "/_PRE");
         assert_eq!(g.sites[1].protocol, SiteProtocol::FtpsImplicit);
-        assert!(r.warnings.iter().any(|w| w.contains("code 7")), "{:?}", r.warnings);
+        assert!(r.warnings.iter().any(|w| matches!(w, ImportWarning::UnknownCode { code, .. } if code == "7")), "{:?}", r.warnings);
     }
 
     #[test]
     fn real_file_structure_parses_if_present() {
-        // Le fichier fourni par l'utilisateur (non versionné) : on vérifie seulement qu'il se lit.
+        // The file supplied by the user (not versioned): only check that it can be read.
         let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../thirdparty_source/FTPRushv3/site.json");
         if let Ok(text) = std::fs::read_to_string(p) {
             let r = import(&text).unwrap();

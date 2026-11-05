@@ -1,14 +1,14 @@
-//! Moteur de file d'attente : exécute les éléments d'une [`Queue`] en parallèle.
+//! Queue engine: runs the items of a [`Queue`] in parallel.
 //!
-//! - **Multi-transfert** : plusieurs fichiers vers ou depuis le même site en même temps,
-//!   sur des connexions distinctes, dans la limite de [`SiteLimits`] (0 = connexion unique).
-//! - **Réservoir de connexions** par site : une connexion libérée sert au transfert suivant.
-//! - **Dossiers** : un dossier est développé à son tour (liste, skiplist, priorités) et son
-//!   contenu prend sa place dans la file.
-//! - **Règles** : skiplist, « fichier existant » (reprendre / ignorer / renommer / écraser /
-//!   demander), repli sans reprise si `REST` est refusé, nouvelles tentatives.
-//! - **Arrêt** d'un élément : sa tâche est interrompue et ses connexions fermées.
-//! - **Débit** limité pour les envois et les téléchargements.
+//! - **Multi-transfer**: several files to or from the same site at the same time, on
+//!   separate connections, within [`SiteLimits`] (0 = single connection).
+//! - **Connection pool** per site: a released connection serves the next transfer.
+//! - **Folders**: a folder is expanded in turn (listing, skip list, priorities) and its
+//!   contents take its place in the queue.
+//! - **Rules**: skip list, "existing file" (resume / skip / rename / overwrite / ask),
+//!   fallback without resume when `REST` is refused, retries.
+//! - **Stopping** an item: its task is aborted and its connections closed.
+//! - **Speed** limited for uploads and downloads.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -25,27 +25,27 @@ use urftp_core::TransferKind;
 use urftp_core::exists::{ExistsDecision, ExistsRules};
 use urftp_core::priority::PriorityList;
 use urftp_core::queue::{Endpoint, ItemId, ItemState, Load, Queue, QueueItem, SiteLimits};
-use urftp_core::skiplist::{Candidate, SkipList};
+use urftp_core::skiplist::{Candidate, SkipList, SkipReason};
 
 use crate::ftp::{EntryKind, FxpOptions, fxp, path as rpath};
 use crate::session::{RemoteSession, SessionError, SiteProfile};
 use crate::throttle::{RateLimiter, Throttled};
 
-/// Réglages du moteur.
+/// Engine settings.
 #[derive(Debug, Clone)]
 pub struct EngineOptions {
-    /// Nouvelles tentatives après un échec (« retry count » de la v2).
+    /// Retries after a failure ("retry count" in v2).
     pub retries: u32,
     pub retry_delay: Duration,
-    /// Transferts simultanés tous sites confondus (`None` : seulement les limites des sites).
+    /// Simultaneous transfers across all sites (`None`: only the site limits).
     pub max_total: Option<u32>,
     pub skiplist: SkipList,
     pub priorities: PriorityList,
     pub exists: ExistsRules,
     pub fxp: FxpOptions,
-    /// Débit des téléchargements (serveur → local), partagé par tous les transferts.
+    /// Download speed (server → local), shared by every transfer.
     pub download_limit: Arc<RateLimiter>,
-    /// Débit des envois (local → serveur).
+    /// Upload speed (local → server).
     pub upload_limit: Arc<RateLimiter>,
 }
 
@@ -65,13 +65,13 @@ impl Default for EngineOptions {
     }
 }
 
-/// Événements pour l'interface (file d'attente, barre d'état, journal des transferts).
+/// Events for the interface (queue, status bar, transfer log).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineEvent {
     Started {
         id: ItemId,
     },
-    /// `bytes` : position dans le fichier (reprise comprise).
+    /// `bytes`: position in the file (resume included).
     Progress {
         id: ItemId,
         bytes: u64,
@@ -81,14 +81,14 @@ pub enum EngineEvent {
         id: ItemId,
         bytes: u64,
     },
-    /// Dossier développé en `children` éléments.
+    /// Folder expanded into `children` items.
     Expanded {
         id: ItemId,
         children: usize,
     },
     Skipped {
         id: ItemId,
-        reason: String,
+        reason: SkipReason,
     },
     NeedsConfirmation {
         id: ItemId,
@@ -107,7 +107,7 @@ pub enum EngineEvent {
     },
 }
 
-/// Connexions d'un site.
+/// Connections of a site.
 struct SitePool {
     profile: SiteProfile,
     idle: Mutex<Vec<RemoteSession>>,
@@ -122,7 +122,7 @@ impl SitePool {
         }
     }
 
-    /// Rend la connexion au réservoir si elle est encore saine.
+    /// Gives the connection back to the pool when it is still healthy.
     fn release<T>(&self, session: RemoteSession, result: &Result<T, SessionError>) {
         if result.as_ref().err().is_none_or(SessionError::keeps_session) {
             self.idle.lock().push(session);
@@ -133,7 +133,7 @@ impl SitePool {
 enum Outcome {
     Done(u64),
     Expanded(usize),
-    Skipped(String),
+    Skipped(SkipReason),
     Ask,
 }
 
@@ -163,12 +163,12 @@ impl Engine {
         self.queue.clone()
     }
 
-    /// Connexions inactives gardées pour `site` (pour l'affichage / les tests).
+    /// Idle connections kept for `site` (for display / tests).
     pub fn idle_connections(&self, site: &str) -> usize {
         self.sites.get(site).map_or(0, |p| p.idle.lock().len())
     }
 
-    /// Arrête un élément en cours : ses connexions sont fermées, il passe à l'état `Stopped`.
+    /// Stops a running item: its connections are closed and it goes to `Stopped`.
     pub fn stop(&self, id: ItemId) -> bool {
         self.running.lock().get(&id).map(AbortHandle::abort).is_some()
     }
@@ -193,7 +193,7 @@ impl Engine {
         self.sites.get(site).cloned().ok_or_else(|| SessionError::UnknownSite(site.to_string()))
     }
 
-    /// Traite la file jusqu'à ce qu'il ne reste rien à lancer.
+    /// Processes the queue until nothing is left to start.
     pub async fn run(self: &Arc<Self>) {
         let mut tasks: JoinSet<()> = JoinSet::new();
         let mut by_task: HashMap<tokio::task::Id, ItemId> = HashMap::new();
@@ -234,8 +234,8 @@ impl Engine {
                     q.set_state(id, ItemState::Stopped);
                     self.emit(EngineEvent::Stopped { id });
                 } else if item.state == ItemState::Running {
-                    // La tâche a paniqué : on ne laisse pas l'élément bloqué.
-                    q.set_state(id, ItemState::Failed("erreur interne".into()));
+                    // The task panicked: do not leave the item stuck.
+                    q.set_state(id, ItemState::Failed("internal error".into()));
                 }
             }
         }
@@ -272,7 +272,7 @@ impl Engine {
         }
     }
 
-    fn skip_reason(&self, item: &QueueItem, name: &str, is_dir: bool, size: Option<u64>) -> Option<String> {
+    fn skip_reason(&self, item: &QueueItem, name: &str, is_dir: bool, size: Option<u64>) -> Option<SkipReason> {
         self.opts.skiplist.check(&Candidate { name, full_path: &item.src.path, is_dir, size, kind: item.kind() })
     }
 
@@ -280,7 +280,7 @@ impl Engine {
         self.emit(EngineEvent::Progress { id, bytes, total });
     }
 
-    // ------------------------------------------------------------------ fichiers
+    // ------------------------------------------------------------------ files
 
     async fn transfer(&self, item: &QueueItem) -> Res<Outcome> {
         match item.kind() {
@@ -311,7 +311,7 @@ impl Engine {
         let target = tokio::fs::metadata(&local).await.ok().map(|m| m.len());
         let mut offset = match self.opts.exists.decide(size, target) {
             ExistsDecision::Transfer { offset } => offset,
-            ExistsDecision::Skip => return Ok(Outcome::Skipped("déjà présent".into())),
+            ExistsDecision::Skip => return Ok(Outcome::Skipped(SkipReason::AlreadyPresent)),
             ExistsDecision::Ask => return Ok(Outcome::Ask),
             ExistsDecision::Rename => {
                 local = free_local_name(&local).await?;
@@ -356,7 +356,7 @@ impl Engine {
         let target = s.size_if_exists(&dst).await?;
         let mut offset = match self.opts.exists.decide(Some(size), target) {
             ExistsDecision::Transfer { offset } => offset,
-            ExistsDecision::Skip => return Ok(Outcome::Skipped("déjà présent".into())),
+            ExistsDecision::Skip => return Ok(Outcome::Skipped(SkipReason::AlreadyPresent)),
             ExistsDecision::Ask => return Ok(Outcome::Ask),
             ExistsDecision::Rename => {
                 let (dir, n) = rpath::split(&dst);
@@ -410,7 +410,7 @@ impl Engine {
         let target = b.size_if_exists(&dst).await?;
         let offset = match self.opts.exists.decide(size, target) {
             ExistsDecision::Transfer { offset } => offset,
-            ExistsDecision::Skip => return Ok(Outcome::Skipped("déjà présent".into())),
+            ExistsDecision::Skip => return Ok(Outcome::Skipped(SkipReason::AlreadyPresent)),
             ExistsDecision::Ask => return Ok(Outcome::Ask),
             ExistsDecision::Rename => {
                 let (dir, n) = rpath::split(&dst);
@@ -429,7 +429,7 @@ impl Engine {
         Ok(Outcome::Done(size.unwrap_or(0)))
     }
 
-    // ------------------------------------------------------------------ dossiers
+    // ------------------------------------------------------------------ folders
 
     async fn expand(&self, item: &QueueItem) -> Res<usize> {
         let kind = item.kind();
@@ -442,7 +442,7 @@ impl Engine {
             return Ok(0);
         }
 
-        // Contenu de la source : (nom, dossier ?, taille).
+        // Contents of the source: (name, folder?, size).
         let entries: Vec<(String, bool, Option<u64>)> = match &item.src.site {
             None => {
                 let mut rd = tokio::fs::read_dir(&item.src.path).await?;
@@ -481,7 +481,7 @@ impl Engine {
             return Ok(0);
         }
 
-        // Dossier cible.
+        // Target folder.
         match &item.dst.site {
             None => tokio::fs::create_dir_all(&item.dst.path).await?,
             Some(site) => {
@@ -506,7 +506,7 @@ fn join_endpoint(e: &Endpoint, name: &str) -> Endpoint {
     Endpoint { site: e.site.clone(), path }
 }
 
-/// Ouvre le fichier local pour écrire à partir de `offset` (troncature à `offset`).
+/// Opens the local file for writing from `offset` (truncated at `offset`).
 async fn open_local_for_write(p: &Path, offset: u64) -> std::io::Result<tokio::fs::File> {
     let mut f = tokio::fs::OpenOptions::new().create(true).write(true).truncate(offset == 0).open(p).await?;
     if offset > 0 {
@@ -524,5 +524,5 @@ async fn free_local_name(p: &Path) -> std::io::Result<PathBuf> {
             return Ok(candidate);
         }
     }
-    Err(std::io::Error::other(format!("aucun nom libre pour {}", p.display())))
+    Err(std::io::Error::other(format!("no free name left for {}", p.display())))
 }

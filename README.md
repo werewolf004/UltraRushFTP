@@ -85,7 +85,7 @@ urftp ls   ftp://user:pass@hôte:21/pub
 ```
 
 Options : `-v` (journal du protocole), `-n <transferts>`, `--exists overwrite|resume|skip|rename`,
-`--insecure`, `--fingerprint <empreinte>`, `--data <dossier>`. Code de sortie : 0 si tout
+`--insecure`, `--fingerprint <empreinte>`, `--data <dossier>`, `--lang en|fr`. Code de sortie : 0 si tout
 est transféré, 1 en cas d'échec, 2 pour une erreur d'arguments.
 
 ## Développement

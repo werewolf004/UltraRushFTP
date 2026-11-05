@@ -1,5 +1,5 @@
-//! `urftp` : UltraRushFTP en ligne de commande. Utilise le gestionnaire de sites et les
-//! options de l'interface (même dossier de réglages), sans fenêtre.
+//! `urftp`: UltraRushFTP on the command line. Uses the site manager and the options of the
+//! interface (same settings folder), without a window.
 
 mod args;
 mod error;
@@ -14,7 +14,7 @@ use std::time::Instant;
 use tokio::sync::mpsc::unbounded_channel;
 use urftp_core::exists::ExistsRules;
 use urftp_core::queue::{Endpoint, ItemState, Queue};
-use urftp_core::settings::Settings;
+use urftp_core::settings::{LanguageSetting, Settings};
 use urftp_core::site::{CertPolicy, SiteBook};
 use urftp_core::sitestore;
 use urftp_proto::engine::{Engine, EngineEvent};
@@ -25,10 +25,11 @@ use urftp_proto::throttle::RateLimiter;
 
 use args::{Command, Options, Target};
 use error::CliError;
+use urftp_i18n::{Lang, set_language, t, text};
 
 type Res<T> = Result<T, CliError>;
 
-/// Fiche de site et options chargées depuis le dossier des réglages.
+/// Site book and options loaded from the settings folder.
 struct Ctx {
     book: SiteBook,
     settings: Settings,
@@ -40,10 +41,16 @@ impl Ctx {
         let path = sitestore::default_path();
         let book = sitestore::load(&path).map_err(|source| CliError::SiteBook { path, source })?;
         let settings = Settings::load(&Settings::default_path()).unwrap_or_default();
+        let forced = opts.lang.is_some() || std::env::var_os("URUSHFTP_LANG").is_some();
+        match settings.language {
+            LanguageSetting::English if !forced => set_language(Lang::En),
+            LanguageSetting::French if !forced => set_language(Lang::Fr),
+            _ => {}
+        }
         Ok(Self { book, settings, opts })
     }
 
-    /// Profil de connexion et chemin d'une cible (`Site:/chemin` ou URL).
+    /// Connection profile and path of a target (`Site:/path` or URL).
     fn resolve(&self, target: &Target) -> Res<(SiteProfile, String)> {
         let (mut site, path) = match target {
             Target::Named { site, path } => {
@@ -88,21 +95,31 @@ fn remote(path: &str) -> impl FnOnce(urftp_proto::session::SessionError) -> CliE
     move |source| CliError::Remote { path: path.to_string(), source }
 }
 
-/// Chemin absolu : relatif au dossier courant de la session.
+/// Absolute path: relative to the current directory of the session.
 fn absolute(session: &RemoteSession, path: &str) -> String {
     let cwd = session.current_dir().unwrap_or_else(|| "/".into());
     if path.is_empty() { rpath::normalize(&cwd) } else { rpath::join(&cwd, path) }
 }
 
+/// Translated reason why an item was skipped.
+fn skip_text(r: &urftp_core::skiplist::SkipReason) -> String {
+    use urftp_core::skiplist::SkipReason;
+    match r {
+        SkipReason::Rule(mask) => t!("skip.reason_rule", mask = mask),
+        SkipReason::ZeroByte => t!("skip.reason_zero"),
+        SkipReason::AlreadyPresent => t!("skip.reason_present"),
+    }
+}
+
 fn human(n: u64) -> String {
-    const U: [&str; 5] = ["o", "Kio", "Mio", "Gio", "Tio"];
+    let units = [text("units.b"), text("units.kb"), text("units.mb"), text("units.gb"), text("units.tb")];
     let mut v = n as f64;
     let mut i = 0;
-    while v >= 1024.0 && i < U.len() - 1 {
+    while v >= 1024.0 && i < units.len() - 1 {
         v /= 1024.0;
         i += 1;
     }
-    if i == 0 { format!("{n} o") } else { format!("{v:.1} {}", U[i]) }
+    if i == 0 { format!("{n} {}", units[0]) } else { format!("{v:.1} {}", units[i]).replace('.', text("units.decimal")) }
 }
 
 fn print_listing(entries: &mut [RemoteEntry]) {
@@ -121,7 +138,7 @@ fn print_listing(entries: &mut [RemoteEntry]) {
     }
 }
 
-/// Entrée distante (dossier ou fichier) d'après le contenu de son parent.
+/// Remote entry (folder or file) from the listing of its parent.
 async fn stat(session: &mut RemoteSession, path: &str) -> Res<RemoteEntry> {
     let (parent, name) = rpath::split(path);
     let parent = parent.unwrap_or("/");
@@ -132,11 +149,11 @@ async fn stat(session: &mut RemoteSession, path: &str) -> Res<RemoteEntry> {
 async fn cmd_sites(ctx: &Ctx) -> Res<()> {
     let sites = ctx.book.all_sites();
     if sites.is_empty() {
-        println!("Aucun site (gestionnaire : {}).", sitestore::default_path().display());
+        println!("{}", t!("cli.no_sites", path = sitestore::default_path().display()));
     }
     for (groups, s) in sites {
         let folder = if groups.is_empty() { String::new() } else { format!("{}/", groups.join("/")) };
-        let state = if s.enabled { "" } else { "  (désactivé)" };
+        let state = if s.enabled { String::new() } else { t!("cli.disabled") };
         println!("{folder}{:<32} {:<14} {}:{}{state}", s.name, s.protocol.label(), s.host, s.port);
     }
     Ok(())
@@ -169,7 +186,7 @@ async fn cmd_raw(ctx: &Ctx, site: &str, commands: &[String]) -> Res<()> {
     if failed { Err(CliError::RawRefused) } else { Ok(()) }
 }
 
-/// Transfert par le moteur de file (multi-transfert, dossiers, skiplist, priorités…).
+/// Transfer through the queue engine (multi-transfer, folders, skip list, priorities...).
 async fn run_queue(ctx: &Ctx, sites: Vec<SiteProfile>, src: Endpoint, dst: Endpoint, is_dir: bool, size: Option<u64>) -> Res<()> {
     let queue = Arc::new(Mutex::new(Queue::new()));
     queue.lock().push(src, dst, is_dir, size, None);
@@ -182,7 +199,7 @@ async fn run_queue(ctx: &Ctx, sites: Vec<SiteProfile>, src: Endpoint, dst: Endpo
     }
     let (tx, mut rx) = unbounded_channel();
     let engine = Engine::new(queue.clone(), sites, opts, Some(tx));
-    // Le moteur garde l'émetteur des événements : la boucle s'arrête quand il est libéré.
+    // The engine holds the event sender: the loop stops once the engine is dropped.
     let runner = tokio::spawn(async move { engine.run().await });
     let started = Instant::now();
     let mut starts = std::collections::HashMap::new();
@@ -197,20 +214,23 @@ async fn run_queue(ctx: &Ctx, sites: Vec<SiteProfile>, src: Endpoint, dst: Endpo
                 let secs = starts.remove(&id).map_or(0.0, |t| t.elapsed().as_secs_f64()).max(0.001);
                 files += 1;
                 bytes_total += bytes;
-                println!("ok      {}  ({}, {}/s)", name(id), human(bytes), human((bytes as f64 / secs) as u64));
+                println!("{}", t!("cli.ok", path = name(id), size = human(bytes), rate = human((bytes as f64 / secs) as u64)));
             }
-            EngineEvent::Expanded { id, children } => println!("dossier {}  ({children} élément(s))", name(id)),
-            EngineEvent::Skipped { id, reason } => println!("ignoré  {}  ({reason})", name(id)),
-            EngineEvent::NeedsConfirmation { id } => println!("existe  {}  (règle « demander » : utilisez --exists)", name(id)),
-            EngineEvent::Retrying { id, attempt, error } => eprintln!("reprise {}  (essai {attempt} : {error})", name(id)),
-            EngineEvent::Failed { id, error } => eprintln!("échec   {}  : {error}", name(id)),
-            EngineEvent::Stopped { id } => eprintln!("arrêté  {}", name(id)),
+            EngineEvent::Expanded { id, children } => println!("{}", t!("cli.folder", path = name(id), n = children)),
+            EngineEvent::Skipped { id, reason } => println!("{}", t!("cli.skipped", path = name(id), reason = skip_text(&reason))),
+            EngineEvent::NeedsConfirmation { id } => println!("{}", t!("cli.exists", path = name(id))),
+            EngineEvent::Retrying { id, attempt, error } => {
+                eprintln!("{}", t!("cli.retry", path = name(id), attempt = attempt, error = error))
+            }
+            EngineEvent::Failed { id, error } => eprintln!("{}", t!("cli.failed", path = name(id), error = error)),
+            EngineEvent::Stopped { id } => eprintln!("{}", t!("cli.stopped", path = name(id))),
             EngineEvent::Progress { .. } => {}
         }
     }
     let _ = runner.await;
     let secs = started.elapsed().as_secs_f64().max(0.001);
-    println!("{files} fichier(s), {} en {secs:.1} s ({}/s)", human(bytes_total), human((bytes_total as f64 / secs) as u64));
+    let rate = human((bytes_total as f64 / secs) as u64);
+    println!("{}", t!("cli.summary", files = files, size = human(bytes_total), secs = format!("{secs:.1}"), rate = rate));
     let q = queue.lock();
     let bad =
         q.items().iter().filter(|i| matches!(i.state, ItemState::Failed(_) | ItemState::NeedsConfirmation | ItemState::Stopped)).count();
@@ -244,7 +264,7 @@ async fn cmd_put(ctx: &Ctx, src: &str, dest: &str) -> Res<()> {
     let meta = std::fs::metadata(&local).map_err(|source| CliError::Local { path: local.clone(), source })?;
     let name = local.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or_else(|| CliError::Local {
         path: local.clone(),
-        source: std::io::Error::new(std::io::ErrorKind::InvalidInput, "nom de fichier invalide"),
+        source: std::io::Error::new(std::io::ErrorKind::InvalidInput, t!("cli.err.invalid_name")),
     })?;
     let (profile, path) = ctx.resolve(&args::parse_target(dest)?)?;
     let session = ctx.open(&profile).await?;
@@ -276,7 +296,7 @@ async fn cmd_fxp(ctx: &Ctx, src: &str, dest: &str) -> Res<()> {
 
 async fn run(cmd: Command, opts: Options) -> Res<()> {
     if let Command::Help = cmd {
-        println!("{}", args::USAGE);
+        println!("{}", t!("cli.usage"));
         return Ok(());
     }
     let ctx = Ctx::load(opts)?;
@@ -291,11 +311,20 @@ async fn run(cmd: Command, opts: Options) -> Res<()> {
     }
 }
 
+/// `--lang` given on the command line, read before full parsing so that parse errors are
+/// already translated; then `URUSHFTP_LANG`; then the Windows language.
+fn startup_language(args: &[String]) -> Lang {
+    let explicit = args.windows(2).find(|w| w[0] == "--lang").and_then(|w| Lang::from_tag(&w[1]));
+    explicit.or_else(|| std::env::var("URUSHFTP_LANG").ok().and_then(|v| Lang::from_tag(&v))).unwrap_or_else(Lang::system)
+}
+
 fn main() -> ExitCode {
-    let (cmd, opts) = match args::parse(std::env::args().skip(1)) {
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    set_language(startup_language(&raw));
+    let (cmd, opts) = match args::parse(raw) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("urftp : {e}");
+            eprintln!("{}", t!("cli.error_prefix", error = e));
             return ExitCode::from(2);
         }
     };
@@ -305,14 +334,14 @@ fn main() -> ExitCode {
     let rt = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
         Ok(rt) => rt,
         Err(e) => {
-            eprintln!("urftp : {}", CliError::Runtime(e));
+            eprintln!("{}", t!("cli.error_prefix", error = CliError::Runtime(e)));
             return ExitCode::FAILURE;
         }
     };
     match rt.block_on(run(cmd, opts)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("urftp : {e}");
+            eprintln!("{}", t!("cli.error_prefix", error = e));
             ExitCode::FAILURE
         }
     }

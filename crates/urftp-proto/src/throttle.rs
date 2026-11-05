@@ -1,8 +1,8 @@
-//! Limitation de débit (« Limit download/upload speed » de la v2).
+//! Speed limiting ("Limit download/upload speed" in v2).
 //!
-//! Un [`RateLimiter`] est partagé par tous les transferts concernés (limite globale ou par
-//! site). [`Throttled`] enveloppe un lecteur ou un écrivain local : après chaque bloc, il
-//! attend le temps nécessaire pour respecter le débit.
+//! A [`RateLimiter`] is shared by every transfer it applies to (global or per-site limit).
+//! [`Throttled`] wraps a local reader or writer: after each block it waits as long as
+//! needed to respect the rate.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -15,10 +15,10 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::time::{Instant, Sleep};
 
-/// Rafale autorisée : un débit moyen sur une fenêtre de cette durée.
+/// Allowed burst: an average rate over a window of this length.
 const BURST: Duration = Duration::from_millis(100);
 
-/// Seau à jetons partagé. Débit en octets par seconde ; 0 = illimité.
+/// Shared token bucket. Rate in bytes per second; 0 = unlimited.
 #[derive(Debug)]
 pub struct RateLimiter {
     state: Mutex<State>,
@@ -27,7 +27,7 @@ pub struct RateLimiter {
 #[derive(Debug)]
 struct State {
     rate: u64,
-    /// Instant à partir duquel le « crédit » est épuisé.
+    /// Instant from which the "credit" is exhausted.
     next: Instant,
 }
 
@@ -36,7 +36,7 @@ impl RateLimiter {
         Arc::new(Self { state: Mutex::new(State { rate: bytes_per_sec, next: Instant::now() }) })
     }
 
-    /// Change le débit en cours de route (0 = illimité).
+    /// Changes the rate on the fly (0 = unlimited).
     pub fn set_rate(&self, bytes_per_sec: u64) {
         let mut s = self.state.lock();
         s.rate = bytes_per_sec;
@@ -47,7 +47,7 @@ impl RateLimiter {
         self.state.lock().rate
     }
 
-    /// Compte `n` octets et renvoie l'attente nécessaire avant le prochain bloc.
+    /// Counts `n` bytes and returns the wait needed before the next block.
     pub fn consume(&self, n: usize) -> Duration {
         let mut s = self.state.lock();
         if s.rate == 0 || n == 0 {
@@ -60,7 +60,7 @@ impl RateLimiter {
     }
 }
 
-/// Lecteur ou écrivain soumis à un ou plusieurs limiteurs (global, par site…).
+/// Reader or writer subject to one or more limiters (global, per site...).
 pub struct Throttled<T> {
     inner: T,
     limiters: Vec<Arc<RateLimiter>>,
@@ -130,7 +130,7 @@ mod tests {
     #[tokio::test]
     async fn limits_read_speed() {
         let data = vec![1u8; 300_000];
-        let limiter = RateLimiter::new(300_000); // 300 Ko/s → ~1 s
+        let limiter = RateLimiter::new(300_000); // 300 KB/s → ~1 s
         let mut r = Throttled::new(data.as_slice(), vec![limiter.clone()]);
         let start = std::time::Instant::now();
         let mut out = Vec::new();
@@ -144,8 +144,8 @@ mod tests {
         }
         let t = start.elapsed();
         assert_eq!(out.len(), 300_000);
-        assert!(t >= Duration::from_millis(700), "trop rapide : {t:?}");
-        assert!(t < Duration::from_secs(3), "trop lent : {t:?}");
+        assert!(t >= Duration::from_millis(700), "too fast: {t:?}");
+        assert!(t < Duration::from_secs(3), "too slow: {t:?}");
     }
 
     #[test]

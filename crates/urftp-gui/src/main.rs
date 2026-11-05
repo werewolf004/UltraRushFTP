@@ -30,13 +30,13 @@ fn main() -> Result<(), StartupError> {
 
 fn run() -> Result<(), StartupError> {
     let startup = cmdline::parse(std::env::args().skip(1));
-    // `-f` : dossier des réglages, à fixer avant tout chargement et avant le premier thread.
+    // `-f`: settings folder, to set before anything is loaded.
     if let Some(d) = &startup.data_dir
         && let Some(dir) = cmdline::resolve_data_dir(d)
     {
         urftp_core::sitestore::set_data_dir(dir);
     }
-    // Le réseau tourne sur un runtime tokio à part ; l'interface ne bloque jamais.
+    // The network runs on a separate tokio runtime; the interface never blocks.
     let runtime =
         tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("urftp-net").build().map_err(StartupError::Runtime)?;
     let handle = runtime.handle().clone();

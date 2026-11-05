@@ -1,8 +1,8 @@
-//! Enregistrement du carnet de sites sur disque (`sites.json`).
+//! Storage of the site book on disk (`sites.json`).
 //!
-//! Emplacement : `%APPDATA%\UltraRushFTP\` par défaut, ou le dossier donné par la variable
-//! `URUSHFTP_DATA` (mode portable, équivalent de `ftprush.exe -f`). Écriture atomique
-//! (fichier temporaire puis renommage) et copie de sauvegarde `sites.json.bak`.
+//! Location: `%APPDATA%\UltraRushFTP\` by default, or the folder given by
+//! `URUSHFTP_DATA` / `-f` (portable mode, like `ftprush.exe -f`). Atomic write
+//! (temporary file then rename) and backup copy `sites.json.bak`.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -37,7 +37,7 @@ pub fn default_path() -> PathBuf {
     data_dir().join(FILE_NAME)
 }
 
-/// Charge le carnet ; un fichier absent donne un carnet vide.
+/// Loads the site book; a missing file gives an empty book.
 pub fn load(path: &Path) -> io::Result<SiteBook> {
     match std::fs::read_to_string(path) {
         Ok(text) => serde_json::from_str(&text).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e)),

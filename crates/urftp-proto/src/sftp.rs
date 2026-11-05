@@ -1,12 +1,12 @@
-//! Client SFTP (SSH File Transfer Protocol) sur `russh` / `russh-sftp`.
+//! SFTP (SSH File Transfer Protocol) client on top of `russh` / `russh-sftp`.
 //!
-//! - Authentification par mot de passe ou par clé privée (OpenSSH, PEM, PuTTY `.ppk`,
-//!   chiffrée ou non).
-//! - Clé d'hôte vérifiée par empreinte SHA-256 au format OpenSSH (`SHA256:…`) : une clé
-//!   inconnue renvoie [`SftpError::HostKey`] avec son empreinte, pour proposer de l'approuver.
-//! - Même interface que le client FTP pour les opérations courantes (listing en
-//!   [`RemoteEntry`], envoi/téléchargement avec reprise et progression).
-//! - Proxy SOCKS/HTTP via [`crate::proxy`].
+//! - Authentication by password or private key (OpenSSH, PEM, PuTTY `.ppk`, encrypted
+//!   or not).
+//! - Host key verified by SHA-256 fingerprint in the OpenSSH format (`SHA256:…`): an
+//!   unknown key returns [`SftpError::HostKey`] with its fingerprint, to offer trusting it.
+//! - Same interface as the FTP client for the common operations (listing as
+//!   [`RemoteEntry`], upload/download with resume and progress).
+//! - SOCKS/HTTP proxy through [`crate::proxy`].
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,16 +28,16 @@ use crate::proxy::{self, ProxyConfig, ProxyError};
 
 const CHUNK: usize = 64 * 1024;
 
-/// Moyen d'authentification.
+/// Authentication method.
 #[derive(Clone, PartialEq, Eq)]
 pub enum SftpAuth {
     Password(String),
-    /// Fichier de clé privée (OpenSSH, PEM ou PuTTY `.ppk`).
+    /// Private key file (OpenSSH, PEM or PuTTY `.ppk`).
     KeyFile {
         path: PathBuf,
         passphrase: Option<String>,
     },
-    /// Clé privée fournie en texte.
+    /// Private key given as text.
     KeyText {
         text: String,
         passphrase: Option<String>,
@@ -54,13 +54,13 @@ impl std::fmt::Debug for SftpAuth {
     }
 }
 
-/// Politique d'acceptation de la clé du serveur.
+/// Acceptance policy of the server key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HostKeyPolicy {
-    /// Accepte uniquement les empreintes listées (`SHA256:…`). Liste vide : toute clé est
-    /// refusée et l'erreur donne son empreinte (première connexion).
+    /// Accepts only the listed fingerprints (`SHA256:…`). Empty list: every key is
+    /// refused and the error gives its fingerprint (first connection).
     Known(Vec<String>),
-    /// Accepte n'importe quelle clé (déconseillé : pas de protection contre l'interception).
+    /// Accepts any key (not recommended: no protection against interception).
     AcceptAny,
 }
 
@@ -70,18 +70,18 @@ impl Default for HostKeyPolicy {
     }
 }
 
-/// Réglages d'une connexion SFTP.
+/// Settings of an SFTP connection.
 #[derive(Debug, Clone)]
 pub struct SftpConfig {
     pub connect_timeout: Duration,
-    /// Délai maximal d'une requête SFTP.
+    /// Maximum duration of an SFTP request.
     pub io_timeout: Duration,
-    /// Intervalle des keep-alive SSH (`None` : désactivé).
+    /// SSH keep-alive interval (`None`: disabled).
     pub keepalive: Option<Duration>,
     pub host_key: HostKeyPolicy,
     pub proxy: Option<ProxyConfig>,
-    /// Requêtes de lecture/écriture envoyées sans attendre la réponse (pipelining), pour
-    /// garder un bon débit sur les liens à forte latence.
+    /// Read/write requests sent without waiting for the reply (pipelining), to keep a
+    /// good throughput on high-latency links.
     pub max_in_flight: usize,
 }
 
@@ -98,34 +98,34 @@ impl Default for SftpConfig {
     }
 }
 
-/// Erreurs SFTP.
+/// SFTP errors.
 #[derive(Debug, thiserror::Error)]
 pub enum SftpError {
-    #[error("erreur réseau : {0}")]
+    #[error("network error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("délai dépassé")]
+    #[error("timed out")]
     Timeout,
     #[error("proxy : {0}")]
     Proxy(#[from] ProxyError),
-    #[error("clé du serveur non approuvée ({reason}) — empreinte : {fingerprint}")]
+    #[error("server key not trusted ({reason}) — fingerprint: {fingerprint}")]
     HostKey { fingerprint: String, reason: String },
-    #[error("authentification refusée par le serveur")]
+    #[error("authentication refused by the server")]
     AuthFailed,
-    #[error("clé privée illisible : {0}")]
+    #[error("private key unreadable: {0}")]
     Key(String),
     #[error("erreur SSH : {0}")]
     Ssh(String),
-    /// Erreur renvoyée par le serveur SFTP (code `SSH_FX_*`).
+    /// Error returned by the SFTP server (`SSH_FX_*` code).
     #[error("{operation} : {message} (code {code})")]
     Status { operation: String, code: u32, message: String },
     #[error("erreur SFTP : {0}")]
     Sftp(String),
-    #[error("argument invalide : {0}")]
+    #[error("invalid argument: {0}")]
     InvalidArgument(String),
 }
 
 impl SftpError {
-    /// Code `SSH_FX_*` (2 = fichier absent, 3 = permission refusée…), si fourni par le serveur.
+    /// `SSH_FX_*` code (2 = no such file, 3 = permission denied...), when given by the server.
     pub fn status_code(&self) -> Option<u32> {
         match self {
             SftpError::Status { code, .. } => Some(*code),
@@ -149,7 +149,7 @@ fn op_err(operation: &str, p: &str) -> impl FnOnce(SftpLibError) -> SftpError {
     }
 }
 
-/// Empreinte SHA-256 au format OpenSSH (`SHA256:base64`).
+/// SHA-256 fingerprint in the OpenSSH format (`SHA256:base64`).
 pub fn host_key_fingerprint(key: &PublicKeyOrCertificate) -> String {
     match key {
         PublicKeyOrCertificate::PublicKey { key, .. } => key.fingerprint(HashAlg::Sha256).to_string(),
@@ -175,7 +175,7 @@ impl client::Handler for Handler {
     }
 }
 
-/// Session SFTP ouverte.
+/// Open SFTP session.
 pub struct SftpClient {
     ssh: Handle<Handler>,
     sftp: SftpSession,
@@ -185,7 +185,7 @@ pub struct SftpClient {
 }
 
 impl SftpClient {
-    /// Connexion SSH, vérification de la clé d'hôte, authentification, ouverture du sous-système SFTP.
+    /// SSH connection, host key check, authentication, opening of the SFTP subsystem.
     pub async fn connect(host: &str, port: u16, user: &str, auth: &SftpAuth, config: SftpConfig, log: Option<LogSink>) -> Result<Self> {
         let status = |m: String| {
             if let Some(l) = &log {
@@ -196,7 +196,7 @@ impl SftpClient {
         let proxy = config.proxy.clone().filter(|p| !p.bypasses(host));
         let tcp = match &proxy {
             Some(p) => {
-                status(format!("Connexion via proxy {:?} {}:{}", p.kind, p.host, p.port));
+                status(format!("Connecting through proxy {:?} {}:{}", p.kind, p.host, p.port));
                 limit(ct, async { Ok(proxy::connect(p, host, port).await?) }).await?
             }
             None => limit(ct, async { Ok(TcpStream::connect((host, port)).await?) }).await?,
@@ -214,14 +214,14 @@ impl SftpClient {
                 let fingerprint = seen.lock().clone();
                 return Err(match (e, fingerprint) {
                     (russh::Error::UnknownKey, Some(fingerprint)) => {
-                        SftpError::HostKey { fingerprint, reason: "clé inconnue ou différente de celle approuvée".into() }
+                        SftpError::HostKey { fingerprint, reason: "unknown key or different from the trusted one".into() }
                     }
                     (e, _) => SftpError::Ssh(e.to_string()),
                 });
             }
         };
         let fingerprint = seen.lock().clone().unwrap_or_default();
-        status(format!("Clé du serveur : {fingerprint}"));
+        status(format!("Server key: {fingerprint}"));
 
         let result = match auth {
             SftpAuth::Password(pass) => ssh.authenticate_password(user, pass).await,
@@ -246,10 +246,10 @@ impl SftpClient {
         };
         let sftp = SftpSession::new_with_config(channel.into_stream(), sftp_config)
             .await
-            .map_err(|e| SftpError::Sftp(format!("ouverture du sous-système SFTP : {e}")))?;
+            .map_err(|e| SftpError::Sftp(format!("opening the SFTP subsystem: {e}")))?;
         sftp.set_timeout(config.io_timeout.as_secs().max(1));
         let cwd = sftp.canonicalize(".").await.map_err(op_err("REALPATH", "."))?;
-        status(format!("SFTP prêt, répertoire : {cwd}"));
+        status(format!("SFTP ready, directory: {cwd}"));
         Ok(Self { ssh, sftp, cwd, fingerprint, log })
     }
 
@@ -257,7 +257,7 @@ impl SftpClient {
         self.log = log;
     }
 
-    /// Empreinte de la clé du serveur (`SHA256:…`).
+    /// Fingerprint of the server key (`SHA256:…`).
     pub fn host_key_fingerprint(&self) -> &str {
         &self.fingerprint
     }
@@ -272,7 +272,7 @@ impl SftpClient {
         }
     }
 
-    /// Chemin absolu (les chemins relatifs partent du répertoire courant).
+    /// Absolute path (relative paths start from the current directory).
     fn abs(&self, p: &str) -> String {
         path::join(&self.cwd, p)
     }
@@ -281,7 +281,7 @@ impl SftpClient {
         let target = self.abs(dir);
         let meta = self.sftp.metadata(target.clone()).await.map_err(op_err("CWD", &target))?;
         if !meta.is_dir() {
-            return Err(SftpError::InvalidArgument(format!("{target} n'est pas un dossier")));
+            return Err(SftpError::InvalidArgument(format!("{target} is not a folder")));
         }
         self.cwd = target;
         Ok(())
@@ -308,7 +308,7 @@ impl SftpClient {
         self.sftp.remove_file(t.clone()).await.map_err(op_err("DELETE", &t))
     }
 
-    /// Renomme ou déplace. `to` peut être un nom simple (même dossier) ou un chemin.
+    /// Renames or moves. `to` may be a plain name (same folder) or a path.
     pub async fn rename(&mut self, from: &str, to: &str) -> Result<()> {
         let f = self.abs(from);
         let t = if to.contains('/') { self.abs(to) } else { path::join(path::split(&f).0.unwrap_or("/"), to) };
@@ -325,7 +325,7 @@ impl SftpClient {
         Ok(self.stat(p).await?.size)
     }
 
-    /// Télécharge `remote` vers `out` à partir de `offset`. Renvoie les octets reçus.
+    /// Downloads `remote` into `out` from `offset`. Returns the bytes received.
     pub async fn retr<W>(&mut self, remote: &str, offset: u64, out: &mut W, mut progress: impl FnMut(u64)) -> Result<u64>
     where
         W: AsyncWrite + Unpin + ?Sized,
@@ -351,8 +351,8 @@ impl SftpClient {
         Ok(total)
     }
 
-    /// Envoie `input` vers `remote`. Avec `offset > 0`, écrit à partir de cet octet sans
-    /// tronquer (reprise) ; `input` doit déjà être positionné à `offset`.
+    /// Uploads `input` to `remote`. With `offset > 0`, writes from that byte without
+    /// truncating (resume); `input` must already be positioned at `offset`.
     pub async fn stor<R>(&mut self, remote: &str, offset: u64, input: &mut R, mut progress: impl FnMut(u64)) -> Result<u64>
     where
         R: AsyncRead + Unpin + ?Sized,
@@ -379,9 +379,9 @@ impl SftpClient {
         Ok(total)
     }
 
-    /// Ferme proprement la session SFTP puis la connexion SSH.
+    /// Closes the SFTP session cleanly, then the SSH connection.
     pub async fn quit(self) -> Result<()> {
-        self.status("Déconnexion");
+        self.status("Disconnecting");
         let _ = self.sftp.close().await;
         self.ssh.disconnect(russh::Disconnect::ByApplication, "", "fr").await.map_err(ssh_err)
     }
@@ -398,10 +398,10 @@ async fn limit<T>(d: Duration, f: impl Future<Output = Result<T>>) -> Result<T> 
 fn load_key(auth: &SftpAuth) -> Result<russh::keys::PrivateKey> {
     let (text, pass) = match auth {
         SftpAuth::KeyFile { path, passphrase } => {
-            (std::fs::read_to_string(path).map_err(|e| SftpError::Key(format!("{} : {e}", path.display())))?, passphrase.as_deref())
+            (std::fs::read_to_string(path).map_err(|e| SftpError::Key(format!("{}: {e}", path.display())))?, passphrase.as_deref())
         }
         SftpAuth::KeyText { text, passphrase } => (text.clone(), passphrase.as_deref()),
-        SftpAuth::Password(_) => unreachable!("pas de clé pour l'authentification par mot de passe"),
+        SftpAuth::Password(_) => return Err(SftpError::Key("password authentication has no key file".into())),
     };
     russh::keys::decode_secret_key(&text, pass).map_err(|e| SftpError::Key(e.to_string()))
 }
@@ -426,7 +426,7 @@ fn to_entry(name: String, meta: &FileAttributes) -> RemoteEntry {
     }
 }
 
-/// Date Unix (UTC) → [`FtpTime`] (algorithme « civil from days » de H. Hinnant).
+/// Unix date (UTC) → [`FtpTime`] ("civil from days" algorithm by H. Hinnant).
 pub fn unix_to_ftptime(secs: i64) -> FtpTime {
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
@@ -442,7 +442,7 @@ pub fn unix_to_ftptime(secs: i64) -> FtpTime {
     FtpTime { year: Some(year), month, day, hour: (rem / 3600) as u8, minute: (rem % 3600 / 60) as u8, second: (rem % 60) as u8 }
 }
 
-/// Mode Unix → `drwxr-xr-x`.
+/// Unix mode → `drwxr-xr-x`.
 pub fn mode_string(mode: u32) -> String {
     let kind = match mode & 0o170000 {
         0o040000 => 'd',

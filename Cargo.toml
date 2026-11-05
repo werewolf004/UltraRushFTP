@@ -4,6 +4,7 @@ members = [
     "crates/urftp-core",
     "crates/urftp-proto",
     "crates/urftp-script",
+    "crates/urftp-i18n",
     "crates/urftp-sys",
     "crates/rushmirc",
     "crates/urftp-cli",
@@ -24,6 +25,7 @@ urftp-core = { path = "crates/urftp-core" }
 urftp-proto = { path = "crates/urftp-proto" }
 urftp-script = { path = "crates/urftp-script" }
 urftp-sys = { path = "crates/urftp-sys" }
+urftp-i18n = { path = "crates/urftp-i18n" }
 tokio = { version = "1", features = ["net", "io-util", "time", "rt", "sync", "macros", "fs"] }
 thiserror = "2"
 parking_lot = "0.12"
@@ -39,6 +41,7 @@ expect_used = "deny"
 panic = "deny"
 todo = "deny"
 unimplemented = "deny"
+unreachable = "deny"
 dbg_macro = "deny"
 
 [profile.release]

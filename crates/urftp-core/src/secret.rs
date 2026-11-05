@@ -1,15 +1,15 @@
-//! Protection des mots de passe enregistrés.
+//! Protection of stored passwords.
 //!
-//! Sous Windows : DPAPI (`CryptProtectData`), lié au compte Windows de l'utilisateur ; le
-//! fichier de sites copié sur une autre machine ou un autre compte ne révèle rien.
-//! Ailleurs : simple base64 (marqué comme tel), en attendant un trousseau système.
+//! On Windows: DPAPI (`CryptProtectData`), bound to the user's Windows account; a site
+//! file copied to another machine or account reveals nothing.
+//! Elsewhere: plain base64 (labelled as such), until a system keyring is used.
 //!
-//! Format stocké : `dpapi:<base64>` ou `b64:<base64>` ; chaîne vide = pas de mot de passe.
+//! Stored format: `dpapi:<base64>` or `b64:<base64>`; empty string = no password.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 
-/// Chiffre un secret pour l'enregistrer.
+/// Encrypts a secret before storing it.
 pub fn protect(plain: &str) -> String {
     if plain.is_empty() {
         return String::new();
@@ -21,7 +21,7 @@ pub fn protect(plain: &str) -> String {
     format!("b64:{}", STANDARD.encode(plain.as_bytes()))
 }
 
-/// Déchiffre un secret enregistré. `None` si illisible (autre compte Windows, fichier abîmé…).
+/// Decrypts a stored secret. `None` when unreadable (other Windows account, damaged file...).
 pub fn unprotect(stored: &str) -> Option<String> {
     if stored.is_empty() {
         return Some(String::new());
@@ -52,7 +52,7 @@ mod dpapi {
     }
 }
 
-/// Sérialisation serde : le champ est chiffré dans le fichier, en clair en mémoire.
+/// serde serialisation: the field is encrypted in the file, plain in memory.
 pub mod serde_secret {
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -62,7 +62,7 @@ pub mod serde_secret {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
         let stored = String::deserialize(d)?;
-        // Un secret illisible ne doit pas empêcher d'ouvrir tout le carnet de sites.
+        // An unreadable secret must not prevent opening the whole site book.
         Ok(super::unprotect(&stored).unwrap_or_default())
     }
 }
@@ -75,7 +75,7 @@ mod tests {
     fn roundtrip() {
         for p in ["", "s3cr3t", "mot de passe accentué é à ü 🔑"] {
             let stored = protect(p);
-            assert!(!stored.contains(p) || p.is_empty(), "le secret apparaît en clair : {stored}");
+            assert!(!stored.contains(p) || p.is_empty(), "the secret appears in clear: {stored}");
             assert_eq!(unprotect(&stored).as_deref(), Some(p));
         }
         #[cfg(windows)]

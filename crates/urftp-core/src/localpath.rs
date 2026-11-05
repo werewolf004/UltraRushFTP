@@ -1,16 +1,16 @@
-//! Chemins locaux longs (au-delà de `MAX_PATH` = 260 caractères sous Windows).
+//! Long local paths (beyond `MAX_PATH` = 260 characters on Windows).
 //!
-//! `std::fs` ajoute déjà le préfixe `\\?\` quand c'est nécessaire. Ce module sert aux
-//! appels Win32 directs (shell, dialogues, API qui ne passent pas par `std::fs`) :
-//! [`to_verbatim`] produit un chemin absolu normalisé au format `\\?\C:\…` ou `\\?\UNC\…`.
+//! `std::fs` already adds the `\\?\` prefix when needed. This module serves direct Win32
+//! calls (shell, dialogs, APIs that do not go through `std::fs`): [`to_verbatim`]
+//! returns a normalised absolute path in the `\\?\C:\…` or `\\?\UNC\…` format.
 
 use std::path::{Component, Path, PathBuf, Prefix};
 
-/// Convertit un chemin absolu en chemin « verbatim » Windows, sans limite de longueur.
+/// Converts an absolute path into a Windows "verbatim" path, without length limit.
 ///
-/// Les composants `.` et `..` sont résolus (le format verbatim ne les interprète pas) et les
-/// `/` sont remplacés par `\`. Un chemin relatif, déjà verbatim, ou non représentable en
-/// UTF-8 est renvoyé tel quel. Hors Windows, la fonction renvoie le chemin inchangé.
+/// `.` and `..` components are resolved (the verbatim format does not interpret them) and
+/// `/` are replaced by `\`. A relative path, an already verbatim one, or one that is not
+/// valid UTF-8 is returned unchanged. Outside Windows the path is returned unchanged.
 pub fn to_verbatim(path: &Path) -> PathBuf {
     if cfg!(windows) { verbatim_windows(path).unwrap_or_else(|| path.to_path_buf()) } else { path.to_path_buf() }
 }
@@ -26,7 +26,7 @@ fn verbatim_windows(path: &Path) -> Option<PathBuf> {
                     Prefix::UNC(server, share) => {
                         format!(r"\\?\UNC\{}\{}", server.to_str()?, share.to_str()?)
                     }
-                    // Déjà verbatim ou chemin de périphérique : ne pas toucher.
+                    // Already verbatim or a device path: leave it alone.
                     _ => return None,
                 });
             }
@@ -69,7 +69,7 @@ mod tests {
         assert_eq!(to_verbatim(Path::new(r"rel\x")), PathBuf::from(r"rel\x"));
     }
 
-    /// Crée, écrit, relit et supprime une arborescence de plus de 600 caractères.
+    /// Creates, writes, reads back and deletes a tree longer than 600 characters.
     #[test]
     fn std_fs_handles_paths_longer_than_max_path() {
         let root = std::env::temp_dir().join(format!("urftp-long-{}", std::process::id()));
@@ -77,7 +77,7 @@ mod tests {
         for i in 0..12 {
             deep.push(format!("dossier_tres_long_numero_{i:02}_{}", "x".repeat(30)));
         }
-        let file = deep.join("fichier.bin");
+        let file = deep.join("file.bin");
         assert!(file.as_os_str().len() > 600);
 
         std::fs::create_dir_all(&deep).unwrap();

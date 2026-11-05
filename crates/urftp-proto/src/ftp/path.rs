@@ -1,6 +1,6 @@
-//! Chemins distants (séparateur `/`). Aucune limite de longueur n'est imposée ici.
+//! Remote paths (`/` separator). No length limit is enforced here.
 
-/// Normalise un chemin absolu : supprime `.`, résout `..`, retire les `/` en double.
+/// Normalises an absolute path: removes `.`, resolves `..`, drops duplicate `/`.
 pub fn normalize(path: &str) -> String {
     let mut parts: Vec<&str> = Vec::new();
     for seg in path.split('/') {
@@ -15,12 +15,12 @@ pub fn normalize(path: &str) -> String {
     format!("/{}", parts.join("/"))
 }
 
-/// Résout `path` par rapport au répertoire absolu `base`.
+/// Resolves `path` against the absolute directory `base`.
 pub fn join(base: &str, path: &str) -> String {
     if path.starts_with('/') { normalize(path) } else { normalize(&format!("{base}/{path}")) }
 }
 
-/// Sépare un chemin en (répertoire parent, nom). `"a"` → `(None, "a")`, `"/a"` → `(Some("/"), "a")`.
+/// Splits a path into (parent directory, name). `"a"` → `(None, "a")`, `"/a"` → `(Some("/"), "a")`.
 pub fn split(path: &str) -> (Option<&str>, &str) {
     let trimmed = path.trim_end_matches('/');
     match trimmed.rfind('/') {

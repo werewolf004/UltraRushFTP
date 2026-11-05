@@ -1,20 +1,20 @@
-//! Session distante commune (FTP/FTPS ou SFTP) et profil de site, pour le moteur de file.
+//! Common remote session (FTP/FTPS or SFTP) and site profile, for the queue engine.
 
 use urftp_core::queue::SiteLimits;
 
 use crate::ftp::{FtpClient, FtpConfig, FtpError, LogSink, RemoteEntry, path};
 use crate::sftp::{SftpAuth, SftpClient, SftpConfig, SftpError};
 
-/// Protocole et réglages d'un site.
+/// Protocol and settings of a site.
 #[derive(Debug, Clone)]
 pub enum SiteProtocol {
-    /// FTP ou FTPS (voir `FtpConfig::security`).
+    /// FTP or FTPS (see `FtpConfig::security`).
     Ftp(FtpConfig),
-    /// SFTP ; `key` remplace le mot de passe si présente.
+    /// SFTP; `key` replaces the password when present.
     Sftp { config: SftpConfig, key: Option<SftpAuth> },
 }
 
-/// Tout ce qu'il faut pour ouvrir des connexions vers un site.
+/// Everything needed to open connections to a site.
 #[derive(Debug, Clone)]
 pub struct SiteProfile {
     pub name: String,
@@ -26,14 +26,14 @@ pub struct SiteProfile {
     pub limits: SiteLimits,
 }
 
-/// Erreur d'une opération de session ou de transfert.
+/// Error of a session or transfer operation.
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
     #[error(transparent)]
     Ftp(#[from] FtpError),
     #[error(transparent)]
     Sftp(#[from] SftpError),
-    #[error("fichier local : {0}")]
+    #[error("local file: {0}")]
     Local(#[from] std::io::Error),
     /// The queue refers to a site the engine was not given.
     #[error("unknown site: {0}")]
@@ -47,8 +47,8 @@ pub enum SessionError {
 }
 
 impl SessionError {
-    /// La connexion reste-t-elle utilisable après cette erreur ? (refus du serveur : oui ;
-    /// erreur réseau, délai, protocole : non.)
+    /// Is the connection still usable after this error? (server refusal: yes; network
+    /// error, timeout, protocol error: no.)
     pub fn keeps_session(&self) -> bool {
         matches!(
             self,
@@ -61,7 +61,7 @@ impl SessionError {
         )
     }
 
-    /// Le serveur a-t-il refusé la reprise (`REST`) ?
+    /// Did the server refuse to resume (`REST`)?
     pub fn is_resume_refused(&self) -> bool {
         matches!(self, SessionError::Ftp(FtpError::Unexpected { command, .. }) if command.starts_with("REST"))
     }
@@ -69,14 +69,14 @@ impl SessionError {
 
 pub type Result<T, E = SessionError> = std::result::Result<T, E>;
 
-/// Connexion ouverte et authentifiée vers un site.
+/// Open, authenticated connection to a site.
 pub enum RemoteSession {
     Ftp(Box<FtpClient>),
     Sftp(Box<SftpClient>),
 }
 
 impl RemoteSession {
-    /// Ouvre une connexion et s'authentifie.
+    /// Opens a connection and logs in.
     pub async fn open(site: &SiteProfile, log: Option<LogSink>) -> Result<Self> {
         Ok(match &site.protocol {
             SiteProtocol::Ftp(cfg) => {
@@ -99,13 +99,13 @@ impl RemoteSession {
         }
     }
 
-    /// Taille d'un fichier, `None` s'il n'existe pas.
+    /// Size of a file, `None` when it does not exist.
     pub async fn size_if_exists(&mut self, p: &str) -> Result<Option<u64>> {
         match self {
             RemoteSession::Ftp(c) => match c.size(p).await {
                 Ok(n) => Ok(Some(n)),
                 Err(FtpError::Unexpected { reply, .. }) if reply.code == 550 || reply.code == 450 => Ok(None),
-                // Répertoire parent absent : le CWD échoue, la cible n'existe donc pas.
+                // Missing parent folder: CWD fails, so the target does not exist.
                 Err(FtpError::Unexpected { command, .. }) if command.starts_with("CWD") => Ok(None),
                 Err(e) => Err(e.into()),
             },
@@ -133,7 +133,7 @@ impl RemoteSession {
         Ok(())
     }
 
-    /// Supprime un dossier vide.
+    /// Removes an empty folder.
     pub async fn rmdir(&mut self, p: &str) -> Result<()> {
         match self {
             RemoteSession::Ftp(c) => c.rmdir(p).await?,
@@ -142,11 +142,11 @@ impl RemoteSession {
         Ok(())
     }
 
-    /// Supprime un dossier et tout son contenu.
+    /// Removes a folder and all its contents.
     pub async fn remove_tree(&mut self, dir: &str) -> Result<usize> {
         let mut removed = 0;
         let mut stack = vec![(dir.to_string(), false)];
-        // Parcours en profondeur : un dossier n'est supprimé qu'après son contenu.
+        // Depth-first walk: a folder is removed only after its contents.
         while let Some((d, listed)) = stack.pop() {
             if listed {
                 self.rmdir(&d).await?;
@@ -167,7 +167,7 @@ impl RemoteSession {
         Ok(removed)
     }
 
-    /// Renomme `from` en `to` (nom simple dans le même dossier, ou chemin).
+    /// Renames `from` to `to` (plain name in the same folder, or a path).
     pub async fn rename(&mut self, from: &str, to: &str) -> Result<()> {
         match self {
             RemoteSession::Ftp(c) => c.rename(from, to).await?,
@@ -176,7 +176,7 @@ impl RemoteSession {
         Ok(())
     }
 
-    /// Change de répertoire (chemin absolu ou relatif, `..` accepté).
+    /// Changes directory (absolute or relative path, `..` allowed).
     pub async fn cwd(&mut self, dir: &str) -> Result<()> {
         match self {
             RemoteSession::Ftp(c) => c.cwd(dir).await?,
@@ -185,7 +185,7 @@ impl RemoteSession {
         Ok(())
     }
 
-    /// Répertoire courant connu.
+    /// Known current directory.
     pub fn current_dir(&self) -> Option<String> {
         match self {
             RemoteSession::Ftp(c) => c.current_dir().map(String::from),
@@ -193,7 +193,7 @@ impl RemoteSession {
         }
     }
 
-    /// Liste le répertoire courant.
+    /// Lists the current directory.
     pub async fn list_current(&mut self) -> Result<Vec<RemoteEntry>> {
         Ok(match self {
             RemoteSession::Ftp(c) => c.list(None).await?,
@@ -208,7 +208,7 @@ impl RemoteSession {
         })
     }
 
-    /// Crée le dossier s'il n'existe pas (les parents doivent exister).
+    /// Creates the folder when missing (the parents must exist).
     pub async fn ensure_dir(&mut self, dir: &str) -> Result<()> {
         match self {
             RemoteSession::Ftp(c) => {
@@ -247,7 +247,7 @@ impl RemoteSession {
         })
     }
 
-    /// Nom libre dans `dir` à partir de `name` (« nom (1).ext »…).
+    /// Free name in `dir` based on `name` ("name (1).ext"...).
     pub async fn free_name(&mut self, dir: &str, name: &str) -> Result<String> {
         for n in 1..1000 {
             let candidate = urftp_core::exists::renamed(name, n);

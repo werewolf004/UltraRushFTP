@@ -1,8 +1,8 @@
-//! Tests avec les exemples de l'aide de FTPRush v2.
+//! Tests with the examples of the FTPRush v2 help.
 
 use super::*;
 
-/// Hôte de test : enregistre les appels et répond à quelques propriétés.
+/// Test host: records the calls and answers a few properties.
 #[derive(Default)]
 struct Mock {
     calls: Vec<(String, Vec<Value>)>,
@@ -119,14 +119,14 @@ fn input_query_example_from_help() {
 
     let mut cancelled = Mock::default();
     run(src, &mut cancelled).unwrap();
-    assert!(!cancelled.calls.iter().any(|c| c.0 == "RushApp.FTP.CWD"), "annulé : pas de CWD");
+    assert!(!cancelled.calls.iter().any(|c| c.0 == "RushApp.FTP.CWD"), "cancelled: no CWD");
 }
 
 #[test]
 fn invoke_expressions() {
     let mut m = Mock::default();
     assert_eq!(evaluate("RushApp.TotalDownloadSize", &mut m).unwrap(), Value::Int(1234));
-    // L'exemple mIRC de l'aide termine certaines expressions par « ; ».
+    // The mIRC example of the help ends some expressions with ";".
     assert_eq!(evaluate("RushApp.Containers.ContainerCount;", &mut m).unwrap().to_text(), "3");
     assert_eq!(evaluate("rushapp.version", &mut m).unwrap().to_text(), "UltraRushFTP 0.1.0");
     assert_eq!(

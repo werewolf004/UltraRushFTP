@@ -54,14 +54,14 @@ async fn resume_download_and_upload() {
     let mut c = connect(&srv).await;
     let full: Vec<u8> = (0..100_000u32).map(|i| (i % 199) as u8).collect();
 
-    // Envoi interrompu à 40 000 octets, puis reprise.
+    // Upload interrupted at 40,000 bytes, then resumed.
     c.stor("/f.bin", 0, &mut &full[..40_000], |_| {}).await.unwrap();
     let remote = c.size("/f.bin").await.unwrap();
     assert_eq!(remote, 40_000);
     c.stor("/f.bin", remote, &mut &full[40_000..], |_| {}).await.unwrap();
     assert_eq!(srv.fs.lock().unwrap().files["/f.bin"], full);
 
-    // Téléchargement repris à 70 000 octets.
+    // Download resumed at 70,000 bytes.
     let mut tail = Vec::new();
     let n = c.retr("/f.bin", 70_000, &mut tail, |_| {}).await.unwrap();
     assert_eq!(n, 30_000);
@@ -71,7 +71,7 @@ async fn resume_download_and_upload() {
 
 #[tokio::test]
 async fn long_remote_paths_fall_back_to_step_by_step_cwd() {
-    // Le serveur refuse tout argument de plus de 100 caractères.
+    // The server refuses any argument longer than 100 characters.
     let srv = MockServer::start(MockConfig { max_arg_len: Some(100), ..MockConfig::default() }).await;
     let deep: String = (0..10).map(|i| format!("/repertoire_{i:02}_{}", "z".repeat(40))).collect();
     assert!(deep.len() > 500);
@@ -87,7 +87,7 @@ async fn long_remote_paths_fall_back_to_step_by_step_cwd() {
     assert_eq!(back, b"contenu");
     let names: Vec<String> = c.list(Some(&deep)).await.unwrap().into_iter().map(|e| e.name).collect();
     assert_eq!(names, ["release.nfo"]);
-    // Aucune commande envoyée n'a dépassé la limite, hormis le premier CWD tenté en entier.
+    // No command sent exceeded the limit, except the first CWD tried as a whole.
     let too_long: Vec<_> = srv.received().into_iter().filter(|l| l.len() > 105).collect();
     assert_eq!(too_long.len(), 1, "{too_long:?}");
 }
@@ -101,7 +101,7 @@ async fn epsv_refused_falls_back_to_pasv_and_list_without_mlsd() {
     let list = c.list(None).await.unwrap();
     assert_eq!(list.len(), 2);
     let cmds = srv.received();
-    assert_eq!(cmds.iter().filter(|l| *l == "EPSV").count(), 1, "EPSV ne doit être tenté qu'une fois");
+    assert_eq!(cmds.iter().filter(|l| *l == "EPSV").count(), 1, "EPSV must be tried only once");
     assert!(cmds.iter().any(|l| l == "LIST"));
 }
 
@@ -115,7 +115,7 @@ async fn bad_password_and_missing_file() {
     let mut c = connect(&srv).await;
     let err = c.retr("/absent.bin", 0, &mut Vec::new(), |_| {}).await.unwrap_err();
     assert_eq!(err.reply_code(), Some(550));
-    // La connexion reste utilisable après une erreur.
+    // The connection stays usable after an error.
     c.noop().await.unwrap();
 }
 

@@ -1,4 +1,4 @@
-//! Serveur SSH/SFTP de test en mémoire (localhost uniquement).
+//! In-memory SSH/SFTP test server (localhost only).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::net::SocketAddr;
@@ -31,9 +31,9 @@ impl SftpFs {
 pub struct MockSftp {
     pub addr: SocketAddr,
     pub fs: Arc<Mutex<SftpFs>>,
-    /// Empreinte de la clé d'hôte (`SHA256:…`).
+    /// Fingerprint of the host key (`SHA256:…`).
     pub fingerprint: String,
-    /// Méthodes d'authentification acceptées (« password », « publickey »).
+    /// Accepted authentication methods ("password", "publickey").
     pub auth_log: Arc<Mutex<Vec<String>>>,
 }
 
@@ -41,7 +41,7 @@ pub struct MockSftp {
 pub struct SftpMockConfig {
     pub user: String,
     pub pass: String,
-    /// Clé publique autorisée pour l'authentification par clé.
+    /// Public key authorised for key authentication.
     pub authorized_key: Option<PublicKey>,
 }
 

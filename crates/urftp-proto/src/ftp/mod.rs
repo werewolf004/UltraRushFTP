@@ -1,7 +1,7 @@
-//! Client FTP (RFC 959, 2389, 2428, 3659) écrit pour UltraRushFTP.
+//! FTP client (RFC 959, 2389, 2428, 3659) written for UltraRushFTP.
 //!
-//! Le flux de contrôle et les flux de données sont des [`BoxStream`] : TLS (FTPS) et
-//! proxys viendront s'insérer sans changer le client.
+//! The control stream and the data streams are [`BoxStream`]s: TLS (FTPS) and proxies
+//! plug in without changing the client.
 
 mod client;
 mod features;
@@ -20,39 +20,39 @@ pub use listing::{EntryKind, FtpTime, RemoteEntry};
 pub use reply::Reply;
 pub use tls::{Security, TlsOptions, TlsVerify, fingerprint_sha256};
 
-/// Flux réseau générique (TCP, TLS, tunnel proxy…).
+/// Generic network stream (TCP, TLS, proxy tunnel...).
 pub trait AsyncStream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncStream for T {}
 
-/// Flux réseau générique en boîte.
+/// Boxed generic network stream.
 pub type BoxStream = Box<dyn AsyncStream>;
 
-/// Erreurs du client FTP.
+/// Errors of the FTP client.
 #[derive(Debug, thiserror::Error)]
 pub enum FtpError {
-    #[error("erreur réseau : {0}")]
+    #[error("network error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("délai dépassé")]
+    #[error("timed out")]
     Timeout,
-    #[error("connexion fermée par le serveur")]
+    #[error("connection closed by the server")]
     Closed,
-    #[error("réponse inattendue à « {command} » : {reply}")]
+    #[error("unexpected reply to \"{command}\": {reply}")]
     Unexpected { command: String, reply: Reply },
-    #[error("erreur de protocole : {0}")]
+    #[error("protocol error: {0}")]
     Protocol(String),
-    #[error("argument invalide : {0}")]
+    #[error("invalid argument: {0}")]
     InvalidArgument(String),
     #[error("erreur TLS : {0}")]
     Tls(String),
     #[error("proxy : {0}")]
     Proxy(#[from] crate::proxy::ProxyError),
-    /// Certificat refusé ; `fingerprint` (SHA-256) permet de proposer de l'approuver.
-    #[error("certificat du serveur refusé ({reason}) — empreinte SHA-256 : {fingerprint}")]
+    /// Certificate refused; `fingerprint` (SHA-256) allows offering to trust it.
+    #[error("server certificate refused ({reason}) — SHA-256 fingerprint: {fingerprint}")]
     Certificate { fingerprint: String, reason: String },
 }
 
 impl FtpError {
-    /// Code de la réponse serveur si l'erreur en provient.
+    /// Server reply code when the error comes from one.
     pub fn reply_code(&self) -> Option<u16> {
         match self {
             FtpError::Unexpected { reply, .. } => Some(reply.code),

@@ -1,12 +1,12 @@
 // Development tool: aborting on an unexpected state is acceptable.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-//! Simule mIRC : appelle les fonctions de la DLL contre une instance d'UltraRushFTP ouverte,
-//! puis affiche ce que mIRC aurait reçu. Développement uniquement.
+//! Simulates mIRC: calls the DLL functions against a running UltraRushFTP instance, then
+//! prints what mIRC would have received. Development only.
 //!
 //! ```text
 //! cargo run -p urftp-sys --features mirc-dll --example mirc_driver -- "RushApp.Version" "RushApp.FTP.RAW('DEV','SYST',0);"
 //! ```
-//! Respecte `URUSHFTP_IPC_CLASS` (même valeur que l'application visée).
+//! Honours `URUSHFTP_IPC_CLASS` (same value as the targeted application).
 #![cfg_attr(not(windows), allow(unused))]
 
 #[cfg(windows)]
@@ -62,15 +62,15 @@ fn main() {
     // SAFETY: `data` is a writable 4096-byte buffer.
     let r = unsafe { Invoke(mirc, std::ptr::null_mut(), data.as_mut_ptr(), std::ptr::null_mut(), 0, 0) };
     let answer = String::from_utf8_lossy(data.split(|&c| c == 0).next().unwrap()).into_owned();
-    println!("Invoke({invoke}) -> code {r}, réponse « {answer} »");
+    println!("Invoke({invoke}) -> code {r}, answer \"{answer}\"");
 
     if let Some(script) = script {
         let mut data = vec![0u8; 4096];
         data[..script.len()].copy_from_slice(script.as_bytes());
         // SAFETY: `data` is a writable 4096-byte buffer.
         unsafe { RushScript(mirc, std::ptr::null_mut(), data.as_mut_ptr(), std::ptr::null_mut(), 0, 0) };
-        println!("RushScript envoyé, attente des réponses…");
-        // Boucle de messages : la fenêtre de rappel de la DLL reçoit les réponses RAW.
+        println!("RushScript sent, waiting for replies...");
+        // Message loop: the DLL callback window receives the RAW replies.
         let end = Instant::now() + Duration::from_secs(6);
         while Instant::now() < end {
             // SAFETY: standard message pump on the thread owning the windows; `MSG` may be zeroed.
@@ -83,7 +83,7 @@ fn main() {
             std::thread::sleep(Duration::from_millis(20));
         }
         for line in RECEIVED.lock().unwrap().iter() {
-            println!("mIRC reçoit : {line}");
+            println!("mIRC receives: {line}");
         }
     }
 }

@@ -1,21 +1,21 @@
-//! Interpréteur du Pascal Script de FTPRush.
+//! Interpreter of the FTPRush Pascal Script.
 //!
-//! `rushmirc.dll` (fonction `RushScript`) envoie du code Pascal à l'application, par exemple
-//! `RushApp.FTP.Login('FTP1;FTP2','public',RS_BOOKMARK or RS_CHECKBM);`, et `Invoke` demande
-//! une valeur : `RushApp.TotalDownloadSize`.
+//! `rushmirc.dll` (function `RushScript`) sends Pascal code to the application, for example
+//! `RushApp.FTP.Login('FTP1;FTP2','public',RS_BOOKMARK or RS_CHECKBM);`, and `Invoke` asks
+//! for a value: `RushApp.TotalDownloadSize`.
 //!
-//! L'interpréteur gère le sous-ensemble utilisé par les scripts FTPRush : variables,
-//! chaînes, entiers, booléens, opérateurs (dont `or`/`and` bit à bit sur les drapeaux),
-//! `if/then/else`, `while`, `repeat/until`, `for`, `begin/end`, `exit`, quelques fonctions
-//! intégrées (`IntToStr`, `StrToInt`, `Length`, `Copy`, `Pos`, `UpperCase`, `ShowMessage`,
-//! `InputQuery`…). Tout ce qui commence par `RushApp` est confié à l'hôte ([`Host`]),
-//! c'est-à-dire à l'application.
+//! The interpreter handles the subset used by FTPRush scripts: variables, strings,
+//! integers, booleans, operators (including bitwise `or`/`and` on flags),
+//! `if/then/else`, `while`, `repeat/until`, `for`, `begin/end`, `exit`, a few built-in
+//! functions (`IntToStr`, `StrToInt`, `Length`, `Copy`, `Pos`, `UpperCase`, `ShowMessage`,
+//! `InputQuery`...). Everything starting with `RushApp` is handed to the host ([`Host`]),
+//! that is to the application.
 
 mod interp;
 mod lexer;
 mod parser;
 
-/// Noms des constantes de drapeaux reconnues par l'API `RushApp.FTP.*` de FTPRush.
+/// Names of the flag constants known by the FTPRush `RushApp.FTP.*` API.
 pub const RS_FLAG_NAMES: &[&str] = &[
     "RS_ALL",
     "RS_APPEND",
@@ -57,17 +57,17 @@ pub const RS_FLAG_NAMES: &[&str] = &[
     "RS_WILD",
 ];
 
-/// Valeur d'un drapeau `RS_*` (un bit par drapeau), insensible à la casse.
+/// Value of an `RS_*` flag (one bit per flag), case-insensitive.
 pub fn flag_value(name: &str) -> Option<i64> {
     RS_FLAG_NAMES.iter().position(|f| f.eq_ignore_ascii_case(name)).map(|i| 1i64 << i)
 }
 
-/// Le drapeau `name` est-il présent dans `flags` ?
+/// Is the flag `name` set in `flags`?
 pub fn has_flag(flags: i64, name: &str) -> bool {
     flag_value(name).is_some_and(|v| flags & v != 0)
 }
 
-/// Valeur manipulée par les scripts.
+/// Value handled by scripts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     Int(i64),
@@ -77,7 +77,7 @@ pub enum Value {
 }
 
 impl Value {
-    /// Représentation texte (réponse d'`Invoke`, concaténation).
+    /// Text representation (`Invoke` answer, concatenation).
     pub fn to_text(&self) -> String {
         match self {
             Value::Int(i) => i.to_string(),
@@ -89,9 +89,9 @@ impl Value {
 
     pub fn type_name(&self) -> &'static str {
         match self {
-            Value::Int(_) => "entier",
-            Value::Str(_) => "chaîne",
-            Value::Bool(_) => "booléen",
+            Value::Int(_) => "integer",
+            Value::Str(_) => "string",
+            Value::Bool(_) => "boolean",
             Value::Nil => "nil",
         }
     }
@@ -112,15 +112,14 @@ impl Value {
     }
 }
 
-/// L'application qui exécute les scripts : reçoit les appels et lectures `RushApp.*`.
-/// Les chemins sont transmis tels qu'écrits (`RushApp.FTP.Login`) ; comparez-les sans
-/// tenir compte de la casse.
+/// The application running the scripts: receives the `RushApp.*` calls and reads. Paths
+/// are passed as written (`RushApp.FTP.Login`); compare them case-insensitively.
 pub trait Host {
-    /// Appel de procédure ou de fonction (`RushApp.FTP.Login(…)`, `ShowMessage`, `InputQuery`).
+    /// Procedure or function call (`RushApp.FTP.Login(…)`, `ShowMessage`, `InputQuery`).
     fn call(&mut self, name: &str, args: &[Value]) -> Result<Value, HostError>;
-    /// Lecture d'une propriété (`RushApp.Version`, `RushApp.Containers.ContainerCount`).
+    /// Property read (`RushApp.Version`, `RushApp.Containers.ContainerCount`).
     fn get(&mut self, name: &str) -> Result<Value, HostError>;
-    /// Écriture d'une propriété (`RushApp.FTP.Splitter := '|'`).
+    /// Property write (`RushApp.FTP.Splitter := '|'`).
     fn set(&mut self, name: &str, value: Value) -> Result<(), HostError>;
 }
 
@@ -218,22 +217,22 @@ impl ScriptError {
     }
 }
 
-/// Exécute un script complet (`RushScript`).
+/// Runs a complete script (`RushScript`).
 pub fn run(source: &str, host: &mut dyn Host) -> Result<(), ScriptError> {
     let prog = parser::parse_program(lexer::tokenize(source)?)?;
     interp::Interpreter::new(host).run(&prog)
 }
 
-/// Évalue une seule expression et renvoie sa valeur (`Invoke`).
+/// Evaluates a single expression and returns its value (`Invoke`).
 pub fn evaluate(expression: &str, host: &mut dyn Host) -> Result<Value, ScriptError> {
     let expr = parser::parse_expression(lexer::tokenize(expression.trim())?)?;
-    let prog = [parser::Stmt::Assign(vec!["__resultat".into()], expr, 1)];
+    let prog = [parser::Stmt::Assign(vec!["__result".into()], expr, 1)];
     let mut it = interp::Interpreter::new(host);
     it.run(&prog)?;
-    Ok(it.take_var("__resultat").unwrap_or(Value::Nil))
+    Ok(it.take_var("__result").unwrap_or(Value::Nil))
 }
 
-/// Vérifie la syntaxe sans rien exécuter.
+/// Checks the syntax without running anything.
 pub fn check(source: &str) -> Result<(), ScriptError> {
     parser::parse_program(lexer::tokenize(source)?).map(drop)
 }

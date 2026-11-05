@@ -1,11 +1,12 @@
-//! L'objet `RushApp` des scripts FTPRush, branché sur l'application : connexions, commandes
-//! brutes, file d'attente, sites, statistiques. Utilisé par la console de script et, plus
-//! tard, par `rushmirc.dll` (`RushScript`, `Invoke`).
+//! The `RushApp` object of FTPRush scripts, wired to the application: connections, raw
+//! commands, queue, sites, statistics. Used by the script console and by `rushmirc.dll`
+//! (`RushScript`, `Invoke`).
 
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use urftp_core::pattern::Pattern;
+use urftp_i18n::t;
 use urftp_script::{Host, HostError, ScriptError, Value, has_flag};
 
 use super::*;
@@ -15,20 +16,20 @@ use super::*;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 struct Totals {
-    /// Date de la première utilisation (`AAAA-MM-JJ`).
+    /// Date of first use (`YYYY-MM-DD`).
     start_date: String,
     download: u64,
     upload: u64,
     fxp: u64,
 }
 
-/// Octets transférés : totaux enregistrés (`stats.json`), session en cours, débits.
+/// Bytes transferred: stored totals (`stats.json`), current session, rates.
 pub(super) struct Stats {
     totals: Totals,
     session: [u64; 3],
     window: [u64; 2],
     window_start: Instant,
-    /// Débits en Kio/s : téléchargement, envoi.
+    /// Rates in KiB/s: download, upload.
     bw: [f64; 2],
     dirty: bool,
     last_save: Instant,
@@ -44,7 +45,7 @@ fn today() -> String {
     format!("{:04}-{:02}-{:02}", t.year.unwrap_or(1970), t.month, t.day)
 }
 
-/// Jours depuis le 1970-01-01 (algorithme de H. Hinnant).
+/// Days since 1970-01-01 (algorithm by H. Hinnant).
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = y.div_euclid(400);
@@ -74,7 +75,7 @@ impl Stats {
         Self { totals, session: [0; 3], window: [0; 2], window_start: Instant::now(), bw: [0.0; 2], dirty, last_save: Instant::now() }
     }
 
-    /// Compte le trafic d'une image et met à jour les débits (fenêtre d'une seconde).
+    /// Counts the traffic of one frame and updates the rates (one-second window).
     pub(super) fn record(&mut self, traffic: &[(TransferKind, u64)]) {
         for &(kind, n) in traffic {
             if n == 0 {
@@ -131,16 +132,16 @@ impl Drop for Stats {
     }
 }
 
-// ====================================================================== exécution
+// ====================================================================== execution
 
 impl UltraRushApp {
-    /// Exécute un script (`RushScript`) ; les erreurs portent leur numéro de ligne.
+    /// Runs a script (`RushScript`); errors carry their line number.
     pub(super) fn run_script(&mut self, src: &str, ctx: &egui::Context) -> Result<(), ScriptError> {
         let mut host = AppHost { app: self, ctx };
         urftp_script::run(src, &mut host)
     }
 
-    /// Évalue une expression (`Invoke`) et renvoie son texte.
+    /// Evaluates an expression (`Invoke`) and returns its text.
     pub(super) fn invoke(&mut self, src: &str, ctx: &egui::Context) -> Result<String, ScriptError> {
         let mut host = AppHost { app: self, ctx };
         urftp_script::evaluate(src, &mut host).map(|v| v.to_text())
@@ -150,7 +151,7 @@ impl UltraRushApp {
 // ====================================================================== liaison mIRC
 
 impl UltraRushApp {
-    /// Démarre la fenêtre `TfmRush` (une fois) puis traite les demandes de `rushmirc.dll`.
+    /// Starts the `TfmRush` window (once), then handles the requests of `rushmirc.dll`.
     pub(super) fn serve_ipc(&mut self, ctx: &egui::Context) {
         if self.ipc_rx.is_none() {
             let (tx, rx) = std::sync::mpsc::channel();
@@ -161,9 +162,9 @@ impl UltraRushApp {
             }) {
                 Ok(srv) => {
                     self.ipc = Some(srv);
-                    self.tabs[self.active].push_log(0, LogKind::Status, "Liaison mIRC prête (rushmirc.dll)");
+                    self.tabs[self.active].push_log(0, LogKind::Status, t!("log.mirc_ready"));
                 }
-                Err(e) => self.tabs[self.active].push_log(0, LogKind::Error, format!("Liaison mIRC indisponible : {e}")),
+                Err(e) => self.tabs[self.active].push_log(0, LogKind::Error, t!("log.mirc_unavailable", error = e)),
             }
             self.ipc_rx = Some(rx);
         }
@@ -172,7 +173,7 @@ impl UltraRushApp {
             use urftp_sys::server::Request;
             match req {
                 Request::Invoke { expression, reply } => {
-                    let answer = self.invoke(&expression, ctx).unwrap_or_else(|e| format!("Erreur : {e}"));
+                    let answer = self.invoke(&expression, ctx).unwrap_or_else(|e| t!("script.error", error = e));
                     let _ = reply.send(answer);
                 }
                 Request::Script { source, callback } => {
@@ -192,12 +193,12 @@ impl UltraRushApp {
     fn note_ipc(&mut self, what: &str, r: Result<(), ScriptError>) {
         let t = self.active;
         self.tabs[t].script_out.push(match r {
-            Ok(()) => (true, format!("[mIRC] {what} exécuté")),
-            Err(e) => (false, format!("[mIRC] {what} : {e}")),
+            Ok(()) => (true, t!("script.mirc_done", what = what)),
+            Err(e) => (false, t!("script.mirc_failed", what = what, error = e)),
         });
     }
 
-    /// Renvoie à mIRC les réponses des `RAW` qu'il a demandés ; les autres sont oubliées.
+    /// Sends mIRC the replies of the `RAW` it asked for; the others are forgotten.
     pub(super) fn forward_raw_replies(&mut self) {
         for t in 0..self.tabs.len() {
             for (site, cmd, lines, ok) in std::mem::take(&mut self.tabs[t].raw_replies) {
@@ -208,7 +209,7 @@ impl UltraRushApp {
                 }
             }
         }
-        // Rappels orphelins (connexion jamais établie…) : on ne les garde pas indéfiniment.
+        // Orphan callbacks (connection never established...): not kept forever.
         if self.raw_callbacks.len() > 200 {
             self.raw_callbacks.drain(..100);
         }
@@ -239,7 +240,7 @@ fn want(a: &[Value], count: usize, name: &str) -> Result<(), HostError> {
 impl AppHost<'_> {
     fn log(&mut self, kind: LogKind, msg: impl Into<String>) {
         let t = self.app.active;
-        self.app.tabs[t].push_log(0, kind, format!("[script] {}", msg.into()));
+        self.app.tabs[t].push_log(0, kind, t!("log.script", message = msg.into()));
     }
 
     fn names(&self, list: &str) -> Vec<String> {
@@ -259,7 +260,7 @@ impl AppHost<'_> {
         site.bookmarks.iter().find(|bm| bm.name.eq_ignore_ascii_case(name))
     }
 
-    /// Panneaux connectés à l'un des sites (tous les panneaux distants si `names` est vide).
+    /// Panels connected to one of the sites (every remote panel when `names` is empty).
     fn panels(&self, names: &[String]) -> Vec<(usize, usize)> {
         let mut out = Vec::new();
         for (t, tab) in self.app.tabs.iter().enumerate() {
@@ -294,7 +295,7 @@ impl AppHost<'_> {
         }
     }
 
-    /// Connecte un site dans un nouveau panneau et renvoie sa position.
+    /// Connects a site in a new panel and returns its position.
     fn connect(&mut self, site: &Site, dir: Option<String>, flags: i64) -> (usize, usize) {
         let mut profile = sites::to_profile(site, &self.app.options.settings);
         if has_flag(flags, "RS_GHOST") && !profile.user.starts_with('!') {
@@ -305,7 +306,7 @@ impl AppHost<'_> {
         (self.app.active, 1)
     }
 
-    /// Dossier de départ pour `Login`/`CWD` : signet (`RS_BOOKMARK`) ou chemin.
+    /// Start folder for `Login`/`CWD`: bookmark (`RS_BOOKMARK`) or path.
     fn start_dir(site: &Site, param: &str, flags: i64) -> Result<Option<String>, HostError> {
         if param.is_empty() {
             return Ok(None);
@@ -329,22 +330,22 @@ impl AppHost<'_> {
             let site = match self.site(&name) {
                 Ok(site) => site,
                 Err(e) => {
-                    self.log(LogKind::Error, format!("Login : {e}"));
+                    self.log(LogKind::Error, t!("host.login_error", error = e));
                     continue;
                 }
             };
             match Self::start_dir(&site, &param, flags) {
                 Ok(dir) => sites.push((site, dir)),
-                // RS_CHECKBM : sans le signet demandé, ce site n'est pas connecté.
-                Err(e) if has_flag(flags, "RS_CHECKBM") => self.log(LogKind::Status, format!("Login : {e}, site ignoré")),
+                // RS_CHECKBM: without the requested bookmark, this site is not connected.
+                Err(e) if has_flag(flags, "RS_CHECKBM") => self.log(LogKind::Status, t!("host.login_skipped", error = e)),
                 Err(e) => {
-                    self.log(LogKind::Status, format!("Login : {e}, dossier par défaut"));
+                    self.log(LogKind::Status, t!("host.login_default_dir", error = e));
                     sites.push((site, None));
                 }
             }
         }
         if has_flag(flags, "RS_PAIR") && sites.len() >= 2 {
-            // FTP1;FTP2;FTP3 → onglets FTP1|FTP2 et FTP2|FTP3, prêts pour le FXP.
+            // FTP1;FTP2;FTP3 → tabs FTP1|FTP2 and FTP2|FTP3, ready for FXP.
             for w in sites.windows(2) {
                 self.app.new_tab();
                 let t = self.app.active;
@@ -360,7 +361,7 @@ impl AppHost<'_> {
             }
         }
         if has_flag(flags, "RS_INVERT") {
-            self.log(LogKind::Status, "Login : RS_INVERT n'est pas pris en charge, ignoré");
+            self.log(LogKind::Status, t!("host.invert_unsupported"));
         }
         self.popup(flags);
         Ok(())
@@ -388,7 +389,7 @@ impl AppHost<'_> {
                 match self.app.sites.book.find_by_name(&site_name).and_then(|site| Self::bookmark(site, &param)) {
                     Some(bm) => bm.remote_dir.clone(),
                     None => {
-                        self.log(LogKind::Status, format!("CWD : signet « {param} » absent de {site_name}"));
+                        self.log(LogKind::Status, t!("host.cwd_no_bookmark", bookmark = param, site = site_name));
                         continue;
                     }
                 }
@@ -401,7 +402,7 @@ impl AppHost<'_> {
         Ok(())
     }
 
-    /// Panneaux visés ; avec `RS_LOGIN`, connecte les sites qui ne le sont pas encore.
+    /// Targeted panels; with `RS_LOGIN`, connects the sites that are not connected yet.
     fn targets(&mut self, names: &[String], flags: i64) -> Vec<(usize, usize)> {
         let mut found = self.panels(names);
         if has_flag(flags, "RS_LOGIN") {
@@ -418,7 +419,7 @@ impl AppHost<'_> {
             }
         }
         if has_flag(flags, "RS_ONE") {
-            // Une seule connexion par site.
+            // A single connection per site.
             let mut seen = Vec::<String>::new();
             found.retain(|&(t, sd)| match &self.app.tabs[t].sides[sd] {
                 Side::Remote(r) if !seen.iter().any(|x| x.eq_ignore_ascii_case(&r.profile.name)) => {
@@ -435,14 +436,14 @@ impl AppHost<'_> {
         want(a, 3, "RAW")?;
         let (names, cmd, flags) = (self.names(&s(a, 0)), s(a, 1), n(a, 2));
         if cmd.trim().is_empty() {
-            return Err(HostError::InvalidArgument { function: "RAW".into(), reason: "commande vide".into() });
+            return Err(HostError::InvalidArgument { function: "RAW".into(), reason: t!("host.raw_empty") });
         }
         let targets = self.targets(&names, flags);
         if targets.is_empty() {
-            self.log(LogKind::Status, format!("RAW « {cmd} » : aucune connexion visée"));
+            self.log(LogKind::Status, t!("host.raw_no_target", command = cmd));
         }
         for p in targets {
-            // Script venu de mIRC : la réponse lui sera renvoyée.
+            // Script coming from mIRC: the reply will be sent back to it.
             if let (Some(cb), Side::Remote(r)) = (self.app.ipc_callback, &self.app.tabs[p.0].sides[p.1]) {
                 self.app.raw_callbacks.push((r.profile.name.clone(), cmd.clone(), cb));
             }
@@ -459,9 +460,7 @@ impl AppHost<'_> {
         want(a, 4, "Delete")?;
         let (names, path, item, flags) = (self.names(&s(a, 0)), s(a, 1), s(a, 2), n(a, 3));
         if names.is_empty() {
-            return Err(HostError::InvalidArgument {
-                function: "Delete".into(), reason: "la liste de sites ne peut pas être vide".into()
-            });
+            return Err(HostError::InvalidArgument { function: "Delete".into(), reason: t!("host.delete_empty_list") });
         }
         for p in self.targets(&names, flags) {
             let site_name = match &self.app.tabs[p.0].sides[p.1] {
@@ -472,7 +471,7 @@ impl AppHost<'_> {
                 match self.app.sites.book.find_by_name(&site_name).and_then(|site| Self::bookmark(site, &path)) {
                     Some(bm) => bm.remote_dir.clone(),
                     None => {
-                        self.log(LogKind::Error, format!("Delete : signet « {path} » absent de {site_name}"));
+                        self.log(LogKind::Error, t!("host.delete_no_bookmark", bookmark = path, site = site_name));
                         continue;
                     }
                 }
@@ -491,7 +490,7 @@ impl AppHost<'_> {
         Ok(())
     }
 
-    /// Dossier d'une extrémité : chemin (`dir_flag`) ou signet du site / signet local.
+    /// Folder of one end: path (`dir_flag`) or bookmark of the site / local bookmark.
     fn folder(site: Option<&Site>, value: &str, dir_flag: bool, local: bool) -> Result<String, HostError> {
         if dir_flag || value.is_empty() {
             return Ok(value.to_string());
@@ -512,16 +511,16 @@ impl AppHost<'_> {
         let (dir_src, dir_des) = (has_flag(flags, "RS_DIRSRC"), has_flag(flags, "RS_DIRDES"));
         for (i, label) in [(8, "FolderAllow"), (9, "FolderSkip"), (10, "FileAllow"), (11, "FileSkip"), (12, "CompleteFlag")] {
             if !s(a, i).is_empty() {
-                self.log(LogKind::Status, format!("Transfer : {label} n'est pas encore pris en charge, ignoré"));
+                self.log(LogKind::Status, t!("host.transfer_unsupported", what = label));
             }
         }
         if n(a, 13) > 0 {
-            self.log(LogKind::Status, "Transfer : RepeatCount n'est pas encore pris en charge, ignoré");
+            self.log(LogKind::Status, t!("host.transfer_unsupported", what = "RepeatCount"));
         }
 
         let srcs = self.names(&src_list);
         let dsts = self.names(&des_list);
-        // (site source, site destination, dossier source, élément source) ; None = local.
+        // (source site, destination site, source folder, source item); None = local.
         let mut pairs: Vec<(Option<Site>, Option<Site>, String, String)> = Vec::new();
         if up {
             for d in &dsts {
@@ -530,7 +529,7 @@ impl AppHost<'_> {
         } else if down {
             let src = srcs
                 .first()
-                .ok_or_else(|| HostError::InvalidArgument { function: "Transfer".into(), reason: "site source manquant".into() })?;
+                .ok_or_else(|| HostError::InvalidArgument { function: "Transfer".into(), reason: t!("host.transfer_no_source") })?;
             pairs.push((Some(self.site(src)?), None, src_folder.clone(), src_item.clone()));
         } else if let Some(src) = srcs.first() {
             let src = self.site(src)?;
@@ -538,13 +537,13 @@ impl AppHost<'_> {
                 pairs.push((Some(src.clone()), Some(self.site(d)?), src_folder.clone(), src_item.clone()));
             }
         } else {
-            // Chaîne FTP1;FTP2;FTP3 : FTP1 → FTP2 et FTP2 → FTP3, mêmes dossier et élément.
+            // Chain FTP1;FTP2;FTP3: FTP1 → FTP2 and FTP2 → FTP3, same folder and item.
             for w in dsts.windows(2) {
                 pairs.push((Some(self.site(&w[0])?), Some(self.site(&w[1])?), des_folder.clone(), des_item.clone()));
             }
         }
         if pairs.is_empty() {
-            return Err(HostError::InvalidArgument { function: "Transfer".into(), reason: "aucune paire source/destination".into() });
+            return Err(HostError::InvalidArgument { function: "Transfer".into(), reason: t!("host.transfer_no_pair") });
         }
 
         let tab = if handle > 0 && (handle as usize) <= self.app.tabs.len() { handle as usize - 1 } else { self.app.active };
@@ -569,7 +568,7 @@ impl AppHost<'_> {
             self.app.tabs[tab].queue.lock().push(src, dst, !is_file, None, rank);
             added += 1;
         }
-        self.log(LogKind::Status, format!("Transfer : {added} élément(s) ajouté(s) à la file"));
+        self.log(LogKind::Status, t!("host.transfer_queued", n = added));
         let opts = self.app.engine_options();
         let extra = self.app.queue_site_profiles(tab);
         let rt = self.app.rt.clone();
@@ -583,22 +582,18 @@ impl AppHost<'_> {
         let (source, dest, param, flags) = (s(a, 0), s(a, 1), s(a, 2), n(a, 3));
         let states = ["RS_TRANSFER", "RS_NORMAL", "RS_FAIL", "RS_WAITING"];
         if !states.iter().any(|f| has_flag(flags, f)) {
-            return Err(HostError::InvalidArgument {
-                function: "RemoveQueue".into(),
-                reason: "au moins un drapeau d'état est nécessaire (RS_TRANSFER, RS_NORMAL, RS_FAIL, RS_WAITING)".into(),
-            });
+            return Err(HostError::InvalidArgument { function: "RemoveQueue".into(), reason: t!("host.remove_queue_flags") });
         }
-        let pattern =
-            if param.is_empty() {
-                None
-            } else if has_flag(flags, "RS_EXPR") {
-                Some(Pattern::regex(&param).map_err(|e| HostError::InvalidArgument {
-                    function: "RemoveQueue".into(),
-                    reason: format!("expression invalide : {e}"),
-                })?)
-            } else {
-                Some(Pattern::wildcard(&param))
-            };
+        let pattern = if param.is_empty() {
+            None
+        } else if has_flag(flags, "RS_EXPR") {
+            Some(Pattern::regex(&param).map_err(|e| HostError::InvalidArgument {
+                function: "RemoveQueue".into(),
+                reason: t!("host.remove_queue_regex", error = e),
+            })?)
+        } else {
+            Some(Pattern::wildcard(&param))
+        };
         let endpoint_ok = |want: &str, e: &Endpoint| -> bool {
             want.is_empty()
                 || (want.eq_ignore_ascii_case("local") && e.is_local())
@@ -638,7 +633,7 @@ impl AppHost<'_> {
             }
             removed += self.app.tabs[t].queue.lock().remove_where(&matches);
         }
-        self.log(LogKind::Status, format!("RemoveQueue : {removed} retiré(s), {stopped} arrêté(s)"));
+        self.log(LogKind::Status, t!("host.remove_queue_done", removed = removed, stopped = stopped));
         self.popup(flags);
         Ok(())
     }
@@ -656,7 +651,7 @@ impl AppHost<'_> {
         Ok(())
     }
 
-    /// Ferme les onglets sans connexion et à la file vide (au moins un onglet reste).
+    /// Closes the tabs without connection and with an empty queue (at least one tab stays).
     fn delete_empty_tabs(&mut self) {
         let mut i = 0;
         while i < self.app.tabs.len() && self.app.tabs.len() > 1 {
@@ -687,10 +682,10 @@ impl Host for AppHost<'_> {
             "rushapp.deleteemptytabs" | "rushapp.deleteemptycontainers" => self.delete_empty_tabs(),
             "showmessage" => {
                 let msg = s(a, 0);
-                self.log(LogKind::Status, format!("Message : {msg}"));
+                self.log(LogKind::Status, t!("host.message", message = msg));
             }
             "inputquery" => {
-                self.log(LogKind::Status, "InputQuery : la saisie interactive n'est pas encore disponible, considérée comme annulée");
+                self.log(LogKind::Status, t!("host.input_query"));
                 return Ok(Value::Nil);
             }
             _ => return Err(HostError::UnknownFunction(name.into())),
@@ -703,7 +698,7 @@ impl Host for AppHost<'_> {
         let remote = || self.app.tabs.iter().flat_map(|t| t.sides.iter());
         Ok(match name.to_ascii_lowercase().as_str() {
             "rushapp.version" => Value::Str(format!("UltraRushFTP {}", env!("CARGO_PKG_VERSION"))),
-            "rushapp.language" => Value::Str("Français".into()),
+            "rushapp.language" => Value::Str(urftp_i18n::language().native_name().into()),
             "rushapp.ftp.splitter" => Value::Str(self.app.splitter.clone()),
             "rushapp.totaldownloadsize" => mb(st.totals.download),
             "rushapp.totaluploadsize" => mb(st.totals.upload),
@@ -719,10 +714,8 @@ impl Host for AppHost<'_> {
             "rushapp.poolinfo" => {
                 let running: usize =
                     self.app.tabs.iter().map(|t| t.queue.lock().items().iter().filter(|i| i.state == ItemState::Running).count()).sum();
-                Value::Str(format!(
-                    "{running} transfert(s) en cours, {} file(s) active(s)",
-                    self.app.tabs.iter().filter(|t| t.engine.is_some()).count()
-                ))
+                let queues = self.app.tabs.iter().filter(|t| t.engine.is_some()).count();
+                Value::Str(t!("host.pool_info", running = running, queues = queues))
             }
             "rushapp.containers.containercount" => Value::Int(self.app.tabs.len() as i64),
             "rushapp.containers.connectedsitecount" => {
@@ -740,10 +733,7 @@ impl Host for AppHost<'_> {
             "rushapp.ftp.splitter" => {
                 let v = value.to_text();
                 if v.is_empty() {
-                    return Err(HostError::InvalidArgument {
-                        function: "RushApp.FTP.Splitter".into(),
-                        reason: "le séparateur ne peut pas être vide".into(),
-                    });
+                    return Err(HostError::InvalidArgument { function: "RushApp.FTP.Splitter".into(), reason: t!("host.splitter_empty") });
                 }
                 self.app.splitter = v;
                 Ok(())
@@ -762,7 +752,7 @@ mod tests {
         assert_eq!(days_from_civil(1970, 1, 1), 0);
         assert_eq!(parse_date("2026-11-05").unwrap() - parse_date("2026-11-01").unwrap(), 4);
         assert_eq!(parse_date("2025-01-01").unwrap() - parse_date("2024-01-01").unwrap(), 366);
-        assert!(parse_date("pas une date").is_none());
+        assert!(parse_date("not a date").is_none());
         assert_eq!(today().len(), 10);
     }
 
@@ -780,6 +770,6 @@ mod tests {
         st.record(&[(TransferKind::Download, 1024 * 1024), (TransferKind::Upload, 10), (TransferKind::Fxp, 5)]);
         assert_eq!(st.session, [1024 * 1024, 10, 5]);
         assert_eq!(mb(st.totals.download), Value::Str("1.00".into()));
-        st.dirty = false; // pas d'écriture disque pendant le test
+        st.dirty = false; // no disk write during the test
     }
 }

@@ -1,8 +1,8 @@
-//! Import de carnets de sites d'autres clients FTP, avec détection automatique du format.
+//! Import of the site books of other FTP clients, with automatic format detection.
 //!
-//! Gérés : FileZilla (`sitemanager.xml` et exports XML), FTPRush v3 (`site.json`),
-//! FTPRush v1/v2 (`RushSite.xml`) et FlashFXP (`.ftp`). Pour ces deux derniers, les mots de
-//! passe ne sont pas importés : ils sont à ressaisir.
+//! Supported: FileZilla (`sitemanager.xml` and XML exports), FTPRush v3 (`site.json`),
+//! FTPRush v1/v2 (`RushSite.xml`) and FlashFXP (`.ftp`). For the last two, passwords are
+//! not imported: they must be entered again.
 
 mod filezilla;
 mod flashfxp;
@@ -13,13 +13,19 @@ use std::path::Path;
 
 use crate::site::SiteGroup;
 
-/// Format détecté.
+/// Detected format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ImportFormat {
     FileZilla,
     FtpRush3,
     FtpRush2,
     FlashFxp,
+}
+
+impl std::fmt::Display for ImportFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
+    }
 }
 
 impl ImportFormat {
@@ -33,25 +39,67 @@ impl ImportFormat {
     }
 }
 
-/// Résultat d'un import : un groupe prêt à greffer dans le carnet, et les remarques.
+/// Result of an import: a group ready to be grafted into the site book, and remarks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportResult {
     pub format: ImportFormat,
     pub group: SiteGroup,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<ImportWarning>,
+}
+
+/// Remark about an import (the interface translates them; `Display` is English).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ImportWarning {
+    /// The file contains no site.
+    #[error("no site found")]
+    NoSites,
+    /// FileZilla "FTP with TLS if available" sites were imported as explicit FTPS.
+    #[error(
+        "\"FTP with TLS if available\" sites are imported as explicit FTPS; switch them back to FTP if the server does not support TLS"
+    )]
+    TlsIfAvailable,
+    /// A site uses a protocol UltraRushFTP does not support; it was skipped.
+    #[error("\"{site}\" skipped: {source_format} protocol {protocol} not supported")]
+    UnsupportedProtocol {
+        /// Site name.
+        site: String,
+        /// Client that produced the file.
+        source_format: ImportFormat,
+        /// Protocol code or name in that file.
+        protocol: String,
+    },
+    /// A protocol or TLS code is unknown; the site was imported with a guess.
+    #[error("\"{site}\": unknown code {code}, imported as {assumed}; please check")]
+    UnknownCode {
+        /// Site name.
+        site: String,
+        /// Unknown code.
+        code: String,
+        /// Protocol used instead.
+        assumed: crate::site::SiteProtocol,
+    },
+    /// The stored password could not be decoded.
+    #[error("\"{0}\": password unreadable")]
+    PasswordUnreadable(String),
+    /// FileZilla password protected by its master password.
+    #[error("\"{0}\": password protected by the FileZilla master password, not imported")]
+    MasterPassword(String),
+    /// Formats whose passwords are never imported (FTPRush v1/v2, FlashFXP).
+    #[error("passwords not imported: enter them again for the {0} site(s)")]
+    PasswordsNotImported(usize),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImportError {
-    #[error("lecture du fichier : {0}")]
+    #[error("reading the file: {0}")]
     Io(#[from] std::io::Error),
-    #[error("format de fichier non reconnu")]
+    #[error("unrecognised file format")]
     UnknownFormat,
-    #[error("fichier {format} illisible : {message}", format = .0.label(), message = .1)]
+    #[error("{format} file unreadable: {message}", format = .0.label(), message = .1)]
     Invalid(ImportFormat, String),
 }
 
-/// Devine le format d'après le nom et le contenu.
+/// Guesses the format from the name and the contents.
 pub fn detect(file_name: &str, text: &str) -> Option<ImportFormat> {
     let head: String = text.chars().take(4096).collect();
     let lower = head.to_lowercase();
@@ -61,7 +109,7 @@ pub fn detect(file_name: &str, text: &str) -> Option<ImportFormat> {
     } else if head.trim_start().starts_with('{') && head.contains("\"RootItem\"") {
         Some(ImportFormat::FtpRush3)
     } else if lower.contains("<sites") && head.contains(" UID=\"") {
-        // FTPRush v1/v2 : chaque site porte un attribut UID.
+        // FTPRush v1/v2: every site has a UID attribute.
         Some(ImportFormat::FtpRush2)
     } else if lower.contains("flashfxp") || name.ends_with(".ftp") || (lower.contains("<sites") && head.contains("<ADDRESS>")) {
         Some(ImportFormat::FlashFxp)
@@ -72,7 +120,7 @@ pub fn detect(file_name: &str, text: &str) -> Option<ImportFormat> {
     }
 }
 
-/// Importe le texte d'un fichier.
+/// Imports the text of a file.
 pub fn import_text(file_name: &str, text: &str) -> Result<ImportResult, ImportError> {
     let text = text.trim_start_matches('\u{feff}');
     match detect(file_name, text).ok_or(ImportError::UnknownFormat)? {
@@ -83,7 +131,7 @@ pub fn import_text(file_name: &str, text: &str) -> Result<ImportResult, ImportEr
     }
 }
 
-/// Importe un fichier (UTF-8, UTF-8 avec BOM ou UTF-16).
+/// Imports a file (UTF-8, UTF-8 with BOM or UTF-16).
 pub fn import_file(path: &Path) -> Result<ImportResult, ImportError> {
     let bytes = std::fs::read(path)?;
     let text = decode_text(&bytes);
@@ -115,7 +163,7 @@ mod tests {
         assert_eq!(detect("RushSite.xml", "<?xml?><root/>"), Some(ImportFormat::FtpRush2));
         assert_eq!(detect("export.ftp", "<x/>"), Some(ImportFormat::FlashFxp));
         assert_eq!(detect("notes.txt", "bonjour"), None);
-        // Même racine <SITES> : FTPRush (attribut UID) ou FlashFXP (balise ADDRESS).
+        // Same <SITES> root: FTPRush (UID attribute) or FlashFXP (ADDRESS tag).
         assert_eq!(detect("export.xml", "<SITES><A NAME=\"a\" UID=\"01\"/></SITES>"), Some(ImportFormat::FtpRush2));
         assert_eq!(detect("export.xml", "<SITES VERSION=\"1.3\"><A><ADDRESS>h</ADDRESS></A></SITES>"), Some(ImportFormat::FlashFxp));
         assert!(import_text("RushSite.xml", "<SITES/>").unwrap().group.sites.is_empty());

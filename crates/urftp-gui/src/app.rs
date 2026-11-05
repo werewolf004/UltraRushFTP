@@ -1,5 +1,5 @@
-//! Fenêtre principale : onglets de sites (containers), chacun avec son dock (deux panneaux
-//! de fichiers, file d'attente, journal), barre de connexion rapide et barre d'état.
+//! Main window: site tabs (containers), each with its dock (two file panels, queue, log),
+//! quick-connect bar and status bar.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -28,12 +28,13 @@ use crate::sites::{self, SiteManager};
 use crate::theme::{self, ACCENT, LOG_COMMAND, LOG_ERROR, LOG_REPLY, LOG_STATUS, human_size};
 use urftp_core::settings::IdentSettings;
 use urftp_core::site::Site;
+use urftp_i18n::{Lang, language, t};
 use urftp_proto::ident::{IdentConfig, IdentServer};
 use urftp_proto::throttle::RateLimiter;
 
 mod rushapp;
 
-// ====================================================================== modèle
+// ====================================================================== model
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pane {
@@ -50,7 +51,7 @@ struct FileRow {
     is_dir: bool,
     size: u64,
     modified: String,
-    /// Clé de tri de la date.
+    /// Sort key of the date.
     mtime: i64,
 }
 
@@ -73,7 +74,7 @@ enum SortCol {
     Modified,
 }
 
-/// Tri d'un panneau ; les dossiers restent toujours en tête.
+/// Sorting of a panel; folders always stay first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Sort {
     col: SortCol,
@@ -87,13 +88,13 @@ impl Default for Sort {
 }
 
 impl Sort {
-    /// Clic sur une colonne : même colonne = sens inverse, autre colonne = croissant.
+    /// Click on a column: same column = reverse order, other column = ascending.
     fn toggle(self, col: SortCol) -> Self {
         if self.col == col { Self { col, asc: !self.asc } } else { Self { col, asc: true } }
     }
 }
 
-/// Date sous forme de nombre comparable (année inconnue = récente).
+/// Date as a comparable number (unknown year = recent).
 fn time_key(t: FtpTime) -> i64 {
     let y = i64::from(t.year.unwrap_or(9999));
     ((((y * 100 + i64::from(t.month)) * 100 + i64::from(t.day)) * 100 + i64::from(t.hour)) * 100 + i64::from(t.minute)) * 100
@@ -113,8 +114,21 @@ fn sort_rows(rows: &mut [FileRow], s: Sort) {
     });
 }
 
+/// Translated reason why an item was skipped.
+fn skip_text(r: &urftp_core::skiplist::SkipReason) -> String {
+    use urftp_core::skiplist::SkipReason;
+    match r {
+        SkipReason::Rule(mask) => t!("skip.reason_rule", mask = mask),
+        SkipReason::ZeroByte => t!("skip.reason_zero"),
+        SkipReason::AlreadyPresent => t!("skip.reason_present"),
+    }
+}
+
 fn fmt_time(t: FtpTime) -> String {
     match t.year {
+        // ISO order in English, day/month in French.
+        Some(y) if language() == Lang::En => format!("{y:04}-{:02}-{:02} {:02}:{:02}", t.month, t.day, t.hour, t.minute),
+        None if language() == Lang::En => format!("{:02}-{:02} {:02}:{:02}", t.month, t.day, t.hour, t.minute),
         Some(y) => format!("{:02}/{:02}/{y} {:02}:{:02}", t.day, t.month, t.hour, t.minute),
         None => format!("{:02}/{:02} {:02}:{:02}", t.day, t.month, t.hour, t.minute),
     }
@@ -205,7 +219,7 @@ struct RemoteView {
     rows: Vec<FileRow>,
     selected: BTreeSet<usize>,
     state: RemoteState,
-    /// Fiche du gestionnaire de sites d'origine (pour y mémoriser une empreinte approuvée).
+    /// Record of the site manager it came from (to store a trusted fingerprint there).
     site_id: Option<u64>,
     sort: Sort,
 }
@@ -237,7 +251,7 @@ impl Side {
         }
     }
 
-    /// Extrémité de transfert pour un nom de ce panneau.
+    /// Transfer end for a name of this panel.
     fn endpoint(&self, name: &str) -> Endpoint {
         match self {
             Side::Local(l) => Endpoint::local(l.path.join(name).to_string_lossy()),
@@ -247,7 +261,7 @@ impl Side {
 
     fn title(&self) -> String {
         match self {
-            Side::Local(_) => "💻 Local".into(),
+            Side::Local(_) => t!("pane.local"),
             Side::Remote(r) => format!("🌐 {}", r.profile.name),
         }
     }
@@ -266,7 +280,7 @@ impl Side {
         }
     }
 
-    /// Change le tri et réordonne la liste (la sélection est vidée).
+    /// Changes the sort and reorders the list (the selection is cleared).
     fn set_sort(&mut self, s: Sort) {
         let (rows, sort, sel) = match self {
             Side::Local(l) => (&mut l.rows, &mut l.sort, &mut l.selected),
@@ -277,7 +291,7 @@ impl Side {
         sel.clear();
     }
 
-    /// Chemin complet d'un nom (affichage, presse-papiers, opérations).
+    /// Full path of a name (display, clipboard, operations).
     fn full_path(&self, name: &str) -> String {
         match self {
             Side::Local(l) => l.path.join(name).to_string_lossy().into_owned(),
@@ -285,19 +299,19 @@ impl Side {
         }
     }
 
-    /// Éléments sélectionnés : (nom, dossier ?).
+    /// Selected items: (name, folder?).
     fn picked(&self) -> Vec<(String, bool)> {
         self.selected().iter().filter_map(|&i| self.rows().get(i)).map(|r| (r.name.clone(), r.is_dir)).collect()
     }
 }
 
-/// Glisser-déposer : fichiers sélectionnés d'un panneau.
+/// Drag and drop: selected files of a panel.
 #[derive(Debug, Clone, Copy)]
 struct DragFiles {
     from: usize,
 }
 
-/// Dialogue en attente de saisie ou de confirmation.
+/// Dialog waiting for input or confirmation.
 enum Prompt {
     NewFolder { side: usize, name: String },
     Rename { side: usize, from: String, to: String },
@@ -333,7 +347,7 @@ struct TrustPrompt {
     reason: String,
 }
 
-/// Un onglet de site (« container » de FTPRush).
+/// A site tab (FTPRush "container").
 struct Container {
     id: u32,
     dock: DockState<Pane>,
@@ -344,16 +358,16 @@ struct Container {
     engine_running: Arc<AtomicBool>,
     log: Vec<LogEntry>,
     trust: Option<TrustPrompt>,
-    /// Moteur en cours (pour arrêter un élément).
+    /// Running engine (to stop an item).
     engine: Option<Arc<Engine>>,
     prompt: Option<Prompt>,
-    /// Panneau actif pour le clavier (0 = gauche, 1 = droit).
+    /// Panel active for the keyboard (0 = left, 1 = right).
     focus: usize,
-    /// Console de script : texte du script, expression à évaluer, résultats (succès ?, texte).
+    /// Script console: script text, expression to evaluate, results (success?, text).
     script: String,
     invoke: String,
     script_out: Vec<(bool, String)>,
-    /// Réponses aux commandes brutes (`RushApp.FTP.RAW`) : (site, commande, lignes, succès).
+    /// Replies to raw commands (`RushApp.FTP.RAW`): (site, command, lines, success).
     raw_replies: Vec<(String, String, Vec<String>, bool)>,
 }
 
@@ -391,11 +405,11 @@ impl Container {
         }
     }
 
-    /// Titre affiché ; `pos` = position de l'onglet (1, 2, 3…), qui se renumérote à la fermeture.
+    /// Displayed title; `pos` = position of the tab (1, 2, 3...), renumbered on close.
     fn title(&self, pos: usize) -> String {
         match (&self.sides[0], &self.sides[1]) {
             (_, Side::Remote(r)) | (Side::Remote(r), _) => r.profile.host.clone(),
-            _ => format!("Onglet {pos}"),
+            _ => t!("tabs.default_title", n = pos),
         }
     }
 
@@ -406,8 +420,8 @@ impl Container {
         }
     }
 
-    /// Relève les événements des connexions de navigation et du moteur. Renvoie les octets
-    /// transférés depuis le dernier appel, par sens (pour les statistiques et les débits).
+    /// Collects the events of the browsing connections and of the engine. Returns the bytes
+    /// transferred since the last call, per direction (for statistics and rates).
     fn poll(&mut self) -> Vec<(TransferKind, u64)> {
         let mut traffic = Vec::new();
         for side in 0..2 {
@@ -432,7 +446,7 @@ impl Container {
                 EngineEvent::Progress { id, bytes, total } => {
                     let before = self.progress.insert(id, (bytes, total)).map_or(0, |(b, _)| b);
                     let kind = self.queue.lock().get(id).map(QueueItem::kind);
-                    // Le FXP ne passe pas par cet ordinateur : il n'entre pas dans les débits.
+                    // FXP does not go through this computer: it does not count in the rates.
                     if let Some(k @ (TransferKind::Upload | TransferKind::Download)) = kind {
                         traffic.push((k, bytes.saturating_sub(before)));
                     }
@@ -442,9 +456,9 @@ impl Container {
                         traffic.push((TransferKind::Fxp, bytes));
                     }
                 }
-                EngineEvent::Failed { id, error } => self.push_log(0, LogKind::Error, format!("Élément {id} : {error}")),
+                EngineEvent::Failed { id, error } => self.push_log(0, LogKind::Error, t!("log.item_failed", id = id, error = error)),
                 EngineEvent::Retrying { id, attempt, error } => {
-                    self.push_log(0, LogKind::Status, format!("Élément {id} : nouvelle tentative {attempt} ({error})"))
+                    self.push_log(0, LogKind::Status, t!("log.item_retry", id = id, attempt = attempt, error = error))
                 }
                 _ => {}
             }
@@ -452,7 +466,7 @@ impl Container {
         if self.engine_events.is_some() && !self.engine_running.load(Ordering::SeqCst) {
             self.engine_events = None;
             self.engine = None;
-            self.push_log(0, LogKind::Status, "File d'attente terminée");
+            self.push_log(0, LogKind::Status, t!("log.queue_finished"));
             self.refresh_both();
         }
         traffic
@@ -487,9 +501,9 @@ impl Container {
             }
             BrowserEvent::Trust { kind, fingerprint, reason } => {
                 if let Side::Remote(r) = &mut self.sides[side] {
-                    r.state = RemoteState::Failed("serveur non approuvé".into());
+                    r.state = RemoteState::Failed(t!("log.untrusted_server"));
                 }
-                self.push_log(side, LogKind::Error, format!("{reason} — empreinte {fingerprint}"));
+                self.push_log(side, LogKind::Error, t!("log.fingerprint", reason = reason, fingerprint = fingerprint));
                 self.trust = Some(TrustPrompt { side, kind, fingerprint, reason });
             }
             BrowserEvent::Disconnected => {
@@ -517,7 +531,7 @@ impl Container {
         }
     }
 
-    /// Ajoute la sélection du panneau `from` à la file, vers le dossier de l'autre panneau.
+    /// Adds the selection of panel `from` to the queue, towards the folder of the other panel.
     fn enqueue_selection(&mut self, from: usize) {
         let to = 1 - from;
         let picks: Vec<FileRow> = self.sides[from].selected().iter().filter_map(|&i| self.sides[from].rows().get(i).cloned()).collect();
@@ -525,7 +539,7 @@ impl Container {
             return;
         }
         if self.sides[from].profile().is_none() && self.sides[to].profile().is_none() {
-            self.push_log(from, LogKind::Error, "Transfert local → local non géré : connectez un site d'un côté");
+            self.push_log(from, LogKind::Error, t!("log.local_to_local"));
             return;
         }
         let mut q = self.queue.lock();
@@ -535,11 +549,11 @@ impl Container {
             q.push(src, dst, row.is_dir, (!row.is_dir).then_some(row.size), None);
         }
         drop(q);
-        self.push_log(from, LogKind::Status, format!("{} élément(s) ajouté(s) à la file", picks.len()));
+        self.push_log(from, LogKind::Status, t!("log.items_queued", n = picks.len()));
     }
 
-    /// Lance le moteur. `extra` : profils des sites de la file absents des panneaux
-    /// (éléments ajoutés par un script, par exemple).
+    /// Starts the engine. `extra`: profiles of the queue sites missing from the panels
+    /// (items added by a script, for example).
     fn start_queue(&mut self, rt: &Handle, ctx: &egui::Context, opts: EngineOptions, extra: &[SiteProfile]) {
         if self.engine_events.is_some() {
             return;
@@ -562,13 +576,13 @@ impl Container {
             ctx.request_repaint();
         });
         self.engine_events = Some(rx);
-        self.push_log(0, LogKind::Status, "File d'attente démarrée");
+        self.push_log(0, LogKind::Status, t!("log.queue_started"));
     }
 
-    // ------------------------------------------------------------------ opérations sur les fichiers
+    // ------------------------------------------------------------------ file operations
 
     fn ask_new_folder(&mut self, side: usize) {
-        self.prompt = Some(Prompt::NewFolder { side, name: "Nouveau dossier".into() });
+        self.prompt = Some(Prompt::NewFolder { side, name: t!("prompt.new_folder_default") });
     }
 
     fn ask_rename(&mut self, side: usize) {
@@ -584,7 +598,7 @@ impl Container {
         }
     }
 
-    /// Exécute un dialogue validé (local : tout de suite ; distant : via la connexion du panneau).
+    /// Runs a confirmed dialog (local: at once; remote: through the panel connection).
     fn run_prompt(&mut self, p: Prompt) {
         match p {
             Prompt::NewFolder { side, name } => {
@@ -602,7 +616,7 @@ impl Container {
                                 l.reload();
                             }
                         }
-                        Err(e) => self.push_log(side, LogKind::Error, format!("Création de {full} : {e}")),
+                        Err(e) => self.push_log(side, LogKind::Error, t!("log.mkdir_failed", path = full, error = e)),
                     }
                 }
             }
@@ -621,7 +635,7 @@ impl Container {
                                     l.reload();
                                 }
                             }
-                            Err(e) => self.push_log(side, LogKind::Error, format!("Renommage de {full} : {e}")),
+                            Err(e) => self.push_log(side, LogKind::Error, t!("log.rename_failed", path = full, error = e)),
                         }
                     }
                     Side::Remote(r) => r.handle.send(BrowserCmd::Rename(full, to)),
@@ -634,7 +648,7 @@ impl Container {
                         for (p, is_dir) in &full {
                             let r = if *is_dir { std::fs::remove_dir_all(p) } else { std::fs::remove_file(p) };
                             if let Err(e) = r {
-                                self.push_log(side, LogKind::Error, format!("Suppression de {p} : {e}"));
+                                self.push_log(side, LogKind::Error, t!("log.delete_failed", path = p, error = e));
                             }
                         }
                         if let Side::Local(l) = &mut self.sides[side] {
@@ -647,7 +661,7 @@ impl Container {
         }
     }
 
-    // ------------------------------------------------------------------ file d'attente
+    // ------------------------------------------------------------------ queue
 
     fn move_item(&mut self, id: ItemId, m: Move) {
         let mut q = self.queue.lock();
@@ -692,12 +706,12 @@ enum QuickProto {
 }
 
 impl QuickProto {
-    fn label(self) -> &'static str {
+    fn label(self) -> String {
         match self {
-            QuickProto::Ftp => "FTP",
-            QuickProto::FtpsExplicit => "FTPS explicite",
-            QuickProto::FtpsImplicit => "FTPS implicite",
-            QuickProto::Sftp => "SFTP",
+            QuickProto::Ftp => t!("proto.ftp"),
+            QuickProto::FtpsExplicit => t!("proto.ftps_explicit"),
+            QuickProto::FtpsImplicit => t!("proto.ftps_implicit"),
+            QuickProto::Sftp => t!("proto.sftp"),
         }
     }
 
@@ -725,34 +739,34 @@ pub struct UltraRushApp {
     next_id: u32,
     quick: QuickConnect,
     dark: bool,
-    /// Connexion automatique au premier affichage (variable `URUSHFTP_CONNECT`).
+    /// Automatic connection on the first frame (`URUSHFTP_CONNECT` variable).
     autoconnect: bool,
     sites: SiteManager,
     options: OptionsWindow,
-    /// Limiteurs de débit partagés par tous les onglets (réglés depuis les options).
+    /// Speed limiters shared by every tab (set from the options).
     download_limit: Arc<RateLimiter>,
     upload_limit: Arc<RateLimiter>,
     ident: Option<IdentServer>,
     ident_applied: Option<IdentSettings>,
-    /// Statistiques (totaux enregistrés, session, débits) pour `RushApp.*` et la barre d'état.
+    /// Statistics (stored totals, session, rates) for `RushApp.*` and the status bar.
     stats: rushapp::Stats,
-    /// Séparateur des listes de sites dans les scripts (`RushApp.FTP.Splitter`).
+    /// Separator of the site lists in scripts (`RushApp.FTP.Splitter`).
     splitter: String,
     startup_script_done: bool,
-    /// Liaison mIRC : fenêtre `TfmRush`, demandes reçues, rappels `RAW` en attente.
+    /// mIRC link: `TfmRush` window, requests received, pending `RAW` callbacks.
     ipc: Option<urftp_sys::server::Server>,
     ipc_rx: Option<std::sync::mpsc::Receiver<urftp_sys::server::Request>>,
-    /// Fenêtre de rappel de la DLL pendant l'exécution d'un script venu de mIRC.
+    /// Callback window of the DLL while a script coming from mIRC runs.
     ipc_callback: Option<isize>,
-    /// (site, commande, fenêtre de rappel) des `RAW` dont la réponse doit revenir à mIRC.
+    /// (site, command, callback window) of the `RAW` whose reply must go back to mIRC.
     raw_callbacks: Vec<(String, String, isize)>,
-    /// Options de la ligne de commande, appliquées au premier affichage.
+    /// Command-line options, applied on the first frame.
     startup: Option<StartupOptions>,
-    /// `-rx` : quitter quand plus rien n'est à transférer.
+    /// `-rx`: quit when nothing is left to transfer.
     exit_when_done: bool,
 }
 
-/// `ftp://user:pass@hôte:port`, `ftps://` (explicite), `ftpsi://` (implicite), `sftp://`.
+/// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
 fn parse_connect_url(url: &str) -> Option<QuickConnect> {
     let (scheme, rest) = url.split_once("://")?;
     let proto = match scheme.to_ascii_lowercase().as_str() {
@@ -792,7 +806,7 @@ enum Action {
     QueueRemove(ItemId),
     QueueRetry(ItemId),
     QueueRetryAll,
-    /// Console : exécuter le script de l'onglet / évaluer son expression.
+    /// Console: run the script of the tab / evaluate its expression.
     RunScript,
     Invoke,
 }
@@ -801,6 +815,8 @@ impl UltraRushApp {
     pub fn new(rt: Handle, startup: StartupOptions) -> Self {
         let from_env = std::env::var("URUSHFTP_CONNECT").ok().and_then(|u| parse_connect_url(&u));
         let options = OptionsWindow::load();
+        // Before anything is displayed or listed (dates and sizes follow the language).
+        options::apply_language(options.settings.language);
         let dl = options.settings.transfer.download_limit_kib * 1024;
         let ul = options.settings.transfer.upload_limit_kib * 1024;
         let mut app = Self {
@@ -833,23 +849,35 @@ impl UltraRushApp {
             exit_when_done: false,
             startup: Some(startup),
         };
-        // La variable URUSHFTP_THEME l'emporte sur l'option enregistrée.
+        // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
         app
     }
 
-    /// Thème à appliquer au démarrage.
+    /// Theme to apply at startup.
     pub fn is_dark(&self) -> bool {
         self.dark
     }
 
-    /// Options du moteur de file, d'après les réglages courants.
+    /// Queue engine options, from the current settings.
     fn engine_options(&self) -> EngineOptions {
         options::engine_options(&self.options.settings, &self.download_limit, &self.upload_limit)
     }
 
-    /// Applique les options modifiées : thème, débits (même en cours de transfert), Ident.
+    /// Applies changed options: language, theme, rates (even during transfers), Ident.
     fn apply_settings(&mut self, ctx: &egui::Context) {
+        let s = &self.options.settings;
+        let before = urftp_i18n::language();
+        options::apply_language(s.language);
+        if urftp_i18n::language() != before {
+            // Listings hold formatted dates: list them again in the new language.
+            for side in self.tabs.iter_mut().flat_map(|t| t.sides.iter_mut()) {
+                match side {
+                    Side::Local(l) => l.reload(),
+                    Side::Remote(r) => r.handle.send(BrowserCmd::Refresh),
+                }
+            }
+        }
         let s = &self.options.settings;
         if s.dark_theme != self.dark {
             self.dark = s.dark_theme;
@@ -860,7 +888,7 @@ impl UltraRushApp {
         self.sync_ident();
     }
 
-    /// (Re)démarre ou arrête le serveur Ident si ses réglages ont changé.
+    /// (Re)starts or stops the Ident server when its settings changed.
     fn sync_ident(&mut self) {
         let wanted = self.options.settings.ident.clone();
         if self.ident_applied.as_ref() == Some(&wanted) {
@@ -869,7 +897,7 @@ impl UltraRushApp {
         self.ident = None;
         self.ident_applied = Some(wanted.clone());
         if !wanted.enabled {
-            self.options.ident_status = Some(("Serveur Ident arrêté.".into(), true));
+            self.options.ident_status = Some((t!("ident.stopped"), true));
             return;
         }
         let cfg = IdentConfig {
@@ -877,13 +905,13 @@ impl UltraRushApp {
             system: if wanted.system.trim().is_empty() { "UNIX".into() } else { wanted.system.trim().into() },
             bind: std::net::SocketAddr::from(([0, 0, 0, 0], wanted.port)),
         };
-        // L'interface ne tourne pas dans le runtime : on peut y attendre le démarrage.
+        // The interface does not run inside the runtime: it may block on the startup here.
         match self.rt.block_on(IdentServer::start(cfg)) {
             Ok(srv) => {
-                self.options.ident_status = Some((format!("Serveur Ident actif sur le port {}.", srv.local_addr().port()), true));
+                self.options.ident_status = Some((t!("ident.running", port = srv.local_addr().port()), true));
                 self.ident = Some(srv);
             }
-            Err(e) => self.options.ident_status = Some((format!("Impossible d'écouter sur le port {} : {e}", wanted.port), false)),
+            Err(e) => self.options.ident_status = Some((t!("ident.bind_failed", port = wanted.port, error = e), false)),
         }
     }
 
@@ -928,14 +956,14 @@ impl UltraRushApp {
         })
     }
 
-    /// Connecte le panneau droit de l'onglet actif (comme la barre de connexion rapide de la v2).
+    /// Connects the right panel of the active tab (like the v2 quick-connect bar).
     fn quick_connect(&mut self, ctx: &egui::Context) {
         let Some(profile) = self.quick_profile() else { return };
         self.connect_profile(profile, None, None, ctx);
     }
 
-    /// Ouvre une connexion dans le panneau droit de l'onglet actif (un nouvel onglet si ce
-    /// panneau est déjà connecté), puis se place dans `start_dir`.
+    /// Opens a connection in the right panel of the active tab (a new tab when that panel
+    /// is already connected), then changes to `start_dir`.
     fn connect_profile(&mut self, profile: SiteProfile, site_id: Option<u64>, start_dir: Option<String>, ctx: &egui::Context) {
         if self.options.settings.new_tab_when_busy && matches!(self.tabs[self.active].sides[1], Side::Remote(_)) {
             self.new_tab();
@@ -943,7 +971,7 @@ impl UltraRushApp {
         self.open_remote(self.active, 1, profile, site_id, start_dir, ctx);
     }
 
-    /// Connecte le panneau `side` de l'onglet `tab` (l'ancienne connexion est fermée).
+    /// Connects panel `side` of tab `tab` (the previous connection is closed).
     fn open_remote(
         &mut self,
         tab: usize,
@@ -962,7 +990,7 @@ impl UltraRushApp {
             handle.send(BrowserCmd::Cwd(dir));
         }
         let t = &mut self.tabs[tab];
-        t.push_log(side, LogKind::Status, format!("Connexion à {}…", profile.name));
+        t.push_log(side, LogKind::Status, t!("log.connecting", site = profile.name));
         t.sides[side] = Side::Remote(Box::new(RemoteView {
             profile,
             handle,
@@ -975,7 +1003,7 @@ impl UltraRushApp {
         }));
     }
 
-    /// Connexion depuis une fiche du gestionnaire de sites.
+    /// Connection from a site manager record.
     fn connect_site(&mut self, site: Site, ctx: &egui::Context) {
         let profile = sites::to_profile(&site, &self.options.settings);
         let remote = (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone());
@@ -988,14 +1016,14 @@ impl UltraRushApp {
         }
     }
 
-    /// Options de la ligne de commande (`-w`, `-c`, `-s`, `-r[t][x]`, `-d`).
+    /// Command-line options (`-w`, `-c`, `-s`, `-r[t][x]`, `-d`).
     fn apply_startup(&mut self, o: StartupOptions, ctx: &egui::Context) {
         let mut notes: Vec<(bool, String)> = Vec::new();
         if o.debug {
-            notes.push((true, "Mode débogage (-d).".into()));
+            notes.push((true, t!("startup.debug")));
         }
         for a in &o.unknown {
-            notes.push((false, format!("Option inconnue ignorée : {a}")));
+            notes.push((false, t!("startup.unknown_option", option = a)));
         }
         if let Some(n) = o.windows {
             while self.tabs.len() < n {
@@ -1004,7 +1032,7 @@ impl UltraRushApp {
             self.active = 0;
         }
         if let Some(target) = &o.connect {
-            // URL, nom d'un site du gestionnaire, ou hôte seul (FTP anonyme).
+            // URL, name of a site manager site, or host only (anonymous FTP).
             if let Some(q) = parse_connect_url(target) {
                 self.quick = q;
                 self.quick_connect(ctx);
@@ -1020,11 +1048,11 @@ impl UltraRushApp {
                 Ok(bytes) => {
                     let src = String::from_utf8(bytes).unwrap_or_else(|e| e.into_bytes().iter().map(|&b| b as char).collect());
                     notes.push(match self.run_script(&src, ctx) {
-                        Ok(()) => (true, format!("Script {} exécuté.", path.display())),
-                        Err(e) => (false, format!("Script {} : {e}", path.display())),
+                        Ok(()) => (true, t!("startup.script_done", path = path.display())),
+                        Err(e) => (false, t!("startup.script_failed", path = path.display(), error = e)),
                     });
                 }
-                Err(e) => notes.push((false, format!("Script {} illisible : {e}", path.display()))),
+                Err(e) => notes.push((false, t!("startup.script_unreadable", path = path.display(), error = e))),
             }
         }
         if o.run_queues {
@@ -1041,7 +1069,7 @@ impl UltraRushApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
         }
         self.exit_when_done = o.exit_when_done;
-        // Visible quand le programme est lancé depuis une console (versions de débogage).
+        // Visible when the program is started from a console (debug builds).
         for (_, n) in &notes {
             eprintln!("{n}");
         }
@@ -1051,25 +1079,25 @@ impl UltraRushApp {
 
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("Fichier", |ui| {
-                if ui.button("☰ Gestionnaire de sites").clicked() {
+            ui.menu_button(t!("menu.file"), |ui| {
+                if ui.button(t!("menu.site_manager")).clicked() {
                     self.sites.open = true;
                     ui.close();
                 }
-                if ui.button("Nouvel onglet").clicked() {
+                if ui.button(t!("menu.new_tab")).clicked() {
                     self.new_tab();
                     ui.close();
                 }
-                if ui.button("⚙ Options…").clicked() {
+                if ui.button(t!("menu.options")).clicked() {
                     self.options.open = true;
                     ui.close();
                 }
-                if ui.button("Quitter").clicked() {
+                if ui.button(t!("menu.quit")).clicked() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
-            ui.menu_button("Affichage", |ui| {
-                if ui.button(if self.dark { "☀ Thème clair" } else { "🌙 Thème sombre" }).clicked() {
+            ui.menu_button(t!("menu.view"), |ui| {
+                if ui.button(if self.dark { t!("menu.light_theme") } else { t!("menu.dark_theme") }).clicked() {
                     self.dark = !self.dark;
                     theme::apply(ui.ctx(), self.dark);
                     self.options.settings.dark_theme = self.dark;
@@ -1083,10 +1111,10 @@ impl UltraRushApp {
         });
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            if ui.button("☰ Sites").on_hover_text("Gestionnaire de sites").clicked() {
+            if ui.button(t!("quick.sites")).on_hover_text(t!("quick.sites_hint")).clicked() {
                 self.sites.open = !self.sites.open;
             }
-            if ui.button("⚙").on_hover_text("Options").clicked() {
+            if ui.button("⚙").on_hover_text(t!("quick.options_hint")).clicked() {
                 self.options.open = !self.options.open;
             }
             ui.separator();
@@ -1100,13 +1128,13 @@ impl UltraRushApp {
             if before != self.quick.proto {
                 self.quick.port = self.quick.proto.default_port().to_string();
             }
-            ui.add(egui::TextEdit::singleline(&mut self.quick.host).hint_text("Hôte").desired_width(180.0));
-            ui.add(egui::TextEdit::singleline(&mut self.quick.port).hint_text("Port").desired_width(48.0));
-            ui.add(egui::TextEdit::singleline(&mut self.quick.user).hint_text("Utilisateur").desired_width(120.0));
-            let pass =
-                ui.add(egui::TextEdit::singleline(&mut self.quick.pass).hint_text("Mot de passe").password(true).desired_width(120.0));
+            ui.add(egui::TextEdit::singleline(&mut self.quick.host).hint_text(t!("common.host")).desired_width(180.0));
+            ui.add(egui::TextEdit::singleline(&mut self.quick.port).hint_text(t!("common.port")).desired_width(48.0));
+            ui.add(egui::TextEdit::singleline(&mut self.quick.user).hint_text(t!("common.user")).desired_width(120.0));
+            let pass = ui
+                .add(egui::TextEdit::singleline(&mut self.quick.pass).hint_text(t!("common.password")).password(true).desired_width(120.0));
             let enter = pass.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            if ui.add(egui::Button::new(RichText::new("Connexion").color(Color32::WHITE)).fill(ACCENT)).clicked() || enter {
+            if ui.add(egui::Button::new(RichText::new(t!("quick.connect")).color(Color32::WHITE)).fill(ACCENT)).clicked() || enter {
                 self.quick_connect(ui.ctx());
             }
         });
@@ -1122,12 +1150,12 @@ impl UltraRushApp {
                 if ui.selectable_label(i == self.active, text).clicked() {
                     self.active = i;
                 }
-                if self.tabs.len() > 1 && ui.small_button("✕").on_hover_text("Fermer l'onglet").clicked() {
+                if self.tabs.len() > 1 && ui.small_button("✕").on_hover_text(t!("tabs.close")).clicked() {
                     close = Some(i);
                 }
                 ui.separator();
             }
-            if ui.button("+").on_hover_text("Nouvel onglet").clicked() {
+            if ui.button("+").on_hover_text(t!("tabs.new")).clicked() {
                 self.new_tab();
             }
         });
@@ -1146,11 +1174,11 @@ impl UltraRushApp {
                 .flat_map(|t| t.sides.iter())
                 .filter(|s| matches!(s, Side::Remote(r) if r.state == RemoteState::Connected))
                 .count();
-            ui.label(format!("Onglets : {}", self.tabs.len()));
+            ui.label(t!("status.tabs", n = self.tabs.len()));
             ui.separator();
-            ui.label(format!("Connectés : {connected}"));
+            ui.label(t!("status.connected", n = connected));
             ui.separator();
-            ui.label(format!("Files actives : {running}"));
+            ui.label(t!("status.active_queues", n = running));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).weak());
             });
@@ -1218,7 +1246,7 @@ impl UltraRushApp {
                 }
             }
         }
-        // Console de script : exécutée après les autres actions (elle agit sur toute l'appli).
+        // Script console: run after the other actions (it acts on the whole application).
         for invoke in scripts {
             let (src, tab) = {
                 let t = &self.tabs[self.active];
@@ -1227,7 +1255,7 @@ impl UltraRushApp {
             let out = if invoke {
                 self.invoke(&src, ctx).map(|v| format!("= {v}"))
             } else {
-                self.run_script(&src, ctx).map(|()| "Script exécuté.".to_string())
+                self.run_script(&src, ctx).map(|()| t!("script.done"))
             };
             let last = self.tabs.len() - 1;
             let t = &mut self.tabs[tab.min(last)];
@@ -1241,7 +1269,7 @@ impl UltraRushApp {
         }
     }
 
-    /// Profils (depuis le gestionnaire de sites) de tous les sites cités dans la file d'un onglet.
+    /// Profiles (from the site manager) of every site named in the queue of a tab.
     fn queue_site_profiles(&self, tab: usize) -> Vec<SiteProfile> {
         let Some(t) = self.tabs.get(tab) else { return Vec::new() };
         let names: BTreeSet<String> =
@@ -1249,7 +1277,7 @@ impl UltraRushApp {
         names.iter().filter_map(|n| self.sites.book.find_by_name(n)).map(|s| sites::to_profile(s, &self.options.settings)).collect()
     }
 
-    /// Raccourcis clavier, appliqués au panneau actif quand aucun champ texte n'a le focus.
+    /// Keyboard shortcuts, applied to the active panel when no text field has the focus.
     fn keyboard(&mut self, ctx: &egui::Context) -> Vec<Action> {
         let tab = &self.tabs[self.active];
         if ctx.egui_wants_keyboard_input() || tab.prompt.is_some() || tab.trust.is_some() || self.sites.open || self.options.open {
@@ -1289,7 +1317,7 @@ impl UltraRushApp {
         });
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A)) {
             let n = tab.sides[side].rows().len();
-            // Sélection directe : pas besoin de passer par une action.
+            // Direct selection: no need for an action.
             let sel: BTreeSet<usize> = (0..n).collect();
             out.push(Action::Focus(side));
             self.tabs[self.active].sides[side].selected_mut().extend(sel);
@@ -1297,7 +1325,7 @@ impl UltraRushApp {
         out
     }
 
-    /// Dialogues de saisie (nouveau dossier, renommer) et de confirmation (supprimer).
+    /// Input dialogs (new folder, rename) and confirmation (delete).
     fn prompt_dialog(&mut self, ctx: &egui::Context) {
         let tab = &mut self.tabs[self.active];
         let Some(prompt) = &mut tab.prompt else { return };
@@ -1308,37 +1336,37 @@ impl UltraRushApp {
             let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
             match prompt {
                 Prompt::NewFolder { name, .. } => {
-                    ui.heading("📁 Nouveau dossier");
+                    ui.heading(t!("prompt.new_folder"));
                     let r = ui.add(egui::TextEdit::singleline(name).desired_width(f32::INFINITY));
                     r.request_focus();
                 }
                 Prompt::Rename { from, to, .. } => {
-                    ui.heading("✏ Renommer");
+                    ui.heading(t!("prompt.rename"));
                     ui.label(RichText::new(from.as_str()).weak());
                     let r = ui.add(egui::TextEdit::singleline(to).desired_width(f32::INFINITY));
                     r.request_focus();
                 }
                 Prompt::Delete { items, .. } => {
-                    ui.heading("🗑 Supprimer ?");
+                    ui.heading(t!("prompt.delete"));
                     let dirs = items.iter().filter(|(_, d)| *d).count();
-                    ui.label(format!(
-                        "{} élément(s) seront supprimés définitivement{}.",
-                        items.len(),
-                        if dirs > 0 { format!(", dont {dirs} dossier(s) avec tout leur contenu") } else { String::new() }
-                    ));
+                    ui.label(if dirs > 0 {
+                        t!("prompt.delete_count_dirs", n = items.len(), dirs = dirs)
+                    } else {
+                        t!("prompt.delete_count", n = items.len())
+                    });
                     for (n, d) in items.iter().take(8) {
                         ui.label(RichText::new(format!("{} {n}", if *d { "📁" } else { "📄" })).weak());
                     }
                     if items.len() > 8 {
-                        ui.label(RichText::new(format!("… et {} autre(s)", items.len() - 8)).weak());
+                        ui.label(RichText::new(t!("prompt.and_more", n = items.len() - 8)).weak());
                     }
                 }
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 let (label, color) = match prompt {
-                    Prompt::Delete { .. } => ("Supprimer", LOG_ERROR),
-                    _ => ("Valider", ACCENT),
+                    Prompt::Delete { .. } => (t!("common.delete"), LOG_ERROR),
+                    _ => (t!("common.validate"), ACCENT),
                 };
                 if ui.add(egui::Button::new(RichText::new(label).color(Color32::WHITE)).fill(color)).clicked()
                     || (enter && !matches!(prompt, Prompt::Delete { .. }))
@@ -1365,22 +1393,21 @@ impl UltraRushApp {
         egui::Modal::new(egui::Id::new(("trust", tab.id))).show(ctx, |ui| {
             ui.set_max_width(520.0);
             let what = match prompt.kind {
-                TrustKind::TlsCertificate => "Le certificat TLS de ce serveur n'est pas reconnu.",
-                TrustKind::SshHostKey => "La clé SSH de ce serveur est inconnue.",
+                TrustKind::TlsCertificate => t!("trust.tls"),
+                TrustKind::SshHostKey => t!("trust.ssh"),
             };
-            ui.heading("🔒 Faire confiance à ce serveur ?");
+            ui.heading(t!("trust.title"));
             ui.add_space(6.0);
             ui.label(what);
             ui.label(RichText::new(&prompt.reason).weak());
             ui.add_space(6.0);
-            ui.label("Empreinte :");
+            ui.label(t!("trust.fingerprint"));
             ui.code(&prompt.fingerprint);
             ui.add_space(6.0);
-            ui.label("Ne l'approuvez que si elle correspond à celle donnée par l'administrateur du site.");
+            ui.label(t!("trust.advice"));
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                if ui.add(egui::Button::new(RichText::new("Faire confiance et se connecter").color(Color32::WHITE)).fill(ACCENT)).clicked()
-                {
+                if ui.add(egui::Button::new(RichText::new(t!("trust.accept")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
                     decision = Some(true);
                 }
                 if ui.button("Annuler").clicked() {
@@ -1404,7 +1431,7 @@ impl UltraRushApp {
             }
             r.state = RemoteState::Connecting;
             r.handle.send(BrowserCmd::Connect(Box::new(r.profile.clone())));
-            // Site du gestionnaire : l'empreinte approuvée est enregistrée dans sa fiche.
+            // Site manager site: the trusted fingerprint is stored in its record.
             if let Some(id) = r.site_id {
                 self.sites.remember_trust(id, prompt.kind, &prompt.fingerprint);
             }
@@ -1413,14 +1440,14 @@ impl UltraRushApp {
 }
 
 impl eframe::App for UltraRushApp {
-    // Appelée à chaque image, et aussi quand la fenêtre est réduite : transferts, statistiques
-    // et demandes de mIRC continuent d'être traités.
+    // Called on every frame, and also while the window is minimised: transfers, statistics
+    // and mIRC requests keep being processed.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(Container::poll).collect();
         self.stats.record(&traffic);
         self.forward_raw_replies();
         self.serve_ipc(ctx);
-        // `-rx` : fermer quand aucune file ne tourne et qu'il ne reste rien à transférer.
+        // `-rx`: close when no queue runs and nothing is left to transfer.
         if self.exit_when_done
             && self.startup.is_none()
             && self.tabs.iter().all(|t| t.engine_events.is_none() && !t.queue.lock().has_pending())
@@ -1434,7 +1461,7 @@ impl eframe::App for UltraRushApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        // Démarre l'Ident au premier affichage, puis à chaque changement de ses réglages.
+        // Starts Ident on the first frame, then whenever its settings change.
         if self.ident_applied.is_none() {
             self.sync_ident();
         }
@@ -1444,15 +1471,15 @@ impl eframe::App for UltraRushApp {
         if let Some(o) = self.startup.take() {
             self.apply_startup(o, &ctx);
         }
-        // `URUSHFTP_SCRIPT` : script exécuté au démarrage (développement, automatisation).
+        // `URUSHFTP_SCRIPT`: script run at startup (development, automation).
         if !self.startup_script_done {
             self.startup_script_done = true;
             if let Ok(src) = std::env::var("URUSHFTP_SCRIPT") {
                 let r = self.run_script(&src, &ctx);
                 let t = self.active;
                 self.tabs[t].script_out.push(match r {
-                    Ok(()) => (true, "Script de démarrage exécuté.".into()),
-                    Err(e) => (false, format!("Script de démarrage : {e}")),
+                    Ok(()) => (true, t!("startup.env_script_done")),
+                    Err(e) => (false, t!("startup.env_script_failed", error = e)),
                 });
             }
         }
@@ -1492,7 +1519,7 @@ impl eframe::App for UltraRushApp {
     }
 }
 
-// ====================================================================== panneaux
+// ====================================================================== panels
 
 struct PaneViewer<'a> {
     sides: &'a mut [Side; 2],
@@ -1500,9 +1527,9 @@ struct PaneViewer<'a> {
     progress: &'a HashMap<ItemId, (u64, Option<u64>)>,
     log: &'a [LogEntry],
     actions: &'a mut Vec<Action>,
-    /// Panneau actif pour le clavier.
+    /// Panel active for the keyboard.
     focus: usize,
-    /// Un moteur tourne (pour activer « Arrêter »).
+    /// An engine is running (to enable "Stop").
     running: bool,
     script: &'a mut String,
     invoke: &'a mut String,
@@ -1517,9 +1544,9 @@ impl TabViewer for PaneViewer<'_> {
         match tab {
             Pane::Left => format!("{}{}", mark(0), self.sides[0].title()).into(),
             Pane::Right => format!("{}{}", mark(1), self.sides[1].title()).into(),
-            Pane::Queue => "☰ File d'attente".into(),
-            Pane::Log => "📜 Journal".into(),
-            Pane::Script => "⌨ Script".into(),
+            Pane::Queue => t!("pane.queue").into(),
+            Pane::Log => t!("pane.log").into(),
+            Pane::Script => t!("pane.script").into(),
         }
     }
 
@@ -1540,15 +1567,15 @@ impl TabViewer for PaneViewer<'_> {
 
 impl PaneViewer<'_> {
     fn file_pane(&mut self, ui: &mut egui::Ui, side: usize) {
-        let arrow = if side == 0 { "Transférer ➡" } else { "⬅ Transférer" };
+        let arrow = if side == 0 { t!("files.transfer_right") } else { t!("files.transfer_left") };
         ui.horizontal(|ui| {
-            if ui.button("⬆").on_hover_text("Dossier parent").clicked() {
+            if ui.button("⬆").on_hover_text(t!("files.parent")).clicked() {
                 self.actions.push(Action::Up(side));
             }
-            if ui.button("⟳").on_hover_text("Actualiser (F5)").clicked() {
+            if ui.button("⟳").on_hover_text(t!("files.refresh")).clicked() {
                 self.actions.push(Action::Refresh(side));
             }
-            if ui.button("📁+").on_hover_text("Nouveau dossier (F7)").clicked() {
+            if ui.button("📁+").on_hover_text(t!("files.new_folder")).clicked() {
                 self.actions.push(Action::NewFolder(side));
             }
             match &mut self.sides[side] {
@@ -1567,7 +1594,7 @@ impl PaneViewer<'_> {
                     };
                     ui.label(RichText::new(dot).color(color));
                     ui.label(RichText::new(&r.dir).monospace());
-                    if ui.small_button("Déconnecter").clicked() {
+                    if ui.small_button(t!("files.disconnect")).clicked() {
                         self.actions.push(Action::Disconnect(side));
                     }
                 }
@@ -1587,7 +1614,7 @@ impl PaneViewer<'_> {
                 RemoteState::Connecting => {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label("Connexion…");
+                        ui.label(t!("files.connecting"));
                     });
                 }
                 RemoteState::Failed(e) => {
@@ -1607,8 +1634,8 @@ impl PaneViewer<'_> {
         let mut sort_by: Option<SortCol> = None;
         let mut menu: Vec<Action> = Vec::new();
 
-        // Toute la liste est une zone de dépôt : des fichiers glissés depuis l'autre panneau
-        // y sont transférés.
+        // The whole list is a drop zone: files dragged from the other panel are
+        // transferred into it.
         let (_, dropped) = ui.dnd_drop_zone::<DragFiles, ()>(egui::Frame::new(), |ui| {
             TableBuilder::new(ui)
                 .id_salt(("files", side))
@@ -1618,11 +1645,15 @@ impl PaneViewer<'_> {
                 .column(Column::initial(90.0).at_least(60.0))
                 .column(Column::initial(130.0).at_least(80.0))
                 .header(22.0, |mut h| {
-                    for (col, label) in [(SortCol::Name, "Nom"), (SortCol::Size, "Taille"), (SortCol::Modified, "Modifié")] {
+                    for (col, label) in [
+                        (SortCol::Name, t!("files.col_name")),
+                        (SortCol::Size, t!("files.col_size")),
+                        (SortCol::Modified, t!("files.col_modified")),
+                    ] {
                         h.col(|ui| {
                             let arrow = if sort.col == col { if sort.asc { " ⏶" } else { " ⏷" } } else { "" };
                             let r = ui.add(egui::Label::new(RichText::new(format!("{label}{arrow}")).strong()).sense(Sense::click()));
-                            if r.on_hover_text("Trier").clicked() {
+                            if r.on_hover_text(t!("files.sort")).clicked() {
                                 sort_by = Some(col);
                             }
                         });
@@ -1657,33 +1688,33 @@ impl PaneViewer<'_> {
                             clicked = Some((i, false, false));
                         }
                         resp.context_menu(|ui| {
-                            if ui.button("⇄ Transférer vers l'autre panneau   Espace").clicked() {
+                            if ui.button(t!("files.ctx_transfer")).clicked() {
                                 menu.push(Action::Transfer(side));
                                 ui.close();
                             }
-                            if f.is_dir && ui.button("📂 Ouvrir   Entrée").clicked() {
+                            if f.is_dir && ui.button(t!("files.ctx_open")).clicked() {
                                 menu.push(Action::Open(side, f.name.clone()));
                                 ui.close();
                             }
                             ui.separator();
-                            if ui.button("✏ Renommer…   F2").clicked() {
+                            if ui.button(t!("files.ctx_rename")).clicked() {
                                 menu.push(Action::Rename(side));
                                 ui.close();
                             }
-                            if ui.button("🗑 Supprimer…   Suppr").clicked() {
+                            if ui.button(t!("files.ctx_delete")).clicked() {
                                 menu.push(Action::Delete(side));
                                 ui.close();
                             }
-                            if ui.button("📁 Nouveau dossier…   F7").clicked() {
+                            if ui.button(t!("files.ctx_new_folder")).clicked() {
                                 menu.push(Action::NewFolder(side));
                                 ui.close();
                             }
                             ui.separator();
-                            if ui.button("📋 Copier le chemin").clicked() {
+                            if ui.button(t!("files.ctx_copy_path")).clicked() {
                                 menu.push(Action::CopyPath(side, f.name.clone()));
                                 ui.close();
                             }
-                            if ui.button("⟳ Actualiser   F5").clicked() {
+                            if ui.button(t!("files.ctx_refresh")).clicked() {
                                 menu.push(Action::Refresh(side));
                                 ui.close();
                             }
@@ -1707,7 +1738,7 @@ impl PaneViewer<'_> {
             self.actions.push(Action::Focus(side));
             let sel = self.sides[side].selected_mut();
             if range {
-                // Maj : de la dernière sélection jusqu'ici.
+                // Shift: from the last selection to here.
                 let anchor = sel.iter().next_back().copied().unwrap_or(i);
                 let (a, b) = if anchor <= i { (anchor, i) } else { (i, anchor) };
                 sel.extend(a..=b);
@@ -1727,19 +1758,19 @@ impl PaneViewer<'_> {
         let items = self.queue.lock().items().to_vec();
         let failed = items.iter().filter(|i| matches!(i.state, ItemState::Failed(_) | ItemState::Stopped)).count();
         ui.horizontal(|ui| {
-            if ui.button("▶ Démarrer").clicked() {
+            if ui.button(t!("queue.start")).clicked() {
                 self.actions.push(Action::StartQueue);
             }
-            if ui.add_enabled(self.running, egui::Button::new("⏹ Tout arrêter")).clicked() {
+            if ui.add_enabled(self.running, egui::Button::new(t!("queue.stop_all"))).clicked() {
                 self.actions.push(Action::QueueStopAll);
             }
-            if ui.add_enabled(failed > 0, egui::Button::new(format!("↻ Relancer les échecs ({failed})"))).clicked() {
+            if ui.add_enabled(failed > 0, egui::Button::new(t!("queue.retry_failed", n = failed))).clicked() {
                 self.actions.push(Action::QueueRetryAll);
             }
-            if ui.button("🗑 Retirer les terminés").clicked() {
+            if ui.button(t!("queue.clear_finished")).clicked() {
                 self.actions.push(Action::ClearFinished);
             }
-            ui.label(RichText::new(format!("{} élément(s) — clic droit pour plus d'options", items.len())).weak());
+            ui.label(RichText::new(t!("queue.summary", n = items.len())).weak());
         });
         ui.separator();
         let running = self.running;
@@ -1754,7 +1785,7 @@ impl PaneViewer<'_> {
             .column(Column::initial(170.0))
             .column(Column::initial(140.0).clip(true))
             .header(22.0, |mut h| {
-                for t in ["", "Élément", "Taille", "Progression", "État"] {
+                for t in [String::new(), t!("queue.col_item"), t!("queue.col_size"), t!("queue.col_progress"), t!("queue.col_state")] {
                     h.col(|ui| {
                         ui.strong(t);
                     });
@@ -1793,13 +1824,13 @@ impl PaneViewer<'_> {
                     });
                     row.col(|ui| {
                         let (text, color) = match &it.state {
-                            ItemState::Waiting => ("En attente".to_string(), LOG_STATUS),
-                            ItemState::Running => ("En cours".to_string(), ACCENT),
-                            ItemState::Done => ("Terminé".to_string(), LOG_REPLY),
-                            ItemState::Skipped(r) => (format!("Ignoré : {r}"), LOG_STATUS),
-                            ItemState::NeedsConfirmation => ("À confirmer".to_string(), Color32::from_rgb(0xE8, 0xB3, 0x3C)),
-                            ItemState::Stopped => ("Arrêté".to_string(), LOG_STATUS),
-                            ItemState::Failed(e) => (format!("Échec : {e}"), LOG_ERROR),
+                            ItemState::Waiting => (t!("state.waiting"), LOG_STATUS),
+                            ItemState::Running => (t!("state.running"), ACCENT),
+                            ItemState::Done => (t!("state.done"), LOG_REPLY),
+                            ItemState::Skipped(r) => (t!("state.skipped", reason = skip_text(r)), LOG_STATUS),
+                            ItemState::NeedsConfirmation => (t!("state.confirm"), Color32::from_rgb(0xE8, 0xB3, 0x3C)),
+                            ItemState::Stopped => (t!("state.stopped"), LOG_STATUS),
+                            ItemState::Failed(e) => (t!("state.failed", error = e), LOG_ERROR),
                         };
                         ui.label(RichText::new(&text).color(color)).on_hover_text(text);
                     });
@@ -1807,20 +1838,20 @@ impl PaneViewer<'_> {
                     let is_running = it.state == ItemState::Running;
                     let retryable = matches!(it.state, ItemState::Failed(_) | ItemState::Stopped | ItemState::NeedsConfirmation);
                     row.response().context_menu(|ui| {
-                        if ui.add_enabled(running && is_running, egui::Button::new("⏹ Arrêter")).clicked() {
+                        if ui.add_enabled(running && is_running, egui::Button::new(t!("queue.stop"))).clicked() {
                             menu.push(Action::QueueStop(id));
                             ui.close();
                         }
-                        if ui.add_enabled(retryable, egui::Button::new("↻ Relancer")).clicked() {
+                        if ui.add_enabled(retryable, egui::Button::new(t!("queue.retry"))).clicked() {
                             menu.push(Action::QueueRetry(id));
                             ui.close();
                         }
                         ui.separator();
                         for (m, label) in [
-                            (Move::Top, "⏫ Tout en haut"),
-                            (Move::Up, "⏶ Monter"),
-                            (Move::Down, "⏷ Descendre"),
-                            (Move::Bottom, "⏬ Tout en bas"),
+                            (Move::Top, t!("queue.top")),
+                            (Move::Up, t!("queue.up")),
+                            (Move::Down, t!("queue.down")),
+                            (Move::Bottom, t!("queue.bottom")),
                         ] {
                             if ui.button(label).clicked() {
                                 menu.push(Action::QueueMove(id, m));
@@ -1828,7 +1859,7 @@ impl PaneViewer<'_> {
                             }
                         }
                         ui.separator();
-                        if ui.add_enabled(!is_running, egui::Button::new("🗑 Retirer de la file")).clicked() {
+                        if ui.add_enabled(!is_running, egui::Button::new(t!("queue.remove"))).clicked() {
                             menu.push(Action::QueueRemove(id));
                             ui.close();
                         }
@@ -1838,18 +1869,18 @@ impl PaneViewer<'_> {
         self.actions.extend(menu);
     }
 
-    /// Console de script : exécuter du Pascal Script FTPRush ou évaluer une expression,
-    /// comme le feraient `RushScript` et `Invoke` depuis mIRC.
+    /// Script console: run FTPRush Pascal Script or evaluate an expression, like
+    /// `RushScript` and `Invoke` from mIRC.
     fn script_pane(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label("Invoke :");
+            ui.label(t!("script.invoke"));
             let r = ui.add(egui::TextEdit::singleline(self.invoke).hint_text("RushApp.TotalDownloadSize").desired_width(320.0));
             let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            if ui.button("= Évaluer").clicked() || enter {
+            if ui.button(t!("script.evaluate")).clicked() || enter {
                 self.actions.push(Action::Invoke);
             }
             ui.separator();
-            if ui.add(egui::Button::new(RichText::new("▶ Exécuter le script").color(Color32::WHITE)).fill(ACCENT)).clicked() {
+            if ui.add(egui::Button::new(RichText::new(t!("script.run")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
                 self.actions.push(Action::RunScript);
             }
         });
@@ -1866,7 +1897,7 @@ impl PaneViewer<'_> {
             });
             egui::ScrollArea::vertical().id_salt("script-out").stick_to_bottom(true).show(&mut cols[1], |ui| {
                 if self.script_out.is_empty() {
-                    ui.label(RichText::new("Les résultats et erreurs s'affichent ici.").weak());
+                    ui.label(RichText::new(t!("script.placeholder")).weak());
                 }
                 for (ok, line) in self.script_out {
                     ui.label(RichText::new(line).monospace().color(if *ok { LOG_REPLY } else { LOG_ERROR }));
@@ -1884,7 +1915,7 @@ impl PaneViewer<'_> {
                     LogKind::Status => LOG_STATUS,
                     LogKind::Error => LOG_ERROR,
                 };
-                let side = if e.side == 0 { "G" } else { "D" };
+                let side = if e.side == 0 { t!("pane.left") } else { t!("pane.right") };
                 ui.label(RichText::new(format!("[{side}] {}", e.text)).monospace().color(color));
             }
         });

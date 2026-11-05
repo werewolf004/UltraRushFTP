@@ -1,6 +1,6 @@
-//! Analyse des listings de répertoire : `LIST` (Unix, DOS/IIS) et `MLSD` (RFC 3659).
+//! Parsing of directory listings: `LIST` (Unix, DOS/IIS) and `MLSD` (RFC 3659).
 
-/// Nature d'une entrée distante.
+/// Kind of a remote entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EntryKind {
     File,
@@ -8,8 +8,8 @@ pub enum EntryKind {
     Link,
 }
 
-/// Date telle que donnée par le serveur. Les listings Unix omettent l'année pour les
-/// fichiers récents (`year = None`) et ne donnent pas les secondes.
+/// Date as given by the server. Unix listings omit the year for recent files
+/// (`year = None`) and do not give seconds.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FtpTime {
     pub year: Option<i32>,
@@ -20,7 +20,7 @@ pub struct FtpTime {
     pub second: u8,
 }
 
-/// Une entrée d'un listing distant.
+/// One entry of a remote listing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteEntry {
     pub name: String,
@@ -39,12 +39,12 @@ impl RemoteEntry {
     }
 }
 
-/// Analyse un listing `LIST` complet ; ignore `total N`, `.`, `..` et les lignes inconnues.
+/// Parses a complete `LIST` listing; skips `total N`, `.`, `..` and unknown lines.
 pub fn parse_list(text: &str) -> Vec<RemoteEntry> {
     text.lines().filter_map(parse_list_line).filter(|e| !is_dot(&e.name)).collect()
 }
 
-/// Analyse un listing `MLSD` complet ; ignore `cdir`, `pdir`, `.` et `..`.
+/// Parses a complete `MLSD` listing; skips `cdir`, `pdir`, `.` and `..`.
 pub fn parse_mlsd(text: &str) -> Vec<RemoteEntry> {
     text.lines().filter_map(parse_mlsd_line).filter(|e| !is_dot(&e.name)).collect()
 }
@@ -53,13 +53,13 @@ fn is_dot(name: &str) -> bool {
     name == "." || name == ".."
 }
 
-/// Analyse une ligne `LIST` au format Unix ou DOS/IIS.
+/// Parses a `LIST` line in Unix or DOS/IIS format.
 pub fn parse_list_line(line: &str) -> Option<RemoteEntry> {
     let line = line.trim_end_matches(['\r', '\n']);
     parse_unix(line).or_else(|| parse_dos(line))
 }
 
-/// Découpe en mots en gardant la position de début de chacun dans la ligne.
+/// Splits into words, keeping the start position of each one in the line.
 fn tokens(line: &str) -> Vec<(usize, &str)> {
     let mut out = Vec::new();
     let mut start = None;
@@ -85,8 +85,8 @@ fn month(s: &str) -> Option<u8> {
     M.iter().position(|m| *m == s).map(|i| i as u8 + 1)
 }
 
-/// `drwxr-xr-x  2 owner group  4096 Jan  1 12:00 nom avec espaces`
-/// Tolère l'absence du groupe ou du nombre de liens (glftpd, serveurs embarqués…).
+/// `drwxr-xr-x  2 owner group  4096 Jan  1 12:00 name with spaces`
+/// Tolerates a missing group or link count (glftpd, embedded servers...).
 fn parse_unix(line: &str) -> Option<RemoteEntry> {
     let kind = match line.chars().next()? {
         'd' => EntryKind::Dir,
@@ -98,7 +98,7 @@ fn parse_unix(line: &str) -> Option<RemoteEntry> {
     if t.len() < 7 {
         return None;
     }
-    // Cherche le mois : précédé de la taille, suivi du jour et de l'heure ou de l'année.
+    // Look for the month: preceded by the size, followed by the day and the time or year.
     let i = (3..=t.len() - 4).find(|&i| {
         month(t[i].1).is_some() && t[i - 1].1.parse::<u64>().is_ok() && t[i + 1].1.parse::<u8>().is_ok_and(|d| (1..=31).contains(&d))
     })?;
@@ -135,7 +135,7 @@ fn parse_unix(line: &str) -> Option<RemoteEntry> {
     })
 }
 
-/// `01-02-24  10:30AM       <DIR>          nom` ou avec une taille à la place de `<DIR>`.
+/// `01-02-24  10:30AM       <DIR>          name` or with a size instead of `<DIR>`.
 fn parse_dos(line: &str) -> Option<RemoteEntry> {
     let t = tokens(line);
     if t.len() < 4 {
@@ -186,7 +186,7 @@ fn parse_dos(line: &str) -> Option<RemoteEntry> {
     })
 }
 
-/// `type=file;size=123;modify=20240101120000; nom`
+/// `type=file;size=123;modify=20240101120000; name`
 pub fn parse_mlsd_line(line: &str) -> Option<RemoteEntry> {
     let line = line.trim_end_matches(['\r', '\n']);
     let (facts, name) = line.split_once(' ')?;

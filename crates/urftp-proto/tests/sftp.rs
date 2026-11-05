@@ -79,7 +79,7 @@ async fn resume_upload_and_download() {
 #[tokio::test]
 async fn unknown_host_key_is_reported_with_fingerprint() {
     let srv = MockSftp::start(SftpMockConfig::default()).await;
-    let err = connect(&srv, &password(), SftpConfig::default()).await.err().expect("clé inconnue refusée");
+    let err = connect(&srv, &password(), SftpConfig::default()).await.err().expect("unknown key refused");
     match err {
         SftpError::HostKey { fingerprint, .. } => {
             assert_eq!(fingerprint, srv.fingerprint);
@@ -108,7 +108,7 @@ async fn public_key_auth_from_file_and_encrypted_text() {
     let key = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
     let srv = MockSftp::start(SftpMockConfig { authorized_key: Some(key.public_key().clone()), ..SftpMockConfig::default() }).await;
 
-    // Clé OpenSSH en clair dans un fichier.
+    // Plain OpenSSH key in a file.
     let dir = std::env::temp_dir().join(format!("urftp-key-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("id_ed25519");
@@ -116,18 +116,18 @@ async fn public_key_auth_from_file_and_encrypted_text() {
     connect(&srv, &SftpAuth::KeyFile { path: file, passphrase: None }, trusting(&srv)).await.unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
 
-    // Clé chiffrée par phrase de passe, fournie en texte.
+    // Key encrypted with a passphrase, given as text.
     let encrypted = key.encrypt(&mut rand::rng(), "phrase secrète").unwrap();
     let text = encrypted.to_openssh(LineEnding::LF).unwrap().to_string();
     let auth = SftpAuth::KeyText { text: text.clone(), passphrase: Some("phrase secrète".into()) };
     connect(&srv, &auth, trusting(&srv)).await.unwrap();
     assert_eq!(srv.auth_log.lock().unwrap().as_slice(), ["publickey", "publickey"]);
 
-    // Mauvaise phrase de passe : erreur de clé, pas de connexion.
+    // Wrong passphrase: key error, no connection.
     let bad = SftpAuth::KeyText { text, passphrase: Some("faux".into()) };
     assert!(matches!(connect(&srv, &bad, trusting(&srv)).await, Err(SftpError::Key(_))));
 
-    // Clé non autorisée sur le serveur.
+    // Key not authorised on the server.
     let other = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
     let auth = SftpAuth::KeyText { text: other.to_openssh(LineEnding::LF).unwrap().to_string(), passphrase: None };
     assert!(matches!(connect(&srv, &auth, trusting(&srv)).await, Err(SftpError::AuthFailed)));

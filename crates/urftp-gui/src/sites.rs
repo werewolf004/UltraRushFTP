@@ -1,9 +1,10 @@
-//! Gestionnaire de sites : arbre de dossiers et de sites, fiche de réglages, import.
+//! Site manager: tree of folders and sites, settings form, import.
 
 use std::path::PathBuf;
+use urftp_i18n::t;
 
 use eframe::egui::{self, Color32, RichText};
-use urftp_core::import::{self, ImportResult};
+use urftp_core::import::{self, ImportResult, ImportWarning};
 use urftp_core::settings::Settings;
 use urftp_core::site::{
     Bookmark, CertPolicy, IdentChoice, ProxyChoice, ProxyType, Site, SiteBook, SiteGroup, SiteProtocol, SiteProxy, TransferMode,
@@ -15,8 +16,8 @@ use urftp_proto::session::SiteProfile;
 use crate::browser::TrustKind;
 use crate::theme::{ACCENT, LOG_ERROR, LOG_REPLY};
 
-/// Profil de connexion à partir d'une fiche de site et des options globales (proxy global,
-/// délais).
+/// Connection profile from a site record and the global options (global proxy,
+/// timeouts).
 pub fn to_profile(site: &Site, settings: &Settings) -> SiteProfile {
     urftp_proto::profile::site_profile(site, settings)
 }
@@ -24,7 +25,7 @@ pub fn to_profile(site: &Site, settings: &Settings) -> SiteProfile {
 #[derive(Clone, PartialEq, Eq)]
 enum Selection {
     Site(u64),
-    /// Dossier (indices depuis la racine ; vide = racine).
+    /// Folder (indices from the root; empty = root).
     Group(Vec<usize>),
 }
 
@@ -47,7 +48,7 @@ pub struct SiteManager {
     connect: Option<u64>,
 }
 
-/// Fichiers connus d'autres clients présents sur cette machine.
+/// Site books of other clients present on this machine.
 fn known_sources() -> Vec<(&'static str, PathBuf)> {
     let appdata = std::env::var_os("APPDATA").map(PathBuf::from);
     let home = std::env::var_os("USERPROFILE").map(PathBuf::from);
@@ -69,10 +70,10 @@ impl SiteManager {
             Ok(b) => (b, None),
             Err(e) => (
                 SiteBook::default(),
-                Some(Report { title: "Carnet de sites illisible".into(), lines: vec![format!("{} : {e}", path.display())], error: true }),
+                Some(Report { title: t!("sites.book_unreadable"), lines: vec![format!("{} : {e}", path.display())], error: true }),
             ),
         };
-        // Développement : `URUSHFTP_OPEN_SITES=<id>` ouvre le gestionnaire sur ce site.
+        // Development: `URUSHFTP_OPEN_SITES=<id>` opens the manager on this site.
         let open_on = std::env::var("URUSHFTP_OPEN_SITES").ok().and_then(|v| v.parse::<u64>().ok());
         Self {
             open: open_on.is_some(),
@@ -91,17 +92,17 @@ impl SiteManager {
     pub fn save(&mut self) {
         match sitestore::save(&self.path, &self.book) {
             Ok(()) => self.dirty = false,
-            Err(e) => self.report = Some(Report { title: "Enregistrement impossible".into(), lines: vec![e.to_string()], error: true }),
+            Err(e) => self.report = Some(Report { title: t!("sites.save_failed"), lines: vec![e.to_string()], error: true }),
         }
     }
 
-    /// Site dont l'utilisateur a demandé la connexion.
+    /// Site the user asked to connect to.
     pub fn take_connect(&mut self) -> Option<Site> {
         let id = self.connect.take()?;
         self.book.find(id).cloned()
     }
 
-    /// Enregistre une empreinte approuvée dans la fiche du site.
+    /// Stores a trusted fingerprint in the site record.
     pub fn remember_trust(&mut self, id: u64, kind: TrustKind, fingerprint: &str) {
         if let Some(s) = self.book.find_mut(id) {
             match kind {
@@ -130,13 +131,13 @@ impl SiteManager {
                 self.book.merge_import(group);
                 self.selection = Selection::Group(vec![self.book.root.groups.len() - 1]);
                 self.save();
-                let mut lines = vec![format!("{n} site(s) importé(s) depuis {} ({}).", format.label(), path.display())];
-                lines.extend(warnings.into_iter().map(|w| format!("• {w}")));
-                self.report = Some(Report { title: "Import terminé".into(), lines, error: false });
+                let mut lines = vec![t!("sites.imported", n = n, format = format.label(), path = path.display())];
+                lines.extend(warnings.iter().map(|w| format!("• {}", warning_text(w))));
+                self.report = Some(Report { title: t!("sites.import_done"), lines, error: false });
             }
             Err(e) => {
                 self.report =
-                    Some(Report { title: "Import impossible".into(), lines: vec![format!("{} : {e}", path.display())], error: true })
+                    Some(Report { title: t!("sites.import_failed"), lines: vec![format!("{} : {e}", path.display())], error: true })
             }
         }
     }
@@ -146,9 +147,13 @@ impl SiteManager {
             return;
         }
         let mut open = true;
-        egui::Window::new("☰ Gestionnaire de sites").open(&mut open).default_size([900.0, 600.0]).min_width(720.0).collapsible(false).show(
-            ctx,
-            |ui| {
+        egui::Window::new(t!("sites.title"))
+            .id(egui::Id::new("site-manager"))
+            .open(&mut open)
+            .default_size([900.0, 600.0])
+            .min_width(720.0)
+            .collapsible(false)
+            .show(ctx, |ui| {
                 self.toolbar(ui);
                 ui.separator();
                 ui.horizontal_top(|ui| {
@@ -167,15 +172,14 @@ impl SiteManager {
                         egui::ScrollArea::vertical().id_salt("site-form").show(ui, |ui| self.form(ui));
                     });
                 });
-            },
-        );
+            });
         if !open {
             self.open = false;
             if self.dirty {
                 self.save();
             }
         }
-        // Enregistrement automatique une seconde après la dernière modification.
+        // Automatic save one second after the last change.
         let now = ctx.input(|i| i.time);
         if self.dirty && now - self.last_change > 1.0 {
             self.save();
@@ -187,16 +191,16 @@ impl SiteManager {
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            if ui.button("➕ Nouveau site").clicked() {
+            if ui.button(t!("sites.new_site")).clicked() {
                 let group = self.current_group_path();
-                let id = self.book.add_site(&group, Site::default());
+                let id = self.book.add_site(&group, Site { name: t!("sites.new_site_default"), ..Site::default() });
                 self.selection = Selection::Site(id);
                 self.mark_dirty(ui);
             }
-            if ui.button("📁 Nouveau dossier").clicked() {
+            if ui.button(t!("sites.new_folder")).clicked() {
                 let path = self.current_group_path();
                 if let Some(g) = self.book.root.group_mut(&path) {
-                    g.groups.push(SiteGroup::new("Nouveau dossier"));
+                    g.groups.push(SiteGroup::new(t!("sites.new_folder_default")));
                     let mut p = path;
                     p.push(g.groups.len() - 1);
                     self.selection = Selection::Group(p);
@@ -204,24 +208,24 @@ impl SiteManager {
                 }
             }
             if let Selection::Site(id) = self.selection
-                && ui.button("⧉ Dupliquer").clicked()
+                && ui.button(t!("sites.duplicate")).clicked()
                 && let Some(new) = self.book.duplicate(id)
             {
                 self.selection = Selection::Site(new);
                 self.mark_dirty(ui);
             }
             let deletable = !matches!(&self.selection, Selection::Group(p) if p.is_empty());
-            if ui.add_enabled(deletable, egui::Button::new("🗑 Supprimer")).clicked() {
+            if ui.add_enabled(deletable, egui::Button::new(t!("sites.delete"))).clicked() {
                 self.confirm_delete = Some(self.selection.clone());
             }
             ui.separator();
-            ui.menu_button("📥 Importer", |ui| {
-                if ui.button("Choisir un fichier…").clicked() {
+            ui.menu_button(t!("sites.import"), |ui| {
+                if ui.button(t!("sites.import_pick")).clicked() {
                     ui.close();
                     if let Some(p) = rfd::FileDialog::new()
-                        .set_title("Importer des sites")
-                        .add_filter("Carnets de sites (FileZilla, FTPRush, FlashFXP)", &["xml", "json", "ftp"])
-                        .add_filter("Tous les fichiers", &["*"])
+                        .set_title(t!("sites.import_dialog"))
+                        .add_filter(t!("sites.import_filter"), &["xml", "json", "ftp"])
+                        .add_filter(t!("sites.all_files"), &["*"])
                         .pick_file()
                     {
                         self.import(p);
@@ -230,7 +234,7 @@ impl SiteManager {
                 let found = known_sources();
                 if !found.is_empty() {
                     ui.separator();
-                    ui.label(RichText::new("Trouvés sur cet ordinateur :").weak());
+                    ui.label(RichText::new(t!("sites.found_here")).weak());
                     for (label, path) in found {
                         if ui.button(format!("{label} — {}", path.display())).clicked() {
                             ui.close();
@@ -242,14 +246,14 @@ impl SiteManager {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Selection::Site(id) = self.selection {
                     let enabled = self.book.find(id).is_some_and(|s| s.enabled && !s.host.trim().is_empty());
-                    let btn = egui::Button::new(RichText::new("⚡ Connecter").color(Color32::WHITE)).fill(ACCENT);
+                    let btn = egui::Button::new(RichText::new(t!("sites.connect")).color(Color32::WHITE)).fill(ACCENT);
                     if ui.add_enabled(enabled, btn).clicked() {
                         self.save();
                         self.connect = Some(id);
                         self.open = false;
                     }
                 }
-                ui.label(RichText::new(format!("{} site(s)", self.book.root.site_count())).weak());
+                ui.label(RichText::new(t!("sites.count", n = self.book.root.site_count())).weak());
             });
         });
     }
@@ -264,12 +268,12 @@ impl SiteManager {
             Selection::Group(path) => {
                 let is_root = path.is_empty();
                 let Some(g) = self.book.root.group_mut(&path) else { return };
-                ui.heading(if is_root { "☰ Tous les sites" } else { "📁 Dossier" });
+                ui.heading(if is_root { t!("sites.all_sites") } else { t!("sites.folder") });
                 ui.add_space(6.0);
                 if !is_root {
                     let before = g.name.clone();
                     ui.horizontal(|ui| {
-                        ui.label("Nom du dossier");
+                        ui.label(t!("sites.folder_name"));
                         ui.text_edit_singleline(&mut g.name);
                     });
                     if g.name != before {
@@ -277,9 +281,9 @@ impl SiteManager {
                     }
                 }
                 let n = self.book.root.group_mut(&path).map_or(0, |g| g.site_count());
-                ui.label(RichText::new(format!("{n} site(s) dans ce dossier.")).weak());
+                ui.label(RichText::new(t!("sites.folder_count", n = n)).weak());
                 ui.add_space(8.0);
-                ui.label("Sélectionnez un site pour le modifier, ou créez-en un avec « Nouveau site ».");
+                ui.label(t!("sites.select_hint"));
             }
             Selection::Site(id) => {
                 let show_password = &mut self.show_password;
@@ -297,19 +301,19 @@ impl SiteManager {
     fn dialogs(&mut self, ctx: &egui::Context) {
         if let Some(sel) = self.confirm_delete.clone() {
             let what = match &sel {
-                Selection::Site(id) => format!("le site « {} »", self.book.find(*id).map_or("?", |s| s.name.as_str())),
-                Selection::Group(_) => "ce dossier et tous ses sites".to_string(),
+                Selection::Site(id) => t!("sites.delete_site", name = self.book.find(*id).map_or("?", |s| s.name.as_str())),
+                Selection::Group(_) => t!("sites.delete_folder"),
             };
             let mut answer = None;
             egui::Modal::new(egui::Id::new("confirm-delete-site")).show(ctx, |ui| {
-                ui.heading("Supprimer ?");
-                ui.label(format!("Voulez-vous vraiment supprimer {what} ?"));
+                ui.heading(t!("sites.delete_title"));
+                ui.label(t!("sites.delete_confirm", what = what));
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(RichText::new("Supprimer").color(Color32::WHITE)).fill(LOG_ERROR)).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(t!("common.delete")).color(Color32::WHITE)).fill(LOG_ERROR)).clicked() {
                         answer = Some(true);
                     }
-                    if ui.button("Annuler").clicked() {
+                    if ui.button(t!("common.cancel")).clicked() {
                         answer = Some(false);
                     }
                 });
@@ -348,7 +352,7 @@ impl SiteManager {
                     }
                 });
                 ui.add_space(8.0);
-                if ui.button("OK").clicked() {
+                if ui.button(t!("common.ok")).clicked() {
                     close = true;
                 }
             });
@@ -360,7 +364,7 @@ impl SiteManager {
 }
 
 fn tree(ui: &mut egui::Ui, g: &SiteGroup, path: &mut Vec<usize>, sel: &Selection, clicked: &mut Option<Selection>) {
-    let title = if path.is_empty() { "☰ Tous les sites".to_string() } else { format!("📁 {}", g.name) };
+    let title = if path.is_empty() { t!("sites.all_sites") } else { format!("📁 {}", g.name) };
     let header = egui::CollapsingHeader::new(RichText::new(title).strong())
         .id_salt(("grp", path.clone()))
         .default_open(path.len() < 2)
@@ -390,6 +394,33 @@ fn tree(ui: &mut egui::Ui, g: &SiteGroup, path: &mut Vec<usize>, sel: &Selection
     }
 }
 
+/// Translated import remark.
+fn warning_text(w: &ImportWarning) -> String {
+    match w {
+        ImportWarning::NoSites => t!("import.no_sites"),
+        ImportWarning::TlsIfAvailable => t!("import.tls_if_available"),
+        ImportWarning::UnsupportedProtocol { site, source_format, protocol } => {
+            t!("import.unsupported_protocol", site = site, format = source_format, protocol = protocol)
+        }
+        ImportWarning::UnknownCode { site, code, assumed } => {
+            t!("import.unknown_code", site = site, code = code, protocol = proto_label(*assumed))
+        }
+        ImportWarning::PasswordUnreadable(site) => t!("import.password_unreadable", site = site),
+        ImportWarning::MasterPassword(site) => t!("import.master_password", site = site),
+        ImportWarning::PasswordsNotImported(n) => t!("import.passwords_not_imported", n = n),
+    }
+}
+
+/// Translated protocol name.
+pub fn proto_label(p: SiteProtocol) -> String {
+    match p {
+        SiteProtocol::Ftp => t!("proto.ftp"),
+        SiteProtocol::FtpsExplicit => t!("proto.ftps_explicit"),
+        SiteProtocol::FtpsImplicit => t!("proto.ftps_implicit"),
+        SiteProtocol::Sftp => t!("proto.sftp"),
+    }
+}
+
 fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.label(label);
     add(ui);
@@ -409,80 +440,80 @@ fn optional_limit(ui: &mut egui::Ui, value: &mut Option<u32>) {
 fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
     ui.heading(format!("{} {}", if s.protocol == SiteProtocol::Sftp { "🔑" } else { "🌐" }, s.name));
     ui.add_space(4.0);
-    section(ui, "Connexion", |ui| {
+    section(ui, &t!("site.connection"), |ui| {
         egui::Grid::new("site-conn").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-            row(ui, "Nom", |ui| {
+            row(ui, &t!("common.name"), |ui| {
                 ui.add(egui::TextEdit::singleline(&mut s.name).desired_width(320.0));
             });
-            row(ui, "Protocole", |ui| {
+            row(ui, &t!("site.protocol"), |ui| {
                 let before = s.protocol;
-                egui::ComboBox::from_id_salt("site-proto").selected_text(s.protocol.label()).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("site-proto").selected_text(proto_label(s.protocol)).show_ui(ui, |ui| {
                     for p in SiteProtocol::ALL {
-                        ui.selectable_value(&mut s.protocol, p, p.label());
+                        ui.selectable_value(&mut s.protocol, p, proto_label(p));
                     }
                 });
                 if s.protocol != before && s.port == before.default_port() {
                     s.port = s.protocol.default_port();
                 }
             });
-            row(ui, "Hôte", |ui| {
-                ui.add(egui::TextEdit::singleline(&mut s.host).hint_text("ftp.exemple.com").desired_width(240.0));
-                ui.label("Port");
+            row(ui, &t!("common.host"), |ui| {
+                ui.add(egui::TextEdit::singleline(&mut s.host).hint_text(t!("site.host_hint")).desired_width(240.0));
+                ui.label(t!("common.port"));
                 ui.add(egui::DragValue::new(&mut s.port).range(1..=65535));
             });
-            row(ui, "Utilisateur", |ui| {
+            row(ui, &t!("common.user"), |ui| {
                 ui.add_enabled(!s.anonymous, egui::TextEdit::singleline(&mut s.user).desired_width(200.0));
-                ui.checkbox(&mut s.anonymous, "Anonyme");
+                ui.checkbox(&mut s.anonymous, t!("site.anonymous"));
             });
-            row(ui, if s.ssh_key_file.is_some() { "Phrase de passe" } else { "Mot de passe" }, |ui| {
+            row(ui, &if s.ssh_key_file.is_some() { t!("site.passphrase") } else { t!("common.password") }, |ui| {
                 ui.add_enabled(!s.anonymous, egui::TextEdit::singleline(&mut s.password).password(!*show_password).desired_width(200.0));
-                if ui.small_button(if *show_password { "🙈" } else { "👁" }).on_hover_text("Afficher / masquer").clicked() {
+                if ui.small_button(if *show_password { "🙈" } else { "👁" }).on_hover_text(t!("site.show_hide")).clicked() {
                     *show_password = !*show_password;
                 }
             });
-            row(ui, "Actif", |ui| {
-                ui.checkbox(&mut s.enabled, "Site activé");
+            row(ui, &t!("site.active"), |ui| {
+                ui.checkbox(&mut s.enabled, t!("site.enabled"));
             });
         });
     });
 
     if s.protocol.is_tls() {
-        section(ui, "Sécurité TLS", |ui| {
-            ui.checkbox(&mut s.protect_data, "Chiffrer aussi les transferts (PROT P)");
+        section(ui, &t!("site.tls"), |ui| {
+            ui.checkbox(&mut s.protect_data, t!("site.protect_data"));
             let label = match &s.cert {
-                CertPolicy::System => "Vérifier avec les autorités Windows",
-                CertPolicy::AcceptAny => "Accepter tout certificat (déconseillé)",
-                CertPolicy::Fingerprint(_) => "Certificat approuvé (empreinte)",
+                CertPolicy::System => t!("site.cert_system"),
+                CertPolicy::AcceptAny => t!("site.cert_any"),
+                CertPolicy::Fingerprint(_) => t!("site.cert_pinned"),
             };
             egui::ComboBox::from_id_salt("site-cert").selected_text(label).width(300.0).show_ui(ui, |ui| {
-                if ui.selectable_label(s.cert == CertPolicy::System, "Vérifier avec les autorités Windows").clicked() {
+                if ui.selectable_label(s.cert == CertPolicy::System, t!("site.cert_system")).clicked() {
                     s.cert = CertPolicy::System;
                 }
-                if ui.selectable_label(s.cert == CertPolicy::AcceptAny, "Accepter tout certificat (déconseillé)").clicked() {
+                if ui.selectable_label(s.cert == CertPolicy::AcceptAny, t!("site.cert_any")).clicked() {
                     s.cert = CertPolicy::AcceptAny;
                 }
-                if ui.selectable_label(matches!(s.cert, CertPolicy::Fingerprint(_)), "Certificat approuvé (empreinte)").clicked()
+                if ui.selectable_label(matches!(s.cert, CertPolicy::Fingerprint(_)), t!("site.cert_pinned")).clicked()
                     && !matches!(s.cert, CertPolicy::Fingerprint(_))
                 {
                     s.cert = CertPolicy::Fingerprint(String::new());
                 }
             });
             if let CertPolicy::Fingerprint(fp) = &mut s.cert {
-                ui.add(egui::TextEdit::singleline(fp).hint_text("AB:CD:… (rempli à la première connexion)").desired_width(f32::INFINITY));
+                ui.add(egui::TextEdit::singleline(fp).hint_text(t!("site.fingerprint_hint")).desired_width(f32::INFINITY));
             }
         });
     }
 
     if s.protocol == SiteProtocol::Sftp {
-        section(ui, "SSH", |ui| {
+        section(ui, &t!("site.ssh"), |ui| {
             let mut use_key = s.ssh_key_file.is_some();
-            ui.checkbox(&mut use_key, "Se connecter avec une clé privée (OpenSSH, PEM ou PuTTY .ppk)");
+            ui.checkbox(&mut use_key, t!("site.use_key"));
             if use_key {
                 let key = s.ssh_key_file.get_or_insert_with(String::new);
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(key).desired_width(360.0));
-                    if ui.button("Parcourir…").clicked()
-                        && let Some(p) = rfd::FileDialog::new().set_title("Clé privée").pick_file()
+                    if ui.button(t!("common.browse")).clicked()
+                        && let Some(p) = rfd::FileDialog::new().set_title(t!("site.key_dialog")).pick_file()
                     {
                         *key = p.to_string_lossy().into_owned();
                     }
@@ -490,7 +521,7 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
             } else {
                 s.ssh_key_file = None;
             }
-            ui.label(RichText::new(format!("Clés de serveur approuvées : {}", s.ssh_host_keys.len())).weak());
+            ui.label(RichText::new(t!("site.host_keys", n = s.ssh_host_keys.len())).weak());
             let mut remove = None;
             for (i, k) in s.ssh_host_keys.iter().enumerate() {
                 ui.horizontal(|ui| {
@@ -506,24 +537,24 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
         });
     }
 
-    section(ui, "Transferts", |ui| {
+    section(ui, &t!("site.transfers"), |ui| {
         egui::Grid::new("site-xfer").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
             if s.protocol != SiteProtocol::Sftp {
-                row(ui, "Mode", |ui| {
-                    ui.radio_value(&mut s.transfer_mode, TransferMode::Passive, "Passif");
-                    ui.radio_value(&mut s.transfer_mode, TransferMode::Active, "Actif");
+                row(ui, &t!("site.mode"), |ui| {
+                    ui.radio_value(&mut s.transfer_mode, TransferMode::Passive, t!("site.passive"));
+                    ui.radio_value(&mut s.transfer_mode, TransferMode::Active, t!("site.active_mode"));
                 });
             }
-            row(ui, "Transferts simultanés", |ui| {
+            row(ui, &t!("site.parallel"), |ui| {
                 ui.add(egui::DragValue::new(&mut s.max_transfers).range(0..=50));
-                ui.label(RichText::new("0 = connexion unique").weak());
+                ui.label(RichText::new(t!("site.single_connection")).weak());
             });
-            row(ui, "Max. téléchargements", |ui| optional_limit(ui, &mut s.max_downloads));
-            row(ui, "Max. envois", |ui| optional_limit(ui, &mut s.max_uploads));
-            row(ui, "Dossier distant", |ui| {
+            row(ui, &t!("site.max_downloads"), |ui| optional_limit(ui, &mut s.max_downloads));
+            row(ui, &t!("site.max_uploads"), |ui| optional_limit(ui, &mut s.max_uploads));
+            row(ui, &t!("site.remote_dir"), |ui| {
                 ui.add(egui::TextEdit::singleline(&mut s.remote_dir).hint_text("/").desired_width(300.0));
             });
-            row(ui, "Dossier local", |ui| {
+            row(ui, &t!("site.local_dir"), |ui| {
                 ui.add(egui::TextEdit::singleline(&mut s.local_dir).desired_width(300.0));
                 if ui.small_button("…").clicked()
                     && let Some(p) = rfd::FileDialog::new().pick_folder()
@@ -534,20 +565,20 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
         });
     });
 
-    section(ui, "Proxy et Ident", |ui| {
+    section(ui, &t!("site.proxy_ident"), |ui| {
         let label = match &s.proxy {
-            ProxyChoice::Global => "Réglage global",
-            ProxyChoice::Direct => "Jamais de proxy",
-            ProxyChoice::Custom(_) => "Proxy propre à ce site",
+            ProxyChoice::Global => t!("site.proxy_global"),
+            ProxyChoice::Direct => t!("site.proxy_direct"),
+            ProxyChoice::Custom(_) => t!("site.proxy_custom"),
         };
         egui::ComboBox::from_id_salt("site-proxy").selected_text(label).show_ui(ui, |ui| {
-            if ui.selectable_label(s.proxy == ProxyChoice::Global, "Réglage global").clicked() {
+            if ui.selectable_label(s.proxy == ProxyChoice::Global, t!("site.proxy_global")).clicked() {
                 s.proxy = ProxyChoice::Global;
             }
-            if ui.selectable_label(s.proxy == ProxyChoice::Direct, "Jamais de proxy").clicked() {
+            if ui.selectable_label(s.proxy == ProxyChoice::Direct, t!("site.proxy_direct")).clicked() {
                 s.proxy = ProxyChoice::Direct;
             }
-            if ui.selectable_label(matches!(s.proxy, ProxyChoice::Custom(_)), "Proxy propre à ce site").clicked()
+            if ui.selectable_label(matches!(s.proxy, ProxyChoice::Custom(_)), t!("site.proxy_custom")).clicked()
                 && !matches!(s.proxy, ProxyChoice::Custom(_))
             {
                 s.proxy = ProxyChoice::Custom(SiteProxy { port: 1080, data_channel: true, ..SiteProxy::default() });
@@ -555,7 +586,7 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
         });
         if let ProxyChoice::Custom(p) = &mut s.proxy {
             egui::Grid::new("site-proxy-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-                row(ui, "Type", |ui| {
+                row(ui, &t!("common.type"), |ui| {
                     for (k, l) in [
                         (ProxyType::Socks4, "SOCKS4"),
                         (ProxyType::Socks4a, "SOCKS4A"),
@@ -565,25 +596,25 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
                         ui.radio_value(&mut p.kind, k, l);
                     }
                 });
-                row(ui, "Hôte", |ui| {
+                row(ui, &t!("common.host"), |ui| {
                     ui.add(egui::TextEdit::singleline(&mut p.host).desired_width(200.0));
-                    ui.label("Port");
+                    ui.label(t!("common.port"));
                     ui.add(egui::DragValue::new(&mut p.port).range(1..=65535));
                 });
-                row(ui, "Utilisateur", |ui| {
+                row(ui, &t!("common.user"), |ui| {
                     ui.add(egui::TextEdit::singleline(&mut p.user).desired_width(140.0));
-                    ui.label("Mot de passe");
+                    ui.label(t!("common.password"));
                     ui.add(egui::TextEdit::singleline(&mut p.password).password(true).desired_width(140.0));
                 });
                 row(ui, "", |ui| {
-                    ui.checkbox(&mut p.data_channel, "Appliquer aussi aux transferts");
+                    ui.checkbox(&mut p.data_channel, t!("site.proxy_data"));
                 });
             });
         }
         ui.add_space(4.0);
         let mut custom = matches!(s.ident, IdentChoice::Custom(_));
         ui.horizontal(|ui| {
-            ui.checkbox(&mut custom, "Nom Ident propre à ce site");
+            ui.checkbox(&mut custom, t!("site.ident_custom"));
             if custom {
                 if let IdentChoice::Global = s.ident {
                     s.ident = IdentChoice::Custom(String::new());
@@ -597,13 +628,13 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
         });
     });
 
-    section(ui, "Signets", |ui| {
+    section(ui, &t!("site.bookmarks"), |ui| {
         let mut remove = None;
         egui::Grid::new("site-bm").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
             for (i, b) in s.bookmarks.iter_mut().enumerate() {
-                ui.add(egui::TextEdit::singleline(&mut b.name).hint_text("Nom").desired_width(110.0));
-                ui.add(egui::TextEdit::singleline(&mut b.remote_dir).hint_text("Distant").desired_width(170.0));
-                ui.add(egui::TextEdit::singleline(&mut b.local_dir).hint_text("Local").desired_width(170.0));
+                ui.add(egui::TextEdit::singleline(&mut b.name).hint_text(t!("common.name")).desired_width(110.0));
+                ui.add(egui::TextEdit::singleline(&mut b.remote_dir).hint_text(t!("common.remote")).desired_width(170.0));
+                ui.add(egui::TextEdit::singleline(&mut b.local_dir).hint_text(t!("common.local")).desired_width(170.0));
                 if ui.small_button("✕").clicked() {
                     remove = Some(i);
                 }
@@ -613,12 +644,12 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
         if let Some(i) = remove {
             s.bookmarks.remove(i);
         }
-        if ui.small_button("➕ Ajouter un signet").clicked() {
+        if ui.small_button(t!("site.add_bookmark")).clicked() {
             s.bookmarks.push(Bookmark::default());
         }
     });
 
-    section(ui, "Notes", |ui| {
+    section(ui, &t!("site.notes"), |ui| {
         ui.add(egui::TextEdit::multiline(&mut s.notes).desired_rows(3).desired_width(f32::INFINITY));
     });
 }

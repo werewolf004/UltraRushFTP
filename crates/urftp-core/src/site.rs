@@ -1,10 +1,10 @@
-//! Carnet de sites : groupes (dossiers) imbriqués et sites avec leurs réglages.
+//! Site book: nested groups (folders) and sites with their settings.
 
 use serde::{Deserialize, Serialize};
 
 use crate::queue::SiteLimits;
 
-/// Protocole d'un site.
+/// Protocol of a site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SiteProtocol {
@@ -15,14 +15,20 @@ pub enum SiteProtocol {
     Sftp,
 }
 
+impl std::fmt::Display for SiteProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
 impl SiteProtocol {
     pub const ALL: [SiteProtocol; 4] = [SiteProtocol::Ftp, SiteProtocol::FtpsExplicit, SiteProtocol::FtpsImplicit, SiteProtocol::Sftp];
 
     pub fn label(self) -> &'static str {
         match self {
             SiteProtocol::Ftp => "FTP",
-            SiteProtocol::FtpsExplicit => "FTPS explicite",
-            SiteProtocol::FtpsImplicit => "FTPS implicite",
+            SiteProtocol::FtpsExplicit => "FTPS (explicit)",
+            SiteProtocol::FtpsImplicit => "FTPS (implicit)",
             SiteProtocol::Sftp => "SFTP",
         }
     }
@@ -40,14 +46,14 @@ impl SiteProtocol {
     }
 }
 
-/// Vérification du certificat TLS.
+/// TLS certificate verification.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum CertPolicy {
     #[default]
     System,
     AcceptAny,
-    /// Empreinte SHA-256 approuvée.
+    /// Trusted SHA-256 fingerprint.
     Fingerprint(String),
 }
 
@@ -78,23 +84,23 @@ pub struct SiteProxy {
     pub user: String,
     #[serde(with = "crate::secret::serde_secret")]
     pub password: String,
-    /// Appliquer aussi aux canaux de données.
+    /// Also apply to the data channels.
     pub data_channel: bool,
 }
 
-/// Proxy d'un site (« Proxy of FTP Server » de la v2).
+/// Proxy of a site ("Proxy of FTP Server" in v2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ProxyChoice {
-    /// Réglage global de l'application.
+    /// Global application setting.
     #[default]
     Global,
-    /// Jamais de proxy pour ce site.
+    /// Never use a proxy for this site.
     Direct,
     Custom(SiteProxy),
 }
 
-/// Nom Ident répondu pour ce site.
+/// Ident name answered for this site.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum IdentChoice {
@@ -123,15 +129,15 @@ pub struct Site {
     #[serde(with = "crate::secret::serde_secret")]
     pub password: String,
     pub anonymous: bool,
-    /// Adresses de secours, essayées si la première échoue (« Site IP List » de la v2).
+    /// Fallback addresses, tried when the first one fails ("Site IP List" in v2).
     pub alt_hosts: Vec<String>,
     pub remote_dir: String,
     pub local_dir: String,
     pub notes: String,
-    /// Site désactivé (`RushApp.FTP.DisableSite`).
+    /// Disabled site (`RushApp.FTP.DisableSite`).
     pub enabled: bool,
     pub cert: CertPolicy,
-    /// Chiffrer les canaux de données (`PROT P`).
+    /// Encrypt the data channels (`PROT P`).
     pub protect_data: bool,
     pub transfer_mode: TransferMode,
     pub max_transfers: u32,
@@ -139,9 +145,9 @@ pub struct Site {
     pub max_uploads: Option<u32>,
     pub proxy: ProxyChoice,
     pub ident: IdentChoice,
-    /// Clé privée SSH (le mot de passe sert alors de phrase de passe).
+    /// SSH private key (the password is then its passphrase).
     pub ssh_key_file: Option<String>,
-    /// Empreintes de clé d'hôte SSH approuvées (`SHA256:…`).
+    /// Trusted SSH host key fingerprints (`SHA256:…`).
     pub ssh_host_keys: Vec<String>,
     pub bookmarks: Vec<Bookmark>,
 }
@@ -150,7 +156,7 @@ impl Default for Site {
     fn default() -> Self {
         Self {
             id: 0,
-            name: "Nouveau site".into(),
+            name: "New site".into(),
             host: String::new(),
             port: 21,
             protocol: SiteProtocol::Ftp,
@@ -182,7 +188,7 @@ impl Site {
         SiteLimits { max_transfers: self.max_transfers, max_downloads: self.max_downloads, max_uploads: self.max_uploads }
     }
 
-    /// Identifiant de connexion effectif (anonyme : `anonymous`).
+    /// Effective login (anonymous: `anonymous`).
     pub fn login_user(&self) -> &str {
         if self.anonymous || self.user.is_empty() { "anonymous" } else { &self.user }
     }
@@ -235,7 +241,7 @@ impl SiteGroup {
         self.groups.iter().map(SiteGroup::max_id).max().unwrap_or(0).max(own)
     }
 
-    /// Donne un identifiant neuf à chaque site (après un import).
+    /// Gives every site a fresh identifier (after an import).
     fn renumber(&mut self, next: &mut u64) {
         for s in &mut self.sites {
             *next += 1;
@@ -246,7 +252,7 @@ impl SiteGroup {
         }
     }
 
-    /// Groupe désigné par une suite d'indices (vide = ce groupe).
+    /// Group designated by a sequence of indices (empty = this group).
     pub fn group_mut(&mut self, path: &[usize]) -> Option<&mut SiteGroup> {
         match path.split_first() {
             None => Some(self),
@@ -269,7 +275,7 @@ impl SiteGroup {
     }
 }
 
-/// Le carnet de sites complet, enregistré sur disque.
+/// The complete site book, stored on disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SiteBook {
@@ -288,7 +294,7 @@ impl SiteBook {
         self.root.max_id() + 1
     }
 
-    /// Tous les sites avec le chemin de leurs dossiers.
+    /// Every site with the path of its folders.
     pub fn all_sites(&self) -> Vec<(Vec<String>, &Site)> {
         let mut out = Vec::new();
         self.root.visit(&mut Vec::new(), &mut out);
@@ -303,7 +309,7 @@ impl SiteBook {
         self.root.find_mut(id)
     }
 
-    /// Recherche par nom (insensible à la casse), comme `RushApp.FTP.Login('FTP1')`.
+    /// Case-insensitive search by name, like `RushApp.FTP.Login('FTP1')`.
     pub fn find_by_name(&self, name: &str) -> Option<&Site> {
         self.all_sites().into_iter().map(|(_, s)| s).find(|s| s.name.eq_ignore_ascii_case(name))
     }
@@ -312,13 +318,13 @@ impl SiteBook {
         self.root.remove(id)
     }
 
-    /// Indices du dossier qui contient le site.
+    /// Indices of the folder containing the site.
     pub fn group_path_of(&self, id: u64) -> Option<Vec<usize>> {
         let mut p = Vec::new();
         self.root.locate(id, &mut p).then_some(p)
     }
 
-    /// Ajoute un site dans le dossier désigné et renvoie son identifiant.
+    /// Adds a site to the designated folder and returns its identifier.
     pub fn add_site(&mut self, group: &[usize], mut site: Site) -> u64 {
         site.id = self.next_id();
         let id = site.id;
@@ -330,7 +336,7 @@ impl SiteBook {
         id
     }
 
-    /// Copie d'un site, placée juste à côté.
+    /// Copy of a site, placed right next to it.
     pub fn duplicate(&mut self, id: u64) -> Option<u64> {
         let mut copy = self.find(id)?.clone();
         copy.name = format!("{} (copie)", copy.name);
@@ -338,7 +344,7 @@ impl SiteBook {
         Some(self.add_site(&path, copy))
     }
 
-    /// Greffe un groupe importé à la racine, avec de nouveaux identifiants.
+    /// Grafts an imported group at the root, with new identifiers.
     pub fn merge_import(&mut self, mut group: SiteGroup) {
         let mut next = self.next_id() - 1;
         group.renumber(&mut next);
@@ -379,7 +385,7 @@ mod tests {
         let mut dedup = ids.clone();
         dedup.sort_unstable();
         dedup.dedup();
-        assert_eq!(ids.len(), dedup.len(), "identifiants uniques après import");
+        assert_eq!(ids.len(), dedup.len(), "unique identifiers after import");
     }
 
     #[test]
@@ -394,7 +400,7 @@ mod tests {
         assert!(!json.contains("TrèsSecret!") && !json.contains("proxypass"), "{json}");
         let back: SiteBook = serde_json::from_str(&json).unwrap();
         assert_eq!(back, book);
-        // Champs absents : valeurs par défaut (compatibilité avec les anciens fichiers).
+        // Missing fields: default values (compatibility with older files).
         let partial: SiteBook = serde_json::from_str(r#"{"root":{"name":"Sites","sites":[{"id":1,"name":"x"}]}}"#).unwrap();
         assert!(partial.root.sites[0].enabled && partial.root.sites[0].protect_data);
     }

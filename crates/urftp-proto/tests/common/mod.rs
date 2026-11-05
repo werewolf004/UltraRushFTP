@@ -1,4 +1,4 @@
-//! Serveur FTP/FTPS minimal en mémoire pour les tests d'intégration (localhost uniquement).
+//! Minimal in-memory FTP/FTPS server for the integration tests (localhost only).
 #![allow(dead_code)]
 
 pub mod proxy;
@@ -22,12 +22,12 @@ type Conn = BufReader<BoxStream>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum MockTls {
-    /// Pas de TLS : `AUTH TLS` est refusé.
+    /// No TLS: `AUTH TLS` is refused.
     #[default]
     None,
-    /// `AUTH TLS` accepté.
+    /// `AUTH TLS` accepted.
     Explicit,
-    /// TLS dès la connexion.
+    /// TLS from the start of the connection.
     Implicit,
 }
 
@@ -35,28 +35,28 @@ pub enum MockTls {
 pub struct MockConfig {
     pub user: String,
     pub pass: String,
-    /// Refuse (550) tout argument plus long que cette limite, comme certains serveurs réels.
+    /// Refuses (550) any argument longer than this limit, like some real servers.
     pub max_arg_len: Option<usize>,
     pub epsv: bool,
     pub mlsd: bool,
     pub tls: MockTls,
-    /// Comme vsftpd `require_ssl_reuse=YES` : refuse un canal de données TLS sans reprise de session.
+    /// Like vsftpd `require_ssl_reuse=YES`: refuses a TLS data channel without session reuse.
     pub require_session_reuse: bool,
-    /// Refuse les transferts tant que `PROT P` n'a pas été envoyé.
+    /// Refuses transfers until `PROT P` has been sent.
     pub require_prot_p: bool,
-    /// Interroge le serveur Ident du client sur ce port à chaque connexion (comme glftpd).
+    /// Queries the client's Ident server on this port at every connection (like glftpd).
     pub ident_port: Option<u16>,
-    /// Accepte `SSCN ON/OFF` (et l'annonce dans `FEAT`).
+    /// Accepts `SSCN ON/OFF` (and announces it in `FEAT`).
     pub sscn: bool,
     /// Accepte `CPSV`.
     pub cpsv: bool,
-    /// Annonce `PRET` dans `FEAT`.
+    /// Announces `PRET` in `FEAT`.
     pub pret: bool,
-    /// Refuse toute commande `PORT`/`EPRT` (FXP interdit en mode actif).
+    /// Refuses every `PORT`/`EPRT` command (FXP forbidden in active mode).
     pub refuse_port: bool,
-    /// Attente avant chaque transfert de données (pour observer le parallélisme).
+    /// Delay before every data transfer (to observe parallelism).
     pub transfer_delay: Option<std::time::Duration>,
-    /// Les N premiers `RETR` (toutes sessions confondues) échouent en 451.
+    /// The first N `RETR` (all sessions together) fail with 451.
     pub fail_first_retr: usize,
 }
 
@@ -134,26 +134,26 @@ fn resolve(cwd: &str, arg: &str) -> String {
     format!("/{}", parts.join("/"))
 }
 
-/// Statistiques observées par le serveur de test.
+/// Statistics observed by the test server.
 #[derive(Default)]
 pub struct Stats {
-    /// Toutes les commandes reçues, toutes sessions confondues.
+    /// Every command received, all sessions together.
     pub commands: Vec<String>,
-    /// Canaux de données ouverts : (chiffré, session TLS reprise).
+    /// Data channels opened: (encrypted, TLS session reused).
     pub data_channels: Vec<(bool, bool)>,
-    /// Connexions de données en mode actif.
+    /// Data connections in active mode.
     pub active_connections: usize,
-    /// Réponses Ident obtenues à la connexion.
+    /// Ident answers obtained when connecting.
     pub ident_answers: Vec<String>,
-    /// Canaux de données où ce serveur a joué le rôle de client TLS (SSCN / CPSV).
+    /// Data channels where this server acted as the TLS client (SSCN / CPSV).
     pub tls_client_channels: usize,
-    /// Sessions authentifiées : en cours, maximum simultané, total.
+    /// Authenticated sessions: current, simultaneous maximum, total.
     pub current_sessions: usize,
     pub max_sessions: usize,
     pub logins: usize,
 }
 
-/// Décompte une session authentifiée à sa fin, quelle que soit la sortie.
+/// Counts an authenticated session when it ends, whatever the exit path.
 struct LoginGuard {
     stats: Arc<Mutex<Stats>>,
     active: bool,
@@ -183,7 +183,7 @@ pub struct MockServer {
     pub addr: SocketAddr,
     pub fs: Arc<Mutex<Fs>>,
     pub stats: Arc<Mutex<Stats>>,
-    /// Empreinte SHA-256 du certificat (si TLS).
+    /// SHA-256 fingerprint of the certificate (with TLS).
     pub fingerprint: Option<String>,
 }
 
@@ -192,7 +192,7 @@ struct Shared {
     fs: Arc<Mutex<Fs>>,
     stats: Arc<Mutex<Stats>>,
     tls: Option<TlsAcceptor>,
-    /// Rôle client TLS (FXP chiffré) : accepte le certificat de l'autre serveur de test.
+    /// TLS client role (encrypted FXP): accepts the certificate of the other test server.
     tls_client: TlsConnector,
     fail_counter: AtomicUsize,
 }
@@ -311,9 +311,9 @@ struct State {
     pending: Option<Pending>,
     rnfr: Option<String>,
     prot_p: bool,
-    /// `SSCN ON` : rôle client TLS sur les canaux de données.
+    /// `SSCN ON`: TLS client role on the data channels.
     sscn: bool,
-    /// `CPSV` : rôle client TLS pour le prochain canal seulement.
+    /// `CPSV`: TLS client role for the next channel only.
     cpsv_once: bool,
 }
 
@@ -324,7 +324,7 @@ async fn reply(c: &mut Conn, s: &str) -> std::io::Result<()> {
     w.flush().await
 }
 
-/// Ouvre le canal de données (passif ou actif) et négocie TLS si `PROT P`.
+/// Opens the data channel (passive or active) and negotiates TLS when `PROT P`.
 async fn open_data(st: &mut State, sh: &Shared) -> Result<BoxStream, &'static str> {
     let tcp = match st.pending.take().ok_or("425 Use PASV or PORT first")? {
         Pending::Pasv(l) => l.accept().await.map_err(|_| "425 Accept failed")?.0,
@@ -355,8 +355,8 @@ async fn open_data(st: &mut State, sh: &Shared) -> Result<BoxStream, &'static st
     Ok(Box::new(tls))
 }
 
-/// Fin d'envoi : close_notify / FIN, puis attente de la fermeture par le pair pour ne pas
-/// provoquer de RST (tickets TLS 1.3 arrivant sur une socket fermée).
+/// End of upload: close_notify / FIN, then wait for the peer to close so as not to cause
+/// an RST (TLS 1.3 tickets arriving on a closed socket).
 async fn finish_send(d: &mut BoxStream) -> std::io::Result<()> {
     d.shutdown().await?;
     let _ = tokio::time::timeout(std::time::Duration::from_secs(2), async {
@@ -386,7 +386,7 @@ fn parse_eprt(arg: &str) -> Option<SocketAddr> {
     Some(SocketAddr::new(ip, p.get(3)?.parse().ok()?))
 }
 
-/// Requête Ident vers le client : `<port du client> , <port du serveur>`.
+/// Ident request to the client: `<client port> , <server port>`.
 async fn ident_lookup(tcp: &TcpStream, ident_port: u16) -> std::io::Result<String> {
     let (client, server) = (tcp.peer_addr()?, tcp.local_addr()?);
     let mut q = TcpStream::connect((client.ip(), ident_port)).await?;
@@ -398,13 +398,13 @@ async fn ident_lookup(tcp: &TcpStream, ident_port: u16) -> std::io::Result<Strin
 async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
     let mut guard = LoginGuard { stats: sh.stats.clone(), active: false };
     if let Some(port) = sh.cfg.ident_port {
-        let answer = ident_lookup(&tcp, port).await.unwrap_or_else(|e| format!("échec : {e}"));
+        let answer = ident_lookup(&tcp, port).await.unwrap_or_else(|e| format!("failed: {e}"));
         sh.stats.lock().unwrap().ident_answers.push(answer);
     }
     let stream: BoxStream =
         if sh.cfg.tls == MockTls::Implicit { Box::new(sh.tls.clone().unwrap().accept(tcp).await?) } else { Box::new(tcp) };
     let mut c: Conn = BufReader::new(stream);
-    reply(&mut c, "220 Serveur de test UltraRushFTP").await?;
+    reply(&mut c, "220 UltraRushFTP test server").await?;
     let mut st = State {
         cwd: "/".into(),
         user_ok: false,
@@ -593,7 +593,7 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 let content = fs.lock().unwrap().files.get(&target).cloned();
                 let rest = std::mem::take(&mut st.rest) as usize;
                 let Some(content) = content else {
-                    // Ferme l'écoute passive : un pair FXP déjà connecté voit la connexion tomber.
+                    // Closes the passive listener: an FXP peer already connected sees the connection drop.
                     st.pending = None;
                     reply(&mut c, "550 No such file").await?;
                     continue;

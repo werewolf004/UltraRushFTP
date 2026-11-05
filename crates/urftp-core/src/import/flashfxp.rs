@@ -1,13 +1,13 @@
-//! FlashFXP : export de sites `.ftp` (XML).
+//! FlashFXP: `.ftp` site export (XML).
 //!
-//! `<SITES VERSION="…">` contient un élément par site (ou par dossier) : `ADDRESS`, `PORT`,
-//! `USERNAME`, `PROTOCOL` (`FTP`, `SFTP`…), `SSL` (`AUTH TLS`, `AUTH SSL`, `IMPLICIT`…),
+//! `<SITES VERSION="…">` holds one element per site (or per folder): `ADDRESS`, `PORT`,
+//! `USERNAME`, `PROTOCOL` (`FTP`, `SFTP`...), `SSL` (`AUTH TLS`, `AUTH SSL`, `IMPLICIT`...),
 //! `PASSIVE`, `LOGIN_TYPE`, `LOCALPATH`, `REMOTEPATH`.
-//! Les mots de passe ne sont pas importés : ils sont à ressaisir dans UltraRushFTP.
+//! Passwords are not imported: they must be entered again in UltraRushFTP.
 
 use roxmltree::{Document, Node};
 
-use super::{ImportError, ImportFormat, ImportResult};
+use super::{ImportError, ImportFormat, ImportResult, ImportWarning};
 use crate::site::{Site, SiteGroup, SiteProtocol, TransferMode};
 
 pub(super) fn import(text: &str) -> Result<ImportResult, ImportError> {
@@ -17,9 +17,9 @@ pub(super) fn import(text: &str) -> Result<ImportResult, ImportError> {
     walk(doc.root_element(), &mut group, &mut warnings);
     let n = group.site_count();
     if n == 0 {
-        warnings.push("aucun site trouvé".into());
+        warnings.push(ImportWarning::NoSites);
     } else {
-        warnings.push(format!("mots de passe non importés : à ressaisir pour les {n} site(s)"));
+        warnings.push(ImportWarning::PasswordsNotImported(n));
     }
     Ok(ImportResult { format: ImportFormat::FlashFxp, group, warnings })
 }
@@ -36,7 +36,7 @@ fn name_of(n: Node) -> String {
     n.attribute("NAME").map(str::to_string).unwrap_or_else(|| n.tag_name().name().to_string())
 }
 
-fn walk(n: Node, parent: &mut SiteGroup, warnings: &mut Vec<String>) {
+fn walk(n: Node, parent: &mut SiteGroup, warnings: &mut Vec<ImportWarning>) {
     for c in n.children().filter(Node::is_element) {
         if is_site(c) {
             if let Some(s) = site(c, warnings) {
@@ -50,7 +50,7 @@ fn walk(n: Node, parent: &mut SiteGroup, warnings: &mut Vec<String>) {
     }
 }
 
-fn site(n: Node, warnings: &mut Vec<String>) -> Option<Site> {
+fn site(n: Node, warnings: &mut Vec<ImportWarning>) -> Option<Site> {
     let name = name_of(n);
     let ssl = text(n, "SSL").to_ascii_uppercase();
     let protocol = match text(n, "PROTOCOL").to_ascii_uppercase().as_str() {
@@ -61,7 +61,11 @@ fn site(n: Node, warnings: &mut Vec<String>) -> Option<Site> {
             _ => SiteProtocol::FtpsExplicit,
         },
         other => {
-            warnings.push(format!("« {name} » ignoré : protocole FlashFXP {other} non géré"));
+            warnings.push(ImportWarning::UnsupportedProtocol {
+                site: name.to_string(),
+                source_format: ImportFormat::FlashFxp,
+                protocol: other.to_string(),
+            });
             return None;
         }
     };
@@ -85,7 +89,7 @@ fn site(n: Node, warnings: &mut Vec<String>) -> Option<Site> {
 mod tests {
     use super::*;
 
-    // Structure identique à un export FlashFXP, valeurs fictives.
+    // Same structure as a FlashFXP export, fictitious values.
     const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
     <SITES VERSION="1.3">
       <Alpha NAME="00.ALPHA">
@@ -109,12 +113,12 @@ mod tests {
             ("00.ALPHA", "alpha.example.net", 2121, SiteProtocol::FtpsExplicit)
         );
         assert_eq!(a.user, "bob");
-        assert!(a.password.is_empty(), "mot de passe non importé");
+        assert!(a.password.is_empty(), "password not imported");
         assert_eq!((a.local_dir.as_str(), a.remote_dir.as_str()), (r"C:\dl", "/incoming"));
         assert_eq!(r.group.groups[0].sites[0].protocol, SiteProtocol::Sftp);
         let plain = r.group.sites.iter().find(|s| s.name == "Clair").unwrap();
         assert!(plain.anonymous && plain.transfer_mode == TransferMode::Active && plain.protocol == SiteProtocol::Ftp);
-        assert_eq!(r.group.site_count(), 3, "site HTTP ignoré");
-        assert!(r.warnings.iter().any(|w| w.contains("HTTP")));
+        assert_eq!(r.group.site_count(), 3, "HTTP site skipped");
+        assert!(r.warnings.iter().any(|w| matches!(w, ImportWarning::UnsupportedProtocol { protocol, .. } if protocol == "HTTP")));
     }
 }

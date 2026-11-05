@@ -1,4 +1,4 @@
-//! Proxys de test (SOCKS4/4A/5, HTTP CONNECT) qui relaient vers la cible demandée.
+//! Test proxies (SOCKS4/4A/5, HTTP CONNECT) relaying to the requested target.
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
@@ -9,12 +9,12 @@ use urftp_proto::proxy::ProxyKind;
 
 pub struct MockProxy {
     pub addr: SocketAddr,
-    /// Cibles demandées (`hôte:port`), dans l'ordre.
+    /// Requested targets (`host:port`), in order.
     pub targets: Arc<Mutex<Vec<String>>>,
 }
 
 impl MockProxy {
-    /// `auth` : identifiants exigés (SOCKS5 et HTTP).
+    /// `auth`: required credentials (SOCKS5 and HTTP).
     pub async fn start(kind: ProxyKind, auth: Option<(&str, &str)>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -135,7 +135,7 @@ async fn handle(
         }
     };
     targets.lock().unwrap().push(format!("{host}:{port}"));
-    // IPv4 d'abord : sous Windows, un refus sur ::1 coûte environ 2 s.
+    // IPv4 first: on Windows, a refusal on ::1 costs about 2 s.
     let mut addrs: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), port)).await?.collect();
     addrs.sort_by_key(|a| a.is_ipv6());
     let mut upstream = None;

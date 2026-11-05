@@ -1,14 +1,14 @@
-//! Options de démarrage, avec la syntaxe de FTPRush v2 :
+//! Startup options, with the FTPRush v2 syntax:
 //!
-//! | Option | Effet |
+//! | Option | Effect |
 //! |---|---|
-//! | `-d` | mode débogage (journal détaillé) |
-//! | `-w<n>` | ouvrir n onglets |
-//! | `-c<url>` | se connecter (`ftp://user:pass@hôte:port`, `ftps://`, `ftpsi://`, `sftp://` ou hôte seul) |
-//! | `-f"dossier"` | réglages dans ce dossier ; `-f` seul : dossier du programme (portable) |
-//! | `-r[t][x]` | lancer les files au démarrage ; `t` : réduire la fenêtre ; `x` : quitter quand il n'y a plus rien à transférer |
-//! | `-s"fichier"` | exécuter ce script (Pascal Script FTPRush) au démarrage — ajout d'UltraRushFTP |
-//! | `-b` | licence « BetaUser » de la v2 : sans objet, ignorée |
+//! | `-d` | debug mode |
+//! | `-w<n>` | open n tabs |
+//! | `-c<url>` | connect (`ftp://user:pass@host:port`, `ftps://`, `ftpsi://`, `sftp://`, site name or host only) |
+//! | `-f"folder"` | settings in this folder; `-f` alone: program folder (portable) |
+//! | `-r[t][x]` | start the queues at startup; `t`: minimise the window; `x`: quit when nothing is left to transfer |
+//! | `-s"file"` | run this script (FTPRush Pascal Script) at startup — UltraRushFTP addition |
+//! | `-b` | v2 "BetaUser" licence: not applicable, ignored |
 
 use std::path::PathBuf;
 
@@ -17,13 +17,13 @@ pub struct StartupOptions {
     pub debug: bool,
     pub windows: Option<usize>,
     pub connect: Option<String>,
-    /// `Some(None)` : `-f` seul (dossier du programme).
+    /// `Some(None)`: `-f` alone (program folder).
     pub data_dir: Option<Option<PathBuf>>,
     pub run_queues: bool,
     pub minimize: bool,
     pub exit_when_done: bool,
     pub script_file: Option<PathBuf>,
-    /// Arguments non reconnus (signalés dans le journal).
+    /// Unrecognised arguments (reported in the log).
     pub unknown: Vec<String>,
 }
 
@@ -71,7 +71,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> StartupOptions {
     o
 }
 
-/// Dossier des réglages demandé par `-f` (relatif : depuis le dossier courant).
+/// Settings folder requested by `-f` (relative: from the current folder).
 pub fn resolve_data_dir(d: &Option<PathBuf>) -> Option<PathBuf> {
     match d {
         Some(p) => Some(p.clone()),

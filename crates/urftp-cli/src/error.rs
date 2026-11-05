@@ -1,6 +1,8 @@
-//! Typed errors of the `urftp` tool.
+//! Typed errors of the `urftp` tool; messages follow the selected language.
 
 use std::path::PathBuf;
+
+use urftp_i18n::t;
 
 use urftp_proto::ftp::FtpError;
 use urftp_proto::session::SessionError;
@@ -10,10 +12,10 @@ use urftp_proto::sftp::SftpError;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ArgsError {
     /// An option needs a value.
-    #[error("{0} : valeur manquante")]
+    #[error("{}", t!("cli.err.missing_value", option = .0))]
     MissingValue(String),
     /// A numeric option received something else.
-    #[error("{option} : nombre attendu, pas « {value} »")]
+    #[error("{}", t!("cli.err.not_a_number", option = .option, value = .value))]
     NotANumber {
         /// Option name.
         option: String,
@@ -21,16 +23,19 @@ pub enum ArgsError {
         value: String,
     },
     /// Unknown `--exists` action.
-    #[error("--exists : action inconnue « {0} »")]
+    #[error("{}", t!("cli.err.unknown_exists", value = .0))]
     UnknownExistsAction(String),
     /// Unknown `--option`.
-    #[error("option inconnue : {0}")]
+    #[error("{}", t!("cli.err.unknown_option", option = .0))]
     UnknownOption(String),
+    /// Unknown `--lang` value.
+    #[error("{}", t!("cli.err.unknown_lang", value = .0))]
+    UnknownLanguage(String),
     /// Unknown sub-command.
-    #[error("commande inconnue : {0} (urftp --help)")]
+    #[error("{}", t!("cli.err.unknown_command", command = .0))]
     UnknownCommand(String),
     /// Wrong number of arguments for a sub-command.
-    #[error("utilisation : urftp {0}")]
+    #[error("{}", t!("cli.err.usage", form = .0))]
     Usage(&'static str),
 }
 
@@ -38,16 +43,16 @@ pub enum ArgsError {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TargetError {
     /// URL scheme other than ftp, ftps, ftpes, ftpsi, sftp.
-    #[error("protocole inconnu : {0}")]
+    #[error("{}", t!("cli.err.unknown_scheme", scheme = .0))]
     UnknownScheme(String),
     /// Port is not a number in 1..=65535.
-    #[error("port invalide : {0}")]
+    #[error("{}", t!("cli.err.invalid_port", port = .0))]
     InvalidPort(String),
     /// URL without host.
-    #[error("hôte manquant : {0}")]
+    #[error("{}", t!("cli.err.missing_host", target = .0))]
     MissingHost(String),
     /// `:/path` without site name.
-    #[error("site manquant : {0}")]
+    #[error("{}", t!("cli.err.missing_site", target = .0))]
     MissingSite(String),
 }
 
@@ -58,7 +63,7 @@ pub enum CliError {
     #[error(transparent)]
     Target(#[from] TargetError),
     /// The site book cannot be read.
-    #[error("gestionnaire de sites illisible ({path}) : {source}")]
+    #[error("{}", t!("cli.err.site_book", path = .path.display(), error = .source))]
     SiteBook {
         /// File read.
         path: PathBuf,
@@ -66,13 +71,13 @@ pub enum CliError {
         source: std::io::Error,
     },
     /// No site with this name.
-    #[error("site inconnu : {0} (voir urftp sites)")]
+    #[error("{}", t!("cli.err.unknown_site", site = .0))]
     UnknownSite(String),
     /// The site is disabled.
-    #[error("le site {0} est désactivé")]
+    #[error("{}", t!("cli.err.disabled_site", site = .0))]
     DisabledSite(String),
     /// Connection or login failed.
-    #[error("{site} : {source}{}", fingerprint_hint(source))]
+    #[error("{}{}", t!("cli.err.connect", site = .site, error = .source), fingerprint_hint(.source))]
     Connect {
         /// Site name.
         site: String,
@@ -80,7 +85,7 @@ pub enum CliError {
         source: SessionError,
     },
     /// A remote operation failed.
-    #[error("{path} : {source}")]
+    #[error("{}", t!("cli.err.remote", path = .path, error = .source))]
     Remote {
         /// Remote path.
         path: String,
@@ -88,10 +93,10 @@ pub enum CliError {
         source: SessionError,
     },
     /// The remote file or folder does not exist.
-    #[error("introuvable : {0}")]
+    #[error("{}", t!("cli.err.not_found", path = .0))]
     NotFound(String),
     /// Local file system error.
-    #[error("{path} : {source}")]
+    #[error("{}", t!("cli.err.local", path = .path.display(), error = .source))]
     Local {
         /// Local path.
         path: PathBuf,
@@ -99,28 +104,28 @@ pub enum CliError {
         source: std::io::Error,
     },
     /// `raw` on an SFTP site.
-    #[error("raw : commandes brutes disponibles en FTP/FTPS seulement")]
+    #[error("{}", t!("cli.err.raw_needs_ftp"))]
     RawNeedsFtp,
     /// The server answered at least one raw command with an error code.
-    #[error("le serveur a refusé au moins une commande")]
+    #[error("{}", t!("cli.err.raw_refused"))]
     RawRefused,
     /// FXP between a site and itself.
-    #[error("FXP : la source et la destination doivent être deux sites différents")]
+    #[error("{}", t!("cli.err.fxp_same_site"))]
     FxpSameSite,
     /// Some queue items were not transferred.
-    #[error("{0} élément(s) non transféré(s)")]
+    #[error("{}", t!("cli.err.incomplete", n = .0))]
     Incomplete(usize),
     /// The async runtime could not start.
-    #[error("démarrage impossible : {0}")]
+    #[error("{}", t!("cli.err.runtime", error = .0))]
     Runtime(#[source] std::io::Error),
 }
 
 /// Suggests `--fingerprint` when a certificate or host key was refused.
-fn fingerprint_hint(e: &SessionError) -> &'static str {
+fn fingerprint_hint(e: &SessionError) -> String {
     match e {
         SessionError::Ftp(FtpError::Certificate { .. }) | SessionError::Sftp(SftpError::HostKey { .. }) => {
-            "\n  (vérifiez l'empreinte puis relancez avec --fingerprint <empreinte>)"
+            t!("cli.err.fingerprint_hint")
         }
-        _ => "",
+        _ => String::new(),
     }
 }

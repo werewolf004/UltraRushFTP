@@ -1,12 +1,12 @@
-//! FTPRush v1/v2 : `RushSite.xml` (ou export XML).
+//! FTPRush v1/v2: `RushSite.xml` (or XML export).
 //!
-//! `<SITES>` contient des groupes (`NAME`) imbriqués et des sites (élément avec `UID`) :
+//! `<SITES>` holds nested groups (`NAME`) and sites (element with a `UID`):
 //! `HOST`, `PORT`, `USER`, `LPATH`, `RPATH`, `SSL` (code), `SSL@ONDATA`, `MAXTRANSFER@LOGIN`.
-//! Les mots de passe ne sont pas importés : ils sont à ressaisir dans UltraRushFTP.
+//! Passwords are not imported: they must be entered again in UltraRushFTP.
 
 use roxmltree::{Document, Node};
 
-use super::{ImportError, ImportFormat, ImportResult};
+use super::{ImportError, ImportFormat, ImportResult, ImportWarning};
 use crate::site::{Site, SiteGroup, SiteProtocol};
 
 pub(super) fn import(text: &str) -> Result<ImportResult, ImportError> {
@@ -17,9 +17,9 @@ pub(super) fn import(text: &str) -> Result<ImportResult, ImportError> {
     walk(root, &mut group, &mut warnings);
     let n = group.site_count();
     if n == 0 {
-        warnings.push("aucun site trouvé".into());
+        warnings.push(ImportWarning::NoSites);
     } else {
-        warnings.push(format!("mots de passe non importés : à ressaisir pour les {n} site(s)"));
+        warnings.push(ImportWarning::PasswordsNotImported(n));
     }
     Ok(ImportResult { format: ImportFormat::FtpRush2, group, warnings })
 }
@@ -36,7 +36,7 @@ fn is_site(n: Node) -> bool {
     n.is_element() && n.attribute("UID").is_some()
 }
 
-fn walk(n: Node, parent: &mut SiteGroup, warnings: &mut Vec<String>) {
+fn walk(n: Node, parent: &mut SiteGroup, warnings: &mut Vec<ImportWarning>) {
     for c in n.children().filter(Node::is_element) {
         if is_site(c) {
             parent.sites.push(site(c, warnings));
@@ -49,19 +49,23 @@ fn walk(n: Node, parent: &mut SiteGroup, warnings: &mut Vec<String>) {
     }
 }
 
-fn site(n: Node, warnings: &mut Vec<String>) -> Site {
+fn site(n: Node, warnings: &mut Vec<ImportWarning>) -> Site {
     let name = n.attribute("NAME").map(str::to_string).unwrap_or_else(|| n.tag_name().name().to_string());
     let port: u16 = text(n, "PORT").parse().unwrap_or(0);
     let ssl = child(n, "SSL");
     let code: u32 = ssl.and_then(|s| s.text()).and_then(|t| t.trim().parse().ok()).unwrap_or(0);
-    // Codes SSL de la v2 : 3 = TLS explicite (le plus courant), 2 = implicite ; port 22 = SSH.
+    // v2 SSL codes: 3 = explicit TLS (the most common), 2 = implicit; port 22 = SSH.
     let protocol = match (code, port) {
         (_, 22) => SiteProtocol::Sftp,
         (3, _) => SiteProtocol::FtpsExplicit,
         (2, _) => SiteProtocol::FtpsImplicit,
         (0 | 1, _) => SiteProtocol::Ftp,
         (other, _) => {
-            warnings.push(format!("« {name} » : code SSL {other} non identifié, importé en FTPS explicite — à vérifier"));
+            warnings.push(ImportWarning::UnknownCode {
+                site: name.to_string(),
+                code: format!("SSL {other}"),
+                assumed: SiteProtocol::FtpsExplicit,
+            });
             SiteProtocol::FtpsExplicit
         }
     };
@@ -87,7 +91,7 @@ fn site(n: Node, warnings: &mut Vec<String>) -> Site {
 mod tests {
     use super::*;
 
-    // Structure identique à un RushSite.xml, valeurs fictives.
+    // Same structure as a RushSite.xml, fictitious values.
     const SAMPLE: &str = r#"<SITES>
       <Favorites NAME="Favoris">
         <Scene NAME="Scène">
@@ -106,7 +110,7 @@ mod tests {
     #[test]
     fn imports_groups_and_sites_without_passwords() {
         let r = import(SAMPLE).unwrap();
-        assert_eq!(r.group.groups.len(), 1, "groupe vide ignoré");
+        assert_eq!(r.group.groups.len(), 1, "empty group skipped");
         let fav = &r.group.groups[0];
         assert_eq!(fav.name, "Favoris");
         let a = &fav.groups[0].sites[0];
@@ -116,11 +120,11 @@ mod tests {
             ("00.ALPHA", "alpha.example.net", 2121, SiteProtocol::FtpsExplicit)
         );
         assert_eq!((a.user.as_str(), a.max_transfers, a.protect_data), ("bob", 4, false));
-        assert!(a.password.is_empty(), "mot de passe non importé");
+        assert!(a.password.is_empty(), "password not imported");
         assert_eq!((a.local_dir.as_str(), a.remote_dir.as_str()), (r"C:\dl", "/incoming"));
         assert_eq!(fav.sites[0].protocol, SiteProtocol::Sftp);
         assert!(fav.sites[1].anonymous);
-        assert!(r.warnings.iter().any(|w| w.contains("code SSL 9")));
-        assert!(r.warnings.iter().any(|w| w.contains("à ressaisir")));
+        assert!(r.warnings.iter().any(|w| matches!(w, ImportWarning::UnknownCode { code, .. } if code == "SSL 9")));
+        assert!(r.warnings.iter().any(|w| matches!(w, ImportWarning::PasswordsNotImported(_))));
     }
 }

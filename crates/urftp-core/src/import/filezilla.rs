@@ -1,16 +1,16 @@
-//! FileZilla 3 : `sitemanager.xml` (ou export « Exporter… » du gestionnaire de sites).
+//! FileZilla 3: `sitemanager.xml` (or the "Export…" file of its site manager).
 //!
-//! `<FileZilla3><Servers>` contient des `<Folder>` (nom en texte) et des `<Server>`.
-//! Protocoles : 0 = FTP avec TLS explicite si disponible, 1 = SFTP, 3 = FTPS implicite,
-//! 4 = FTPS explicite, 6 = FTP en clair ; les autres (S3, WebDAV…) sont ignorés.
-//! Mots de passe : `<Pass encoding="base64">` ; `encoding="crypt"` (mot de passe principal
-//! FileZilla) ne peut pas être déchiffré.
+//! `<FileZilla3><Servers>` holds `<Folder>` (name as text) and `<Server>` elements.
+//! Protocols: 0 = FTP with explicit TLS if available, 1 = SFTP, 3 = implicit FTPS,
+//! 4 = explicit FTPS, 6 = plain FTP; the others (S3, WebDAV...) are skipped.
+//! Passwords: `<Pass encoding="base64">`; `encoding="crypt"` (FileZilla master password)
+//! cannot be decrypted.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use roxmltree::{Document, Node};
 
-use super::{ImportError, ImportFormat, ImportResult};
+use super::{ImportError, ImportFormat, ImportResult, ImportWarning};
 use crate::site::{Site, SiteGroup, SiteProtocol, TransferMode};
 
 pub(super) fn import(text: &str) -> Result<ImportResult, ImportError> {
@@ -18,18 +18,16 @@ pub(super) fn import(text: &str) -> Result<ImportResult, ImportError> {
     let servers = doc
         .descendants()
         .find(|n| n.has_tag_name("Servers"))
-        .ok_or_else(|| ImportError::Invalid(ImportFormat::FileZilla, "élément <Servers> absent".into()))?;
+        .ok_or_else(|| ImportError::Invalid(ImportFormat::FileZilla, "missing <Servers> element".into()))?;
     let mut warnings = Vec::new();
     let mut group = folder(servers, "Import FileZilla".into(), &mut warnings);
     if group.site_count() == 0 {
-        warnings.push("aucun site trouvé".into());
+        warnings.push(ImportWarning::NoSites);
     }
-    if warnings.iter().any(|w| w.contains("TLS si disponible")) {
-        warnings.retain(|w| !w.contains("TLS si disponible"));
-        warnings.push(
-            "les sites « FTP avec TLS si disponible » sont importés en FTPS explicite ; repassez-les en FTP si le serveur ne gère pas TLS"
-                .into(),
-        );
+    // Reported once, after the per-site ones.
+    if warnings.contains(&ImportWarning::TlsIfAvailable) {
+        warnings.retain(|w| *w != ImportWarning::TlsIfAvailable);
+        warnings.push(ImportWarning::TlsIfAvailable);
     }
     group.name = "Import FileZilla".into();
     Ok(ImportResult { format: ImportFormat::FileZilla, group, warnings })
@@ -43,13 +41,13 @@ fn child_text<'a>(n: Node<'a, 'a>, tag: &str) -> Option<&'a str> {
     n.children().find(|c| c.has_tag_name(tag)).and_then(|c| c.text()).map(str::trim)
 }
 
-fn folder(n: Node, name: String, warnings: &mut Vec<String>) -> SiteGroup {
+fn folder(n: Node, name: String, warnings: &mut Vec<ImportWarning>) -> SiteGroup {
     let mut g = SiteGroup::new(name);
     for c in n.children().filter(Node::is_element) {
         match c.tag_name().name() {
             "Folder" => {
                 let name = own_text(c);
-                g.groups.push(folder(c, if name.is_empty() { "Dossier".into() } else { name }, warnings));
+                g.groups.push(folder(c, if name.is_empty() { "Folder".into() } else { name }, warnings));
             }
             "Server" => {
                 if let Some(s) = server(c, warnings) {
@@ -62,13 +60,13 @@ fn folder(n: Node, name: String, warnings: &mut Vec<String>) -> SiteGroup {
     g
 }
 
-fn server(n: Node, warnings: &mut Vec<String>) -> Option<Site> {
+fn server(n: Node, warnings: &mut Vec<ImportWarning>) -> Option<Site> {
     let name = child_text(n, "Name").map(String::from).filter(|s| !s.is_empty()).unwrap_or_else(|| own_text(n));
     let host = child_text(n, "Host").unwrap_or_default().to_string();
     let label = if name.is_empty() { host.clone() } else { name.clone() };
     let protocol = match child_text(n, "Protocol").and_then(|p| p.parse::<u32>().ok()).unwrap_or(0) {
         0 => {
-            warnings.push("TLS si disponible".into());
+            warnings.push(ImportWarning::TlsIfAvailable);
             SiteProtocol::FtpsExplicit
         }
         1 => SiteProtocol::Sftp,
@@ -76,7 +74,11 @@ fn server(n: Node, warnings: &mut Vec<String>) -> Option<Site> {
         4 => SiteProtocol::FtpsExplicit,
         6 => SiteProtocol::Ftp,
         other => {
-            warnings.push(format!("« {label} » ignoré : protocole FileZilla {other} non géré (S3, WebDAV…)"));
+            warnings.push(ImportWarning::UnsupportedProtocol {
+                site: label.to_string(),
+                source_format: ImportFormat::FileZilla,
+                protocol: other.to_string(),
+            });
             return None;
         }
     };
@@ -101,11 +103,9 @@ fn server(n: Node, warnings: &mut Vec<String>) -> Option<Site> {
         match p.attribute("encoding") {
             Some("base64") => match STANDARD.decode(raw).ok().and_then(|b| String::from_utf8(b).ok()) {
                 Some(pw) => site.password = pw,
-                None => warnings.push(format!("« {label} » : mot de passe illisible")),
+                None => warnings.push(ImportWarning::PasswordUnreadable(label.to_string())),
             },
-            Some("crypt") => {
-                warnings.push(format!("« {label} » : mot de passe protégé par le mot de passe principal de FileZilla, non importé"))
-            }
+            Some("crypt") => warnings.push(ImportWarning::MasterPassword(label.to_string())),
             _ => site.password = raw.to_string(),
         }
     }
@@ -115,8 +115,8 @@ fn server(n: Node, warnings: &mut Vec<String>) -> Option<Site> {
     Some(site)
 }
 
-/// Chemin distant FileZilla : `1 0 4 home 3 bob` → `/home/bob`
-/// (type de serveur, longueur du préfixe, puis segments préfixés par leur longueur).
+/// FileZilla remote path: `1 0 4 home 3 bob` → `/home/bob`
+/// (server type, prefix length, then segments prefixed with their length).
 fn parse_remote_dir(s: &str) -> String {
     let chars: Vec<char> = s.chars().collect();
     let mut i = 0;
@@ -194,12 +194,12 @@ mod tests {
         let b = &g.groups[0].sites[0];
         assert_eq!((b.name.as_str(), b.protocol, b.port), ("Ancien nom", SiteProtocol::Sftp, 2222));
         assert_eq!(b.ssh_key_file.as_deref(), Some(r"C:\keys\bob.ppk"));
-        assert_eq!(g.groups[0].sites.len(), 1, "S3 ignoré");
+        assert_eq!(g.groups[0].sites.len(), 1, "S3 skipped");
         assert!(g.sites[1].anonymous && g.sites[1].protocol == SiteProtocol::Ftp);
         assert!(g.sites[2].password.is_empty());
-        assert!(r.warnings.iter().any(|w| w.contains("S3")), "{:?}", r.warnings);
-        assert!(r.warnings.iter().any(|w| w.contains("mot de passe principal")));
-        assert!(r.warnings.iter().any(|w| w.contains("FTPS explicite")));
+        assert!(r.warnings.iter().any(|w| matches!(w, ImportWarning::UnsupportedProtocol { .. })), "{:?}", r.warnings);
+        assert!(r.warnings.iter().any(|w| matches!(w, ImportWarning::MasterPassword(_))));
+        assert_eq!(r.warnings.last(), Some(&ImportWarning::TlsIfAvailable));
     }
 
     #[test]

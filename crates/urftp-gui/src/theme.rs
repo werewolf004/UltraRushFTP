@@ -1,10 +1,10 @@
-//! Thème moderne : coins arrondis, espacements aérés, accent bleu, clair ou sombre.
+//! Modern theme: rounded corners, airy spacing, blue accent, light or dark.
 
 use eframe::egui::{self, Color32, CornerRadius, Shadow, Stroke, Theme, Visuals};
 
-/// Couleur d'accent (sélection, boutons actifs, progression).
+/// Accent colour (selection, active buttons, progress).
 pub const ACCENT: Color32 = Color32::from_rgb(0x4C, 0x8D, 0xFF);
-/// Couleurs du journal (reprennent la v2/v3 : commande bleue, réponse verte, erreur rouge).
+/// Log colours (as in v2/v3: blue command, green reply, red error).
 pub const LOG_COMMAND: Color32 = Color32::from_rgb(0x6F, 0xA8, 0xFF);
 pub const LOG_REPLY: Color32 = Color32::from_rgb(0x4C, 0xC3, 0x7A);
 pub const LOG_ERROR: Color32 = Color32::from_rgb(0xF0, 0x5D, 0x5D);
@@ -30,8 +30,8 @@ fn tune(mut v: Visuals, dark: bool) -> Visuals {
         v.widgets.inactive.weak_bg_fill = Color32::from_rgb(0x2A, 0x2F, 0x38);
         v.widgets.hovered.weak_bg_fill = Color32::from_rgb(0x33, 0x39, 0x44);
     } else {
-        // Clair mais doux : gris bleutés au lieu du blanc pur, texte gris foncé plutôt que
-        // noir, pour limiter l'éblouissement sur les longues sessions.
+        // Light but soft: bluish greys instead of pure white, dark grey text rather than
+        // black, to limit glare during long sessions.
         v.panel_fill = Color32::from_rgb(0xD9, 0xDD, 0xE3);
         v.window_fill = Color32::from_rgb(0xE2, 0xE5, 0xEA);
         v.extreme_bg_color = Color32::from_rgb(0xE6, 0xE9, 0xED);
@@ -52,13 +52,13 @@ fn tune(mut v: Visuals, dark: bool) -> Visuals {
     v
 }
 
-/// Thème au démarrage : `URUSHFTP_THEME=light` pour le clair, sombre sinon.
+/// Startup theme: `URUSHFTP_THEME=light` for light, dark otherwise.
 pub fn start_dark() -> bool {
     !std::env::var("URUSHFTP_THEME").is_ok_and(|t| t.eq_ignore_ascii_case("light") || t.eq_ignore_ascii_case("clair"))
 }
 
-/// Utilise Segoe UI (texte) et Segoe UI Symbol (flèches, symboles) de Windows quand elles
-/// sont présentes ; les polices intégrées d'egui restent en secours (émojis, icônes).
+/// Uses Windows' Segoe UI (text) and Segoe UI Symbol (arrows, symbols) when present;
+/// egui's embedded fonts stay as a fallback (emojis, icons).
 pub fn install_fonts(ctx: &egui::Context) {
     let dir = std::env::var_os("WINDIR").map(std::path::PathBuf::from).unwrap_or_else(|| "C:\\Windows".into()).join("Fonts");
     let mut fonts = egui::FontDefinitions::default();
@@ -85,7 +85,7 @@ pub fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
-/// Applique le thème clair et sombre ; `dark` choisit celui affiché.
+/// Applies the light and dark themes; `dark` selects the one shown.
 pub fn apply(ctx: &egui::Context, dark: bool) {
     ctx.set_visuals_of(Theme::Dark, tune(Visuals::dark(), true));
     ctx.set_visuals_of(Theme::Light, tune(Visuals::light(), false));
@@ -97,24 +97,28 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
     ctx.set_theme(if dark { Theme::Dark } else { Theme::Light });
 }
 
-/// Taille lisible : 1,5 Mo, 820 o…
+/// Readable size: 1.5 MB, 820 B... (units and decimal separator follow the language).
 pub fn human_size(n: u64) -> String {
-    const U: [&str; 5] = ["o", "Ko", "Mo", "Go", "To"];
+    use urftp_i18n::text;
+    let units = [text("units.b"), text("units.kb"), text("units.mb"), text("units.gb"), text("units.tb")];
     let mut v = n as f64;
     let mut i = 0;
-    while v >= 1024.0 && i < U.len() - 1 {
+    while v >= 1024.0 && i < units.len() - 1 {
         v /= 1024.0;
         i += 1;
     }
-    if i == 0 { format!("{n} o") } else { format!("{v:.1} {}", U[i]).replace('.', ",") }
+    if i == 0 { format!("{n} {}", units[0]) } else { format!("{v:.1} {}", units[i]).replace('.', text("units.decimal")) }
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
     fn sizes() {
+        urftp_i18n::set_language(urftp_i18n::Lang::Fr);
         assert_eq!(super::human_size(820), "820 o");
         assert_eq!(super::human_size(1536), "1,5 Ko");
         assert_eq!(super::human_size(5 * 1024 * 1024 * 1024), "5,0 Go");
+        urftp_i18n::set_language(urftp_i18n::Lang::En);
+        assert_eq!(super::human_size(1536), "1.5 KB");
     }
 }

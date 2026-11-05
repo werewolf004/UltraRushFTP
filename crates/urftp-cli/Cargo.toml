@@ -14,6 +14,7 @@ name = "urftp"
 path = "src/main.rs"
 
 [dependencies]
+urftp-i18n.workspace = true
 thiserror.workspace = true
 parking_lot.workspace = true
 urftp-core.workspace = true

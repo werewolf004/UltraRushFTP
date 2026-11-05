@@ -1,5 +1,5 @@
-//! File d'attente : éléments, ordre (priorités puis ajout), états, choix du prochain
-//! élément à lancer selon les limites de chaque site. Aucune entrée-sortie ici.
+//! Transfer queue: items, order (priorities then insertion), states, choice of the next
+//! item to start according to each site's limits. No I/O here.
 
 use std::collections::HashMap;
 
@@ -7,13 +7,13 @@ use crate::TransferKind;
 
 pub type ItemId = u64;
 
-/// Élément à insérer : (source, destination, dossier ?, taille, rang de priorité).
+/// Item to insert: (source, destination, folder?, size, priority rank).
 pub type NewItem = (Endpoint, Endpoint, bool, Option<u64>, Option<usize>);
 
-/// Extrémité d'un transfert : un site (par son nom) ou la machine locale.
+/// End of a transfer: a site (by name) or the local machine.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Endpoint {
-    /// `None` = disque local.
+    /// `None` = local disk.
     pub site: Option<String>,
     pub path: String,
 }
@@ -30,17 +30,17 @@ impl Endpoint {
     }
 }
 
-/// État d'un élément.
+/// State of an item.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ItemState {
     Waiting,
     Running,
     Done,
-    /// Ignoré (skiplist, fichier identique déjà présent…).
-    Skipped(String),
-    /// La cible existe et la règle dit « demander » : en attente d'une décision.
+    /// Skipped (skip list, identical file already present...).
+    Skipped(crate::skiplist::SkipReason),
+    /// The target exists and the rule says "ask": waiting for a decision.
     NeedsConfirmation,
-    /// Arrêté par l'utilisateur.
+    /// Stopped by the user.
     Stopped,
     Failed(String),
 }
@@ -57,14 +57,14 @@ pub struct QueueItem {
     pub src: Endpoint,
     pub dst: Endpoint,
     pub is_dir: bool,
-    /// Taille de la source si connue.
+    /// Source size when known.
     pub size: Option<u64>,
-    /// Rang dans la liste de priorités (0 = le plus prioritaire).
+    /// Rank in the priority list (0 = highest priority).
     pub priority: Option<usize>,
     pub state: ItemState,
-    /// Tentatives déjà faites.
+    /// Attempts already made.
     pub attempts: u32,
-    /// Octets transférés lors de la dernière tentative.
+    /// Bytes transferred during the last attempt.
     pub transferred: u64,
 }
 
@@ -82,14 +82,14 @@ impl QueueItem {
     }
 }
 
-/// Limites de connexions d'un site (onglet « Général » des propriétés du site dans la v2).
+/// Connection limits of a site ("General" tab of the site properties in v2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SiteLimits {
-    /// Transferts simultanés ; 0 = mode connexion unique (un seul transfert à la fois).
+    /// Simultaneous transfers; 0 = single-connection mode (one transfer at a time).
     pub max_transfers: u32,
-    /// Maximum de transferts où le site est source (téléchargement ou source FXP).
+    /// Maximum transfers where the site is the source (download or FXP source).
     pub max_downloads: Option<u32>,
-    /// Maximum de transferts où le site est destination (envoi ou destination FXP).
+    /// Maximum transfers where the site is the destination (upload or FXP destination).
     pub max_uploads: Option<u32>,
 }
 
@@ -100,13 +100,13 @@ impl Default for SiteLimits {
 }
 
 impl SiteLimits {
-    /// Nombre effectif de connexions de transfert (au moins une).
+    /// Effective number of transfer connections (at least one).
     pub fn effective_transfers(&self) -> u32 {
         self.max_transfers.max(1)
     }
 }
 
-/// Compteurs des transferts en cours pour un site.
+/// Counters of the transfers running for a site.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SiteLoad {
     pub transfers: u32,
@@ -114,7 +114,7 @@ pub struct SiteLoad {
     pub uploads: u32,
 }
 
-/// Charge en cours de tous les sites, pour décider si un élément peut démarrer.
+/// Current load of every site, to decide whether an item may start.
 #[derive(Debug, Clone, Default)]
 pub struct Load {
     pub sites: HashMap<String, SiteLoad>,
@@ -126,7 +126,7 @@ impl Load {
         self.sites.get(site).copied().unwrap_or_default()
     }
 
-    /// L'élément peut-il démarrer sans dépasser les limites ?
+    /// May the item start without exceeding the limits?
     pub fn allows(&self, item: &QueueItem, limits: &dyn Fn(&str) -> SiteLimits, max_total: Option<u32>) -> bool {
         if max_total.is_some_and(|m| self.total >= m) {
             return false;
@@ -139,7 +139,7 @@ impl Load {
         }
         if let Some(d) = &item.dst.site {
             let (l, cur) = (limits(d), self.get(d));
-            // Même site des deux côtés : deux connexions.
+            // Same site on both sides: two connections.
             let extra = u32::from(item.src.site.as_deref() == Some(d.as_str()));
             if cur.transfers + extra >= l.effective_transfers() || l.max_uploads.is_some_and(|m| cur.uploads >= m) {
                 return false;
@@ -177,7 +177,7 @@ impl Load {
     }
 }
 
-/// La file d'attente d'un onglet.
+/// The queue of one tab.
 #[derive(Debug, Clone, Default)]
 pub struct Queue {
     items: Vec<QueueItem>,
@@ -210,7 +210,7 @@ impl Queue {
         QueueItem { id: self.next_id, src, dst, is_dir, size, priority, state: ItemState::Waiting, attempts: 0, transferred: 0 }
     }
 
-    /// Ajoute un élément : il passe devant les éléments en attente moins prioritaires.
+    /// Adds an item: it goes before the waiting items with a lower priority.
     pub fn push(&mut self, src: Endpoint, dst: Endpoint, is_dir: bool, size: Option<u64>, priority: Option<usize>) -> ItemId {
         let item = self.make(src, dst, is_dir, size, priority);
         let pos = self.items.iter().position(|i| i.state == ItemState::Waiting && i.rank() > item.rank()).unwrap_or(self.items.len());
@@ -219,7 +219,7 @@ impl Queue {
         id
     }
 
-    /// Insère le contenu d'un dossier juste après lui, trié par priorité (ordre stable).
+    /// Inserts the contents of a folder right after it, sorted by priority (stable order).
     pub fn insert_children(&mut self, parent: ItemId, children: Vec<NewItem>) -> Vec<ItemId> {
         let mut made: Vec<QueueItem> = children.into_iter().map(|(s, d, dir, size, prio)| self.make(s, d, dir, size, prio)).collect();
         made.sort_by_key(QueueItem::rank);
@@ -229,7 +229,7 @@ impl Queue {
         ids
     }
 
-    /// Premier élément en attente que `can_start` autorise.
+    /// First waiting item allowed by `can_start`.
     pub fn next_runnable(&self, mut can_start: impl FnMut(&QueueItem) -> bool) -> Option<ItemId> {
         self.items.iter().find(|i| i.state == ItemState::Waiting && can_start(i)).map(|i| i.id)
     }
@@ -244,14 +244,14 @@ impl Queue {
         self.position(id).map(|p| self.items.remove(p))
     }
 
-    /// Supprime les éléments correspondant au filtre (sauf ceux en cours) ; renvoie leur nombre.
+    /// Removes the items matching the filter (except running ones); returns their number.
     pub fn remove_where(&mut self, mut pred: impl FnMut(&QueueItem) -> bool) -> usize {
         let before = self.items.len();
         self.items.retain(|i| i.state == ItemState::Running || !pred(i));
         before - self.items.len()
     }
 
-    /// Remet en attente les éléments échoués ou arrêtés.
+    /// Puts failed or stopped items back to waiting.
     pub fn reset_failed(&mut self) -> usize {
         let mut n = 0;
         for i in &mut self.items {
@@ -290,7 +290,7 @@ impl Queue {
         }
     }
 
-    /// Reste-t-il des éléments en attente ou en cours ?
+    /// Is any item still waiting or running?
     pub fn has_pending(&self) -> bool {
         self.items.iter().any(|i| matches!(i.state, ItemState::Waiting | ItemState::Running))
     }
@@ -340,7 +340,7 @@ mod tests {
         let item = q.get(first).unwrap().clone();
         load.start(&item);
         q.set_state(first, ItemState::Running);
-        assert!(q.next_runnable(|i| load.allows(i, &limits, None)).is_none(), "0 = une seule connexion");
+        assert!(q.next_runnable(|i| load.allows(i, &limits, None)).is_none(), "0 = a single connection");
         load.finish(&item);
         q.set_state(first, ItemState::Done);
         assert!(q.next_runnable(|i| load.allows(i, &limits, None)).is_some());
@@ -367,7 +367,7 @@ mod tests {
         q.set_state(c, ItemState::Running);
         assert_eq!(q.reset_failed(), 1);
         assert_eq!(q.get(b).unwrap().state, ItemState::Waiting);
-        assert_eq!(q.remove_where(|_| true), 2, "l'élément en cours reste");
+        assert_eq!(q.remove_where(|_| true), 2, "the running item stays");
         assert_eq!(q.items().len(), 1);
     }
 }

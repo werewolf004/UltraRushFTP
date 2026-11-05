@@ -1,5 +1,5 @@
-//! Conversion des fiches de site et des options (`urftp-core`) en réglages de connexion et
-//! de moteur. Partagé par l'interface et l'outil en ligne de commande `urftp`.
+//! Conversion of site records and options (`urftp-core`) into connection and engine
+//! settings. Shared by the interface and the `urftp` command-line tool.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use crate::session::{SiteProfile, SiteProtocol as ProfileProtocol};
 use crate::sftp::{HostKeyPolicy, SftpAuth, SftpConfig};
 use crate::throttle::RateLimiter;
 
-/// Proxy (de site ou global) au format du moteur.
+/// Proxy (site or global) in the engine format.
 pub fn proxy_config(p: &SiteProxy, bypass_local: bool, exceptions: &str) -> ProxyConfig {
     ProxyConfig {
         kind: match p.kind {
@@ -34,12 +34,12 @@ pub fn proxy_config(p: &SiteProxy, bypass_local: bool, exceptions: &str) -> Prox
     }
 }
 
-/// Proxy global s'il est activé et renseigné.
+/// Global proxy when enabled and filled in.
 pub fn global_proxy(g: &GlobalProxy) -> Option<ProxyConfig> {
     (g.enabled && !g.proxy.host.trim().is_empty()).then(|| proxy_config(&g.proxy, g.bypass_local, &g.exceptions))
 }
 
-/// Profil de connexion d'une fiche de site, avec le proxy global et les délais des options.
+/// Connection profile of a site record, with the global proxy and the option timeouts.
 pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
     let proxy = match &site.proxy {
         ProxyChoice::Custom(p) => Some(proxy_config(p, false, "")),
@@ -96,7 +96,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
     }
 }
 
-/// Réglages du moteur de file à partir des options.
+/// Queue engine settings from the options.
 pub fn engine_options(s: &Settings, download: &Arc<RateLimiter>, upload: &Arc<RateLimiter>) -> EngineOptions {
     EngineOptions {
         retries: s.transfer.retries,
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn site_to_profile() {
         let s = Site {
-            name: "Mon site".into(),
+            name: "My site".into(),
             host: " ftp.example.com ".into(),
             port: 2121,
             protocol: SiteProtocol::FtpsExplicit,
@@ -145,7 +145,7 @@ mod tests {
         let ProfileProtocol::Sftp { key: Some(SftpAuth::KeyFile { passphrase, .. }), .. } = &sftp.protocol else { panic!() };
         assert_eq!(passphrase.as_deref(), Some("phrase"));
 
-        // Proxy global : utilisé par les sites réglés sur « Réglage global ».
+        // Global proxy: used by the sites set to "Global setting".
         let mut settings = Settings::default();
         settings.proxy.enabled = true;
         settings.proxy.proxy.host = "proxy.lan".into();

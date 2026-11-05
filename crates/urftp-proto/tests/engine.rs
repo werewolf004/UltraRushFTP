@@ -103,9 +103,9 @@ async fn multi_transfer_respects_the_site_limit() {
         assert_eq!(std::fs::read(dir.join(format!("f{i}.bin"))).unwrap(), payload(50_000, i as u8));
     }
     let max = srv.stats.lock().unwrap().max_sessions;
-    assert_eq!(max, 3, "3 connexions simultanées maximum");
-    assert!(took < Duration::from_millis(6 * 200), "transferts en parallèle : {took:?}");
-    assert_eq!(srv.stats.lock().unwrap().logins, 3, "les connexions sont réutilisées");
+    assert_eq!(max, 3, "at most 3 simultaneous connections");
+    assert!(took < Duration::from_millis(6 * 200), "parallel transfers: {took:?}");
+    assert_eq!(srv.stats.lock().unwrap().logins, 3, "connections are reused");
     assert_eq!(r.engine.idle_connections("A"), 3);
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -152,16 +152,16 @@ async fn folder_download_with_skiplist_and_priorities() {
         priorities: PriorityList::new([Pattern::wildcard("*.sfv"), Pattern::wildcard("*.nfo")]),
         ..opts()
     };
-    // Une seule connexion : l'ordre des RETR reflète l'ordre de la file.
+    // A single connection: the RETR order reflects the queue order.
     let mut r = engine(q, vec![site("A", srv.addr.port(), 1)], options);
     r.engine.run().await;
 
     assert_eq!(state(&r.engine, root), ItemState::Done);
     let base = dir.join("rel");
     assert!(base.join("a.r00").exists() && base.join("a.sfv").exists() && base.join("sub/inner.bin").exists());
-    assert!(!base.join("Sample").exists(), "dossier ignoré par la skiplist");
-    assert!(!base.join("cover.jpg").exists(), "fichier ignoré par la skiplist");
-    assert!(!base.join("vide.txt").exists(), "fichier de 0 octet ignoré");
+    assert!(!base.join("Sample").exists(), "folder skipped by the skip list");
+    assert!(!base.join("cover.jpg").exists(), "file skipped by the skip list");
+    assert!(!base.join("vide.txt").exists(), "0-byte file skipped");
     let retrs: Vec<String> = srv.received().into_iter().filter(|l| l.starts_with("RETR ")).collect();
     assert_eq!(retrs[..2], ["RETR a.sfv".to_string(), "RETR a.nfo".to_string()], "{retrs:?}");
     let events = drain(&mut r.events);
@@ -213,10 +213,10 @@ async fn file_exists_rules_skip_resume_and_rename() {
 
     assert!(matches!(state(&r.engine, ids[0]), ItemState::Skipped(_)));
     assert_eq!(state(&r.engine, ids[1]), ItemState::Done);
-    assert_eq!(std::fs::read(dir.join("small.bin")).unwrap(), data, "reprise du fichier plus petit");
+    assert_eq!(std::fs::read(dir.join("small.bin")).unwrap(), data, "smaller file resumed");
     assert!(srv.received().iter().any(|l| l == "REST 10000"));
-    assert_eq!(std::fs::read(dir.join("big (1).bin")).unwrap(), data, "fichier plus grand : renommé");
-    assert_eq!(std::fs::read(dir.join("big.bin")).unwrap(), payload(50_000, 1), "l'original est intact");
+    assert_eq!(std::fs::read(dir.join("big (1).bin")).unwrap(), data, "larger file: renamed");
+    assert_eq!(std::fs::read(dir.join("big.bin")).unwrap(), payload(50_000, 1), "the original is intact");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -260,7 +260,7 @@ async fn stopping_a_running_transfer() {
     runner.await.unwrap();
     assert!(start.elapsed() < Duration::from_secs(3));
     assert_eq!(state(&r.engine, id), ItemState::Stopped);
-    assert_eq!(r.engine.idle_connections("A"), 0, "la connexion interrompue n'est pas réutilisée");
+    assert_eq!(r.engine.idle_connections("A"), 0, "the aborted connection is not reused");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -276,7 +276,7 @@ async fn download_speed_limit() {
     r.engine.run().await;
     let t = start.elapsed();
     assert_eq!(std::fs::read(dir.join("big.bin")).unwrap(), payload(400_000, 3));
-    assert!(t >= Duration::from_millis(1500), "limite de 200 Ko/s non respectée : {t:?}");
+    assert!(t >= Duration::from_millis(1500), "200 KB/s limit not respected: {t:?}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

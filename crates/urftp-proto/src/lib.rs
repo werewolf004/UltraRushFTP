@@ -1,19 +1,19 @@
-//! Moteurs de protocole.
+//! Protocol engines.
 //!
-//! - [`ftp`] : client FTP écrit pour UltraRushFTP (contrôle complet des commandes :
-//!   `PRET`, `MLSD`, commandes brutes, chemins longs), FTPS explicite (`AUTH TLS`, repli
-//!   `AUTH SSL`) et implicite, `PBSZ 0` / `PROT P|C`, reprise de session TLS sur les canaux
-//!   de données, vérification système / empreinte / sans vérification, modes passif et actif,
-//!   et FXP site à site ([`ftp::fxp`]) : clair ou chiffré (`SSCN`, `CPSV`), inversion auto.
-//! - [`proxy`] : SOCKS4, SOCKS4A, SOCKS5, HTTP Tunnel, règles de contournement.
-//! - [`ident`] : serveur Ident (RFC 1413) avec nom global ou par site.
-//! - [`sftp`] : client SFTP (SSH) par mot de passe ou clé (OpenSSH, PEM, PuTTY), clé d'hôte
-//!   vérifiée par empreinte, proxy.
+//! - [`ftp`]: FTP client written for UltraRushFTP (full control of the commands:
+//!   `PRET`, `MLSD`, raw commands, long paths), explicit FTPS (`AUTH TLS`, `AUTH SSL`
+//!   fallback) and implicit FTPS, `PBSZ 0` / `PROT P|C`, TLS session reuse on the data
+//!   channels, system / fingerprint / no verification, passive and active modes, and
+//!   site-to-site FXP ([`ftp::fxp`]): clear or encrypted (`SSCN`, `CPSV`), auto-reverse.
+//! - [`proxy`]: SOCKS4, SOCKS4A, SOCKS5, HTTP tunnel, bypass rules.
+//! - [`ident`]: Ident server (RFC 1413) with a global or per-site name.
+//! - [`sftp`]: SFTP (SSH) client with password or key (OpenSSH, PEM, PuTTY), host key
+//!   verified by fingerprint, proxy.
 
-//! - [`session`] : session commune FTP/SFTP et profil de site.
-//! - [`engine`] : moteur de file d'attente (multi-transfert, limites par site, dossiers,
-//!   skiplist, priorités, règles « fichier existant », reprises, arrêt).
-//! - [`throttle`] : limitation de débit.
+//! - [`session`]: common FTP/SFTP session and site profile.
+//! - [`engine`]: queue engine (multi-transfer, per-site limits, folders, skip list,
+//!   priorities, "existing file" rules, retries, stop).
+//! - [`throttle`]: speed limiting.
 
 pub mod engine;
 pub mod ftp;

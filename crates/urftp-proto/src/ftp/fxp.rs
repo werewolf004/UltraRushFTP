@@ -1,12 +1,12 @@
-//! FXP : transfert direct de serveur à serveur (RFC 959 § 5.2, « third party transfer »).
+//! FXP: direct server-to-server transfer (RFC 959 § 5.2, "third party transfer").
 //!
-//! Le client pilote deux connexions de contrôle : un serveur se met en écoute (`PASV`),
-//! l'autre s'y connecte (`PORT`), puis `STOR` sur la destination et `RETR` sur la source.
-//! Les données ne passent jamais par le client.
+//! The client drives two control connections: one server listens (`PASV`), the other
+//! connects to it (`PORT`), then `STOR` on the destination and `RETR` on the source.
+//! The data never goes through the client.
 //!
-//! FXP chiffré : les deux serveurs sont normalement serveurs TLS ; il faut que l'un des deux
-//! se comporte en client TLS. C'est le rôle de `SSCN ON` ou de `CPSV` (à la place de `PASV`),
-//! envoyés au côté passif.
+//! Encrypted FXP: both servers are normally TLS servers; one of them has to act as the
+//! TLS client. That is what `SSCN ON` or `CPSV` (instead of `PASV`) are for, sent to the
+//! passive side.
 
 use std::net::{IpAddr, SocketAddr};
 use std::time::{Duration, Instant};
@@ -14,12 +14,12 @@ use std::time::{Duration, Instant};
 use super::client::{needs_fix, parse_pasv};
 use super::{FtpClient, FtpError, Result, TransferType};
 
-/// Qui se met en écoute.
+/// Which side listens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FxpMode {
-    /// Ordre normal : la source fait `PASV`, la destination `PORT`.
+    /// Normal order: the source does `PASV`, the destination `PORT`.
     SourcePassive,
-    /// Ordre inverse (« Use PASV when acts as target FXP FTP » de la v2).
+    /// Reverse order ("Use PASV when acts as target FXP FTP" in v2).
     DestinationPassive,
 }
 
@@ -32,30 +32,30 @@ impl FxpMode {
     }
 }
 
-/// Méthode de chiffrement du canal de données entre les deux serveurs.
+/// Encryption method of the data channel between the two servers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FxpSecurity {
-    /// `SSCN` si le côté passif l'annonce, sinon `CPSV`.
+    /// `SSCN` when the passive side announces it, `CPSV` otherwise.
     Auto,
     Sscn,
     Cpsv,
-    /// Canal de données en clair (`PROT C` sur les deux serveurs le temps du transfert).
+    /// Clear data channel (`PROT C` on both servers during the transfer).
     Clear,
 }
 
-/// Réglages d'un transfert FXP.
+/// Settings of an FXP transfer.
 #[derive(Debug, Clone)]
 pub struct FxpOptions {
     pub mode: FxpMode,
-    /// Si le côté actif refuse `PORT` (FXP interdit vers une IP étrangère), réessayer en
-    /// inversant les rôles.
+    /// When the active side refuses `PORT` (FXP to a foreign IP forbidden), try again
+    /// with the roles reversed.
     pub auto_reverse: bool,
     pub security: FxpSecurity,
-    /// Si aucune méthode de FXP chiffré ne marche, transférer en clair plutôt qu'échouer.
+    /// When no encrypted FXP method works, transfer in clear instead of failing.
     pub allow_clear_fallback: bool,
-    /// Reprise : octet de départ sur la source et sur la destination.
+    /// Resume: start byte on the source and on the destination.
     pub offset: u64,
-    /// Délai maximal d'attente de la fin du transfert (`None` : illimité).
+    /// Maximum wait for the end of the transfer (`None`: unlimited).
     pub completion_timeout: Option<Duration>,
 }
 
@@ -72,19 +72,19 @@ impl Default for FxpOptions {
     }
 }
 
-/// Résultat d'un FXP réussi.
+/// Result of a successful FXP.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FxpOutcome {
-    /// Rôles effectivement utilisés.
+    /// Roles actually used.
     pub mode: FxpMode,
-    /// Rôles inversés automatiquement après un refus de `PORT`.
+    /// Roles reversed automatically after a `PORT` refusal.
     pub reversed: bool,
-    /// Canal de données chiffré entre les deux serveurs.
+    /// Data channel encrypted between the two servers.
     pub encrypted: bool,
     pub elapsed: Duration,
 }
 
-/// Méthode retenue pour cette tentative.
+/// Method chosen for this attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Method {
     Plain,
@@ -92,7 +92,7 @@ enum Method {
     Cpsv,
 }
 
-/// Transfère `src_path` (sur `src`) vers `dst_path` (sur `dst`) en FXP.
+/// Transfers `src_path` (on `src`) to `dst_path` (on `dst`) with FXP.
 pub async fn fxp(src: &mut FtpClient, src_path: &str, dst: &mut FtpClient, dst_path: &str, opts: &FxpOptions) -> Result<FxpOutcome> {
     let start = Instant::now();
     let src_name = src.enter_parent(src_path).await?.to_string();
@@ -108,7 +108,7 @@ pub async fn fxp(src: &mut FtpClient, src_path: &str, dst: &mut FtpClient, dst_p
             Err(Attempt::PortRefused(e)) if opts.auto_reverse && !reversed => {
                 reversed = true;
                 mode = mode.reversed();
-                let msg = format!("FXP : PORT refusé ({e}), inversion des rôles");
+                let msg = format!("FXP: PORT refused ({e}), reversing roles");
                 src.status(msg.clone());
                 dst.status(msg);
             }
@@ -118,7 +118,7 @@ pub async fn fxp(src: &mut FtpClient, src_path: &str, dst: &mut FtpClient, dst_p
 }
 
 enum Attempt {
-    /// Le côté actif refuse `PORT` : inverser les rôles peut résoudre le problème.
+    /// The active side refuses `PORT`: reversing the roles may solve it.
     PortRefused(FtpError),
     Failed(FtpError),
 }
@@ -129,7 +129,7 @@ impl From<FtpError> for Attempt {
     }
 }
 
-/// Une tentative ; renvoie « chiffré ? ». Les réglages PROT / SSCN modifiés sont restaurés.
+/// One attempt; returns "encrypted?". The PROT / SSCN settings changed are restored.
 async fn attempt(
     src: &mut FtpClient,
     src_name: &str,
@@ -142,7 +142,7 @@ async fn attempt(
     let mut sscn_on = false;
     let result = run(src, src_name, dst, dst_name, opts, mode, &mut sscn_on).await;
 
-    // Remise en état, même après une erreur, pour que les transferts normaux suivants marchent.
+    // Restore, even after an error, so that the following normal transfers work.
     let (passive, _) = sides(src, dst, mode);
     if sscn_on {
         let _ = passive.ok("SSCN OFF").await;
@@ -172,7 +172,7 @@ async fn run(
     mode: FxpMode,
     sscn_on: &mut bool,
 ) -> std::result::Result<bool, Attempt> {
-    // ----- Choix de la protection du canal de données.
+    // ----- Protection of the data channel.
     let want = opts.security != FxpSecurity::Clear && (src.is_data_protected() || dst.is_data_protected());
     let both_tls = src.is_secure() && dst.is_secure();
     let mut method = if want && both_tls {
@@ -185,7 +185,7 @@ async fn run(
         }
     } else {
         if want {
-            let msg = "FXP chiffré impossible : un des serveurs n'est pas en TLS, transfert en clair";
+            let msg = "encrypted FXP impossible: one of the servers is not using TLS, transferring in clear";
             src.status(msg);
             dst.status(msg);
         }
@@ -204,13 +204,13 @@ async fn run(
         match passive.raw("SSCN ON").await? {
             r if r.is_completion() => *sscn_on = true,
             r => {
-                passive.status(format!("SSCN refusé ({r}) : essai de CPSV"));
+                passive.status(format!("SSCN refused ({r}): trying CPSV"));
                 method = Method::Cpsv;
             }
         }
     }
 
-    // ----- Côté passif : PRET, puis PASV ou CPSV.
+    // ----- Passive side: PRET, then PASV or CPSV.
     if passive.features().has("PRET") {
         passive.ok(&format!("PRET {passive_cmd}")).await?;
     }
@@ -220,7 +220,7 @@ async fn run(
         if !opts.allow_clear_fallback {
             return Err(Attempt::Failed(FtpError::Unexpected { command: "CPSV".into(), reply: r }));
         }
-        passive.status("Ni SSCN ni CPSV : FXP en clair (repli autorisé)");
+        passive.status("Neither SSCN nor CPSV: FXP in clear (fallback allowed)");
         method = Method::Plain;
         passive.set_data_protection(false).await?;
         active.set_data_protection(false).await?;
@@ -229,19 +229,19 @@ async fn run(
     if r.code != 227 {
         return Err(Attempt::Failed(FtpError::Unexpected { command: pasv_cmd.into(), reply: r }));
     }
-    let (ip, port) = parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("réponse {pasv_cmd} illisible : {r}")))?;
+    let (ip, port) = parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("unreadable {pasv_cmd} reply: {r}")))?;
     let mut ip = IpAddr::V4(ip);
     if let Some(server) = passive.server_ip()
         && needs_fix(ip, Some(server))
     {
-        passive.status(format!("{pasv_cmd} renvoie {ip} : utilisation de {server}"));
+        passive.status(format!("{pasv_cmd} returns {ip}: using {server}"));
         ip = server;
     }
     let addr = SocketAddr::new(ip, port);
 
-    // ----- Côté actif : PORT vers l'adresse du côté passif.
+    // ----- Active side: PORT to the address of the passive side.
     let IpAddr::V4(v4) = addr.ip() else {
-        return Err(Attempt::Failed(FtpError::Protocol("FXP IPv6 non géré (PORT)".into())));
+        return Err(Attempt::Failed(FtpError::Protocol("IPv6 FXP not supported (PORT)".into())));
     };
     let o = v4.octets();
     let port_cmd = format!("PORT {},{},{},{},{},{}", o[0], o[1], o[2], o[3], port >> 8, port & 0xff);
@@ -251,14 +251,14 @@ async fn run(
         return Err(if r.is_permanent_negative() { Attempt::PortRefused(e) } else { Attempt::Failed(e) });
     }
 
-    // ----- Reprise.
+    // ----- Resume.
     if opts.offset > 0 {
         let rest = format!("REST {}", opts.offset);
         src.expect(&rest, |r| r.code == 350).await?;
         dst.expect(&rest, |r| r.code == 350).await?;
     }
 
-    // ----- STOR sur la destination, puis RETR sur la source.
+    // ----- STOR on the destination, then RETR on the source.
     let r = dst.raw(&transfer_dst).await?;
     if !r.is_preliminary() {
         return Err(Attempt::Failed(FtpError::Unexpected { command: transfer_dst, reply: r }));
@@ -269,7 +269,7 @@ async fn run(
         return Err(Attempt::Failed(FtpError::Unexpected { command: transfer_src, reply: r }));
     }
 
-    // ----- Fin : les deux serveurs répondent quand le transfert est terminé.
+    // ----- End: both servers reply when the transfer is over.
     let limit = opts.completion_timeout;
     let (rd, rs) = tokio::join!(dst.read_reply_within(limit), src.read_reply_within(limit));
     let (rd, rs) = (rd?, rs?);

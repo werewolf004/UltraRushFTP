@@ -1,10 +1,10 @@
 // Test code: a failed unwrap/expect is a test failure.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-//! Chaîne complète dans un seul processus : fausse fenêtre mIRC ↔ DLL (vraies fonctions
-//! exportées) ↔ serveur `TfmRush` de l'application.
+//! Complete chain in a single process: fake mIRC window ↔ DLL (real exported functions)
+//! ↔ `TfmRush` server of the application.
 //!
-//! Si FTPRush ou UltraRushFTP est déjà ouvert, `FindWindow("TfmRush")` peut le trouver à la
-//! place du serveur de test : fermez-les avant de lancer ce test.
+//! If FTPRush or UltraRushFTP is already running, `FindWindow("TfmRush")` may find it
+//! instead of the test server: close them before running this test.
 #![cfg(windows)]
 
 use std::sync::Mutex;
@@ -19,12 +19,12 @@ use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, HWND_MESSAGE, RegisterClassExW, WNDCLASSEXW};
 
-/// Commandes reçues par la fausse fenêtre mIRC.
+/// Commands received by the fake mIRC window.
 static MIRC_RECEIVED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 unsafe extern "system" fn fake_mirc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     if msg == WM_MCOMMAND {
-        let mem = SharedMem::open(MIRC_MAP_NAME, SHARED_MAP_SIZE).expect("mémoire mIRC");
+        let mem = SharedMem::open(MIRC_MAP_NAME, SHARED_MAP_SIZE).expect("mIRC shared memory");
         MIRC_RECEIVED.lock().unwrap().push(mem.read_string());
         return 1;
     }
@@ -49,7 +49,7 @@ fn fake_mirc_window() -> HWND {
     }
 }
 
-/// Tampon façon mIRC (900 octets) contenant `s`.
+/// mIRC-like buffer (900 bytes) containing `s`.
 fn buffer(s: &str) -> Vec<u8> {
     let mut b = vec![0u8; 900];
     b[..s.len()].copy_from_slice(s.as_bytes());
@@ -68,17 +68,16 @@ fn other_tfmrush_window() -> bool {
 
 #[test]
 fn invoke_script_and_raw_callback_round_trip() {
-    // Classe de fenêtre propre au test : un vrai FTPRush ou UltraRushFTP ouvert (classe
-    // « TfmRush ») ne reçoit ainsi jamais les commandes du test.
-    // Only test of this binary de ce binaire ; aucun autre fil ne lit l'environnement en même temps.
+    // Window class private to the test: a real FTPRush or UltraRushFTP ("TfmRush" class)
+    // thus never receives the commands of the test.
     // SAFETY: only test of this binary; no other thread reads the environment concurrently.
     unsafe { std::env::set_var("URUSHFTP_IPC_CLASS", format!("TfmRush.UltraRushFTP.Test.{}", std::process::id())) };
     assert!(!other_tfmrush_window());
-    // Côté application : répond aux Invoke, transmet les scripts.
+    // Application side: answers Invoke, forwards the scripts.
     let (tx, rx) = channel::<(String, Option<isize>, bool)>();
     let server = Server::start(move |req| match req {
         Request::Invoke { expression, reply } => {
-            let _ = reply.send(format!("réponse à {expression}"));
+            let _ = reply.send(format!("answer to {expression}"));
         }
         Request::Script { source, callback } => {
             let _ = tx.send((source, callback, false));
@@ -89,32 +88,32 @@ fn invoke_script_and_raw_callback_round_trip() {
     })
     .expect("serveur TfmRush");
 
-    // Côté mIRC : chargement de la DLL.
+    // mIRC side: loading the DLL.
     let mut info = LoadInfo { m_version: 7 | (81 << 16), m_hwnd: std::ptr::null_mut(), m_keep: 0, m_unicode: 0, m_beta: 0, m_bytes: 4096 };
     // SAFETY: `info` is a valid LOADINFO for the duration of the call.
     unsafe { LoadDll(&mut info) };
-    assert_eq!(info.m_keep, 1, "la DLL demande à rester chargée");
-    assert_ne!(callback_hwnd(), 0, "fenêtre de rappel créée");
+    assert_eq!(info.m_keep, 1, "the DLL asks to stay loaded");
+    assert_ne!(callback_hwnd(), 0, "callback window created");
 
-    // Invoke : requête synchrone, réponse écrite dans le tampon de mIRC.
+    // Invoke: synchronous request, answer written into the mIRC buffer.
     let mut data = buffer("RushApp.TotalDownloadSize");
     // SAFETY: `data` is a writable 900-byte buffer, like the mIRC one.
     let r = unsafe { Invoke(std::ptr::null_mut(), std::ptr::null_mut(), data.as_mut_ptr(), std::ptr::null_mut(), 0, 0) };
-    assert_eq!(r, 3, "3 = la valeur est renvoyée à mIRC");
-    assert_eq!(text(&data), "réponse à RushApp.TotalDownloadSize");
+    assert_eq!(r, 3, "3 = the value is returned to mIRC");
+    assert_eq!(text(&data), "answer to RushApp.TotalDownloadSize");
 
-    // RushScript : le script arrive dans l'application avec la fenêtre de rappel de la DLL.
+    // RushScript: the script reaches the application with the DLL callback window.
     let mirc = fake_mirc_window();
     let mut data = buffer("RushApp.FTP.RAW('DEV', 'SITE WHO', RS_LOGIN);");
     // SAFETY: `data` is a writable 900-byte buffer, like the mIRC one.
     let r = unsafe { RushScript(mirc, std::ptr::null_mut(), data.as_mut_ptr(), std::ptr::null_mut(), 0, 0) };
     assert_eq!(r, 1);
-    let (src, cb, is_command) = rx.recv_timeout(Duration::from_secs(5)).expect("script reçu");
+    let (src, cb, is_command) = rx.recv_timeout(Duration::from_secs(5)).expect("script received");
     assert_eq!(src, "RushApp.FTP.RAW('DEV', 'SITE WHO', RS_LOGIN);");
     assert_eq!(cb, Some(callback_hwnd()));
     assert!(!is_command);
 
-    // L'application renvoie la réponse du RAW : elle doit s'afficher dans mIRC.
+    // The application sends back the RAW reply: it must show up in mIRC.
     let lines = vec!["200- user1".to_string(), "200 End".to_string()];
     assert!(send_raw_callback(cb.unwrap(), true, "DEV", "SITE WHO", &lines));
     assert_eq!(
@@ -122,14 +121,14 @@ fn invoke_script_and_raw_callback_round_trip() {
         ["/echo -a (DEV) \u{2}SITE WHO", "/echo -a (DEV) 200- user1", "/echo -a (DEV) 200 End"]
     );
 
-    // RushCommand : transmis sans rappel.
+    // RushCommand: forwarded without callback.
     let mut data = buffer("RushApp.FTP.Logout('', 0);");
     // SAFETY: `data` is a writable 900-byte buffer, like the mIRC one.
     unsafe { RushCommand(mirc, std::ptr::null_mut(), data.as_mut_ptr(), std::ptr::null_mut(), 0, 0) };
-    let (src, cb, is_command) = rx.recv_timeout(Duration::from_secs(5)).expect("commande reçue");
+    let (src, cb, is_command) = rx.recv_timeout(Duration::from_secs(5)).expect("command received");
     assert_eq!((src.as_str(), cb, is_command), ("RushApp.FTP.Logout('', 0);", None, true));
 
-    // Sans application : Invoke rend la main sans rien écrire (comme l'original).
+    // Without the application: Invoke returns without writing anything (like the original).
     drop(server);
     std::thread::sleep(Duration::from_millis(200));
     if other_tfmrush_window() {

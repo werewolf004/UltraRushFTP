@@ -1,16 +1,16 @@
-//! Modèle de données d'UltraRushFTP, indépendant de l'interface et du réseau.
+//! Data model of UltraRushFTP, independent of the user interface and the network.
 //!
-//! - [`queue`] : éléments de file (upload / download / FXP), ordre, états, limites par site
-//! - [`skiplist`] : règles allow/skip (joker, regex, `%W%` chemin complet), par sens de transfert
-//! - [`priority`] : liste de priorités
-//! - [`exists`] : règles « fichier existant »
-//! - [`pattern`] : masques joker / regex
-//! - [`localpath`] : chemins locaux longs
+//! - [`queue`]: queue items (upload / download / FXP), order, states, per-site limits
+//! - [`skiplist`]: allow/skip rules (wildcard, regex, `%W%` full path), per transfer direction
+//! - [`priority`]: priority list
+//! - [`exists`]: "existing file" rules
+//! - [`pattern`]: wildcard / regex masks
+//! - [`localpath`]: long local paths
 //!
-//! Prévu :
-//! - `site` : gestionnaire de sites (groupes, protocole, TLS, proxy, signets)
-//! - `container` : onglets (« containers » dans FTPRush), chacun avec deux panneaux et sa file
-//! - `stats` : compteurs totaux et de session exposés à `RushApp.*`
+//! Also: [`site`] / [`sitestore`] (site manager), [`settings`] (options), [`import`]
+//! (FileZilla, FTPRush, FlashFXP site books), [`secret`] (DPAPI-protected passwords),
+//! [`localpath`] (paths longer than `MAX_PATH`). Tabs (FTPRush "containers") and
+//! statistics live in the interface crate.
 
 pub mod exists;
 pub mod import;
@@ -24,12 +24,12 @@ pub mod site;
 pub mod sitestore;
 pub mod skiplist;
 
-/// Nom Ident (RFC 1413) répondu par défaut aux serveurs FTP.
+/// Ident (RFC 1413) name answered to FTP servers by default.
 pub const DEFAULT_IDENT_NAME: &str = "URUSHFTP";
-/// Port TCP par défaut du serveur Ident.
+/// Default TCP port of the Ident server.
 pub const DEFAULT_IDENT_PORT: u16 = 113;
 
-/// Sens d'un transfert, comme dans FTPRush (`RS_UP`, `RS_DOWN`, FXP par défaut).
+/// Direction of a transfer, as in FTPRush (`RS_UP`, `RS_DOWN`, FXP by default).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TransferKind {
     Upload,
@@ -37,13 +37,13 @@ pub enum TransferKind {
     Fxp,
 }
 
-/// Protocoles de la phase 1.
+/// Supported protocols.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Protocol {
     Ftp,
-    /// FTPS explicite (`AUTH TLS` sur le port de contrôle).
+    /// Explicit FTPS (`AUTH TLS` on the control port).
     FtpsExplicit,
-    /// FTPS implicite (TLS dès la connexion, port 990 par défaut).
+    /// Implicit FTPS (TLS from the start, port 990 by default).
     FtpsImplicit,
     Sftp,
 }

@@ -1,26 +1,26 @@
-//! Connexion à travers un proxy : SOCKS4, SOCKS4A, SOCKS5 (RFC 1928/1929) et HTTP Tunnel
-//! (`CONNECT`), comme dans FTPRush v2. Utilisé pour le canal de contrôle et, si demandé,
-//! pour les canaux de données.
+//! Connection through a proxy: SOCKS4, SOCKS4A, SOCKS5 (RFC 1928/1929) and HTTP tunnel
+//! (`CONNECT`), as in FTPRush v2. Used for the control channel and, when requested, for
+//! the data channels.
 
 use std::net::{IpAddr, SocketAddr};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, lookup_host};
 
-/// Type de proxy.
+/// Proxy type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProxyKind {
-    /// SOCKS4 : adresse IPv4 résolue localement.
+    /// SOCKS4: IPv4 address resolved locally.
     Socks4,
-    /// SOCKS4A : le proxy résout le nom du serveur.
+    /// SOCKS4A: the proxy resolves the server name.
     Socks4a,
-    /// SOCKS5 : IPv4, IPv6 ou nom, avec authentification facultative.
+    /// SOCKS5: IPv4, IPv6 or name, with optional authentication.
     Socks5,
-    /// Tunnel HTTP (`CONNECT hôte:port`), authentification Basic facultative.
+    /// HTTP tunnel (`CONNECT host:port`), optional Basic authentication.
     HttpTunnel,
 }
 
-/// Proxy utilisé par un site (ou le proxy global).
+/// Proxy used by a site (or the global proxy).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProxyConfig {
     pub kind: ProxyKind,
@@ -28,11 +28,11 @@ pub struct ProxyConfig {
     pub port: u16,
     pub username: Option<String>,
     pub password: Option<String>,
-    /// Faire passer aussi les canaux de données par le proxy (option par défaut de la v2).
+    /// Also route the data channels through the proxy (v2 default).
     pub apply_to_data: bool,
-    /// Ne pas utiliser le proxy pour les adresses locales (LAN, `localhost`, nom sans point).
+    /// Do not use the proxy for local addresses (LAN, `localhost`, name without a dot).
     pub bypass_local: bool,
-    /// Masques d'hôtes contournant le proxy (`*` et `?`), ex. `220.67.*`.
+    /// Host masks bypassing the proxy (`*` and `?`), e.g. `220.67.*`.
     pub exceptions: Vec<String>,
 }
 
@@ -56,32 +56,32 @@ impl ProxyConfig {
         self
     }
 
-    /// Le serveur `target` doit-il être joint sans passer par le proxy ?
+    /// Must the server `target` be reached without the proxy?
     pub fn bypasses(&self, target: &str) -> bool {
         (self.bypass_local && is_local_host(target))
             || self.exceptions.iter().any(|m| !m.trim().is_empty() && wildcard_match(m.trim(), target))
     }
 }
 
-/// Découpe une liste d'exceptions au format de la v2 : `220.67.*;12.1.3.*;211.*`.
+/// Splits an exception list in the v2 format: `220.67.*;12.1.3.*;211.*`.
 pub fn parse_exceptions(list: &str) -> Vec<String> {
     list.split([';', ',']).map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect()
 }
 
-/// Erreurs de négociation avec le proxy.
+/// Proxy negotiation errors.
 #[derive(Debug, thiserror::Error)]
 pub enum ProxyError {
-    #[error("connexion au proxy impossible : {0}")]
+    #[error("cannot connect to the proxy: {0}")]
     Io(#[from] std::io::Error),
-    #[error("le proxy a refusé l'authentification")]
+    #[error("the proxy refused the authentication")]
     AuthFailed,
-    #[error("le proxy a refusé la connexion vers {target} : {reason}")]
+    #[error("the proxy refused the connection to {target}: {reason}")]
     Refused { target: String, reason: String },
-    #[error("réponse du proxy invalide : {0}")]
+    #[error("invalid proxy reply: {0}")]
     Protocol(String),
 }
 
-/// Ouvre une connexion TCP vers `target_host:target_port` à travers le proxy.
+/// Opens a TCP connection to `target_host:target_port` through the proxy.
 pub async fn connect(proxy: &ProxyConfig, target_host: &str, target_port: u16) -> Result<TcpStream, ProxyError> {
     let mut s = TcpStream::connect((proxy.host.as_str(), proxy.port)).await?;
     s.set_nodelay(true)?;
@@ -102,17 +102,17 @@ async fn socks4(s: &mut TcpStream, p: &ProxyConfig, host: &str, port: u16) -> Re
     req.extend_from_slice(&port.to_be_bytes());
     let ip = match host.parse::<IpAddr>() {
         Ok(IpAddr::V4(v4)) => Some(v4),
-        Ok(IpAddr::V6(_)) => return Err(ProxyError::Protocol("SOCKS4 ne gère pas IPv6".into())),
+        Ok(IpAddr::V6(_)) => return Err(ProxyError::Protocol("SOCKS4 does not support IPv6".into())),
         Err(_) if p.kind == ProxyKind::Socks4a => None,
         Err(_) => {
             let v4 = lookup_host((host, port)).await?.find_map(|a| match a {
                 SocketAddr::V4(v4) => Some(*v4.ip()),
                 SocketAddr::V6(_) => None,
             });
-            Some(v4.ok_or_else(|| ProxyError::Protocol(format!("aucune adresse IPv4 pour {host}")))?)
+            Some(v4.ok_or_else(|| ProxyError::Protocol(format!("no IPv4 address for {host}")))?)
         }
     };
-    // SOCKS4A : adresse 0.0.0.1 puis nom d'hôte après l'identifiant.
+    // SOCKS4A: address 0.0.0.1, then the host name after the user id.
     req.extend_from_slice(&ip.map_or([0, 0, 0, 1], |v| v.octets()));
     req.extend_from_slice(p.username.as_deref().unwrap_or("").as_bytes());
     req.push(0);
@@ -128,8 +128,8 @@ async fn socks4(s: &mut TcpStream, p: &ProxyConfig, host: &str, port: u16) -> Re
         code => Err(ProxyError::Refused {
             target: target_str(host, port),
             reason: match code {
-                0x5B => "requête rejetée".into(),
-                0x5C | 0x5D => "identification (identd) refusée".into(),
+                0x5B => "request rejected".into(),
+                0x5C | 0x5D => "identification (identd) refused".into(),
                 c => format!("code {c:#04x}"),
             },
         }),
@@ -150,7 +150,7 @@ async fn socks5(s: &mut TcpStream, p: &ProxyConfig, host: &str, port: u16) -> Re
             let user = p.username.as_deref().unwrap_or("").as_bytes();
             let pass = p.password.as_deref().unwrap_or("").as_bytes();
             if user.len() > 255 || pass.len() > 255 {
-                return Err(ProxyError::Protocol("identifiant ou mot de passe trop long (255 max)".into()));
+                return Err(ProxyError::Protocol("user name or password too long (255 max)".into()));
             }
             let mut req = vec![1u8, user.len() as u8];
             req.extend_from_slice(user);
@@ -163,7 +163,7 @@ async fn socks5(s: &mut TcpStream, p: &ProxyConfig, host: &str, port: u16) -> Re
             }
         }
         0xFF => return Err(ProxyError::AuthFailed),
-        m => return Err(ProxyError::Protocol(format!("méthode d'authentification {m} non gérée"))),
+        m => return Err(ProxyError::Protocol(format!("authentication method {m} not supported"))),
     }
 
     let mut req = vec![5u8, 1, 0];
@@ -178,7 +178,7 @@ async fn socks5(s: &mut TcpStream, p: &ProxyConfig, host: &str, port: u16) -> Re
         }
         Err(_) => {
             if host.len() > 255 {
-                return Err(ProxyError::Protocol("nom d'hôte trop long pour SOCKS5".into()));
+                return Err(ProxyError::Protocol("host name too long for SOCKS5".into()));
             }
             req.push(3);
             req.push(host.len() as u8);
@@ -192,19 +192,19 @@ async fn socks5(s: &mut TcpStream, p: &ProxyConfig, host: &str, port: u16) -> Re
     s.read_exact(&mut head).await?;
     if head[1] != 0 {
         let reason = match head[1] {
-            1 => "échec général",
-            2 => "interdit par les règles du proxy",
-            3 => "réseau injoignable",
-            4 => "hôte injoignable",
-            5 => "connexion refusée",
-            6 => "TTL expiré",
-            7 => "commande non gérée",
-            8 => "type d'adresse non géré",
-            _ => "erreur inconnue",
+            1 => "general failure",
+            2 => "not allowed by the proxy rules",
+            3 => "network unreachable",
+            4 => "host unreachable",
+            5 => "connection refused",
+            6 => "TTL expired",
+            7 => "command not supported",
+            8 => "address type not supported",
+            _ => "unknown error",
         };
         return Err(ProxyError::Refused { target: target_str(host, port), reason: reason.into() });
     }
-    // Adresse liée par le proxy : lue puis ignorée.
+    // Address bound by the proxy: read then ignored.
     let len = match head[3] {
         1 => 4,
         4 => 16,
@@ -213,7 +213,7 @@ async fn socks5(s: &mut TcpStream, p: &ProxyConfig, host: &str, port: u16) -> Re
             s.read_exact(&mut l).await?;
             l[0] as usize
         }
-        t => return Err(ProxyError::Protocol(format!("type d'adresse {t} inconnu"))),
+        t => return Err(ProxyError::Protocol(format!("unknown address type {t}"))),
     };
     let mut rest = vec![0u8; len + 2];
     s.read_exact(&mut rest).await?;
@@ -230,15 +230,15 @@ async fn http_connect(s: &mut TcpStream, p: &ProxyConfig, host: &str, port: u16)
     req += "\r\n";
     s.write_all(req.as_bytes()).await?;
 
-    // Lecture octet par octet : rien ne doit être consommé après l'en-tête (c'est le flux FTP).
+    // Byte by byte: nothing may be consumed after the header (it is the FTP stream).
     let mut head = Vec::new();
     let mut b = [0u8; 1];
     while !head.ends_with(b"\r\n\r\n") {
         if head.len() > 16 * 1024 {
-            return Err(ProxyError::Protocol("en-tête HTTP trop long".into()));
+            return Err(ProxyError::Protocol("HTTP header too long".into()));
         }
         if s.read(&mut b).await? == 0 {
-            return Err(ProxyError::Protocol("connexion fermée pendant la réponse HTTP".into()));
+            return Err(ProxyError::Protocol("connection closed during the HTTP reply".into()));
         }
         head.push(b[0]);
     }
@@ -276,7 +276,7 @@ fn base64(data: &[u8]) -> String {
     out
 }
 
-/// Adresse locale : `localhost`, IP privée / loopback / lien local, ou nom sans point (intranet).
+/// Local address: `localhost`, private / loopback / link-local IP, or name without a dot (intranet).
 fn is_local_host(host: &str) -> bool {
     if host.eq_ignore_ascii_case("localhost") {
         return true;

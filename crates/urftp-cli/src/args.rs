@@ -1,32 +1,9 @@
-//! Analyse des arguments de `urftp`.
+//! Command-line parsing of `urftp`.
 
 use urftp_core::exists::ExistsAction;
 use urftp_core::site::{Site, SiteProtocol};
 
 use crate::error::{ArgsError, TargetError};
-
-pub const USAGE: &str = "\
-urftp — UltraRushFTP en ligne de commande (sites du gestionnaire ou URL)
-
-Utilisation :
-  urftp sites                              liste des sites du gestionnaire
-  urftp ls   <cible>                       contenu d'un dossier distant
-  urftp get  <cible> [dossier local]       télécharger un fichier ou un dossier
-  urftp put  <fichier|dossier> <cible>     envoyer dans le dossier distant
-  urftp fxp  <cible source> <cible dest.>  transfert site à site (FXP)
-  urftp raw  <site> <commande>...          commandes brutes (FTP), réponses affichées
-
-Cible : « NomDuSite:/chemin » (gestionnaire de sites, nom insensible à la casse)
-        ou URL « ftp://user:pass@hôte:port/chemin » (ftps://, ftpsi://, sftp://).
-
-Options :
-  -v, --verbose          journal du protocole (mot de passe masqué)
-  -n, --transfers <n>    transferts simultanés par site (défaut : réglage du site)
-  --exists <action>      fichier existant : overwrite, resume, skip, rename
-  --insecure             accepter tout certificat TLS (FTPS)
-  --fingerprint <emp.>   empreinte SHA-256 attendue (certificat FTPS ou clé d'hôte SFTP)
-  --data <dossier>       dossier des réglages (comme -f de l'interface)
-  -h, --help             cette aide";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -47,6 +24,8 @@ pub struct Options {
     pub insecure: bool,
     pub fingerprint: Option<String>,
     pub data_dir: Option<String>,
+    /// `--lang en|fr`: language of the messages.
+    pub lang: Option<urftp_i18n::Lang>,
 }
 
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<(Command, Options), ArgsError> {
@@ -75,6 +54,10 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<(Command, Options
             "--insecure" => opts.insecure = true,
             "--fingerprint" => opts.fingerprint = Some(value(&a)?),
             "--data" => opts.data_dir = Some(value(&a)?),
+            "--lang" => {
+                let v = value(&a)?;
+                opts.lang = Some(urftp_i18n::Lang::from_tag(&v).ok_or(ArgsError::UnknownLanguage(v))?);
+            }
             s if s.starts_with("--") => return Err(ArgsError::UnknownOption(s.into())),
             _ => pos.push(a),
         }
@@ -87,23 +70,23 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<(Command, Options
     let cmd = match verb.to_ascii_lowercase().as_str() {
         "sites" | "list" => Command::Sites,
         "ls" | "dir" => {
-            need(n == 1, "ls <cible>")?;
+            need(n == 1, "ls <target>")?;
             Command::Ls(rest[0].clone())
         }
         "get" | "download" => {
-            need(n == 1 || n == 2, "get <cible> [dossier local]")?;
+            need(n == 1 || n == 2, "get <target> [local folder]")?;
             Command::Get { src: rest[0].clone(), dest: rest.get(1).cloned() }
         }
         "put" | "upload" => {
-            need(n == 2, "put <fichier|dossier> <cible>")?;
+            need(n == 2, "put <file|folder> <target>")?;
             Command::Put { src: rest[0].clone(), dest: rest[1].clone() }
         }
         "fxp" => {
-            need(n == 2, "fxp <cible source> <cible destination>")?;
+            need(n == 2, "fxp <source> <destination>")?;
             Command::Fxp { src: rest[0].clone(), dest: rest[1].clone() }
         }
         "raw" | "quote" => {
-            need(n >= 2, "raw <site> <commande>...")?;
+            need(n >= 2, "raw <site> <command>...")?;
             Command::Raw { site: rest[0].clone(), commands: rest[1..].to_vec() }
         }
         "help" => Command::Help,
@@ -112,10 +95,10 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<(Command, Options
     Ok((cmd, opts))
 }
 
-/// Cible distante : site (fiche du gestionnaire ou construite depuis l'URL) et chemin.
+/// Remote target: site (site manager record, or built from the URL) and path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
-    /// Nom d'un site du gestionnaire.
+    /// Name of a site manager site.
     Named { site: String, path: String },
     /// URL : fiche temporaire.
     Url { site: Box<Site>, path: String },
@@ -140,7 +123,7 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// `NomDuSite:/chemin`, `NomDuSite` (dossier de départ) ou `ftp://user:pass@hôte:port/chemin`.
+/// `SiteName:/path`, `SiteName` (start folder) or `ftp://user:pass@host:port/path`.
 pub fn parse_target(s: &str) -> Result<Target, TargetError> {
     if let Some((scheme, rest)) = s.split_once("://") {
         let protocol = match scheme.to_ascii_lowercase().as_str() {
@@ -202,7 +185,7 @@ mod tests {
             p(&["raw", "Dev", "SITE WHO", "STAT"]).unwrap().0,
             Command::Raw { site: "Dev".into(), commands: vec!["SITE WHO".into(), "STAT".into()] }
         );
-        assert_eq!(p(&["put", "x"]).unwrap_err(), ArgsError::Usage("put <fichier|dossier> <cible>"));
+        assert_eq!(p(&["put", "x"]).unwrap_err(), ArgsError::Usage("put <file|folder> <target>"));
         assert_eq!(p(&["frobnicate"]).unwrap_err(), ArgsError::UnknownCommand("frobnicate".into()));
     }
 

@@ -1,7 +1,7 @@
 // Test harness (mock servers, fixtures): a failed unwrap/expect is a test failure.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-//! Serveur FTP de développement (localhost) réutilisant le serveur des tests d'intégration.
-//! Identifiants : `test` / `secret`. Affiche le port choisi puis tourne jusqu'à Ctrl+C.
+//! Development FTP server (localhost) reusing the integration-test server.
+//! Credentials: `test` / `secret`. Prints the chosen port, then runs until Ctrl+C.
 //!
 //! ```text
 //! cargo run -p urftp-proto --example dev_server
@@ -28,8 +28,8 @@ async fn main() {
             fs.files.insert(format!("{rel}/ultrarush.demo-2026.r{i:02}"), vec![i as u8; 2_500_000]);
         }
         fs.files.insert(format!("{rel}/Sample/sample.mkv"), vec![9; 800_000]);
-        fs.files.insert("/pub/Docs/LISEZMOI.txt".into(), "Serveur de développement UltraRushFTP\r\n".into());
-        fs.files.insert("/pub/bienvenue.txt".into(), b"Bonjour !".to_vec());
+        fs.files.insert("/pub/Docs/README.txt".into(), "UltraRushFTP development server\r\n".into());
+        fs.files.insert("/pub/welcome.txt".into(), b"Hello!".to_vec());
     }
     println!("PORT={}", srv.addr.port());
     tokio::signal::ctrl_c().await.ok();

@@ -1,19 +1,33 @@
-//! Skiplist / allowlist (fichiers et dossiers ignorés), comme dans FTPRush v2.
+//! Skip list / allow list (skipped files and folders), as in FTPRush v2.
 //!
-//! Les règles sont évaluées dans l'ordre : la première qui correspond décide (ignorer ou
-//! autoriser). Un masque préfixé par `%W%` porte sur le chemin complet au lieu du nom seul.
+//! Rules are evaluated in order: the first match decides (skip or allow). A mask
+//! prefixed with `%W%` applies to the full path instead of the name only.
 
 use crate::TransferKind;
 use crate::pattern::Pattern;
 
-/// Effet d'une règle.
+/// Why an item is not transferred (the interface translates it; `Display` is English).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum SkipReason {
+    /// A skip-list rule matched; the mask is given.
+    #[error("skip list: {0}")]
+    Rule(String),
+    /// 0-byte file and "skip 0-byte files" is on.
+    #[error("0-byte file")]
+    ZeroByte,
+    /// The target already exists and the "existing file" rule says skip.
+    #[error("already present")]
+    AlreadyPresent,
+}
+
+/// Effect of a rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuleAction {
     Skip,
     Allow,
 }
 
-/// Éléments concernés par une règle.
+/// Items a rule applies to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuleTarget {
     Files,
@@ -21,7 +35,7 @@ pub enum RuleTarget {
     Both,
 }
 
-/// Sens de transfert concernés par une règle.
+/// Transfer directions a rule applies to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Directions {
     pub upload: bool,
@@ -41,24 +55,24 @@ impl Directions {
     }
 }
 
-/// Une règle de skiplist.
+/// A skip-list rule.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkipRule {
     pub pattern: Pattern,
     pub action: RuleAction,
     pub target: RuleTarget,
     pub directions: Directions,
-    /// Le masque porte sur le chemin complet (`%W%` dans la v2).
+    /// The mask applies to the full path (`%W%` in v2).
     pub full_path: bool,
 }
 
 impl SkipRule {
-    /// Règle « ignorer » depuis un masque joker au format v2 (`%W%` = chemin complet).
+    /// "Skip" rule from a v2 wildcard mask (`%W%` = full path).
     pub fn skip(mask: &str, target: RuleTarget) -> Self {
         Self::from_mask(mask, RuleAction::Skip, target)
     }
 
-    /// Règle « autoriser » depuis un masque joker au format v2.
+    /// "Allow" rule from a v2 wildcard mask.
     pub fn allow(mask: &str, target: RuleTarget) -> Self {
         Self::from_mask(mask, RuleAction::Allow, target)
     }
@@ -81,7 +95,7 @@ impl SkipRule {
     }
 }
 
-/// Élément à tester.
+/// Item to test.
 #[derive(Debug, Clone, Copy)]
 pub struct Candidate<'a> {
     pub name: &'a str,
@@ -91,14 +105,14 @@ pub struct Candidate<'a> {
     pub kind: TransferKind,
 }
 
-/// Skiplist complète d'un site (ou globale).
+/// Complete skip list of a site (or global).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkipList {
     pub enabled: bool,
     pub rules: Vec<SkipRule>,
-    /// Ne pas transférer les fichiers de 0 octet.
+    /// Do not transfer 0-byte files.
     pub skip_zero_byte_files: bool,
-    /// Ne pas créer les dossiers qui resteraient vides.
+    /// Do not create folders that would stay empty.
     pub skip_empty_dirs: bool,
 }
 
@@ -109,8 +123,8 @@ impl Default for SkipList {
 }
 
 impl SkipList {
-    /// Raison de l'exclusion, ou `None` si l'élément doit être transféré.
-    pub fn check(&self, c: &Candidate<'_>) -> Option<String> {
+    /// Reason for the exclusion, or `None` when the item must be transferred.
+    pub fn check(&self, c: &Candidate<'_>) -> Option<SkipReason> {
         if !self.enabled {
             return None;
         }
@@ -119,12 +133,12 @@ impl SkipList {
             if rule.pattern.matches(subject) {
                 return match rule.action {
                     RuleAction::Allow => None,
-                    RuleAction::Skip => Some(format!("skiplist : {}", rule.pattern.text())),
+                    RuleAction::Skip => Some(SkipReason::Rule(rule.pattern.text().to_string())),
                 };
             }
         }
         if self.skip_zero_byte_files && !c.is_dir && c.size == Some(0) {
-            return Some("fichier de 0 octet".into());
+            return Some(SkipReason::ZeroByte);
         }
         None
     }
@@ -153,7 +167,7 @@ mod tests {
         assert!(list.check(&file("movie.mkv", "/r/movie.mkv", 5)).is_none());
         let dir = Candidate { name: "Sample", full_path: "/r/Sample", is_dir: true, size: None, kind: TransferKind::Fxp };
         assert!(list.check(&dir).is_some());
-        // La règle « Dirs » ne touche pas un fichier du même nom.
+        // The "Dirs" rule does not affect a file with the same name.
         assert!(list.check(&file("sample", "/r/sample", 1)).is_none());
     }
 

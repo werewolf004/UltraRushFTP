@@ -1,8 +1,8 @@
-//! TLS pour FTPS (RFC 4217) : explicite (`AUTH TLS`) et implicite.
+//! TLS for FTPS (RFC 4217): explicit (`AUTH TLS`) and implicit.
 //!
-//! Le même [`ClientConfig`] et le même nom de serveur servent au canal de contrôle et à
-//! tous les canaux de données : la reprise de session TLS est donc tentée automatiquement,
-//! ce qu'exigent beaucoup de serveurs (vsftpd `require_ssl_reuse`, glftpd, FileZilla Server…).
+//! The same [`ClientConfig`] and server name serve the control channel and every data
+//! channel: TLS session reuse is therefore attempted automatically, which many servers
+//! require (vsftpd `require_ssl_reuse`, glftpd, FileZilla Server...).
 
 use std::sync::Arc;
 
@@ -17,28 +17,28 @@ use tokio_rustls::TlsConnector;
 
 use super::{BoxStream, FtpError, Result};
 
-/// Politique de vérification du certificat du serveur.
+/// Verification policy of the server certificate.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum TlsVerify {
-    /// Chaîne vérifiée avec les autorités du magasin Windows, et nom du serveur contrôlé.
+    /// Chain verified with the authorities of the Windows store, and server name checked.
     #[default]
     System,
-    /// Accepte n'importe quel certificat (auto-signé, expiré…). Le chiffrement reste actif,
-    /// mais l'identité du serveur n'est pas garantie.
+    /// Accepts any certificate (self-signed, expired...). Encryption stays active, but the
+    /// identity of the server is not guaranteed.
     AcceptAny,
-    /// Accepte uniquement le certificat dont l'empreinte SHA-256 correspond
-    /// (hexadécimal, séparateurs `:` et casse ignorés). Permet d'approuver un certificat
-    /// auto-signé une fois pour toutes.
+    /// Accepts only the certificate whose SHA-256 fingerprint matches (hexadecimal, `:`
+    /// separators and case ignored). Lets the user trust a self-signed certificate once
+    /// and for all.
     Fingerprint(String),
 }
 
-/// Réglages TLS d'un site.
+/// TLS settings of a site.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TlsOptions {
     pub verify: TlsVerify,
-    /// Chiffrer aussi les canaux de données (`PROT P`) ; sinon `PROT C`.
+    /// Also encrypt the data channels (`PROT P`); `PROT C` otherwise.
     pub protect_data: bool,
-    /// Essayer `AUTH SSL` si `AUTH TLS` est refusé (anciens serveurs).
+    /// Try `AUTH SSL` when `AUTH TLS` is refused (old servers).
     pub auth_ssl_fallback: bool,
 }
 
@@ -48,15 +48,15 @@ impl Default for TlsOptions {
     }
 }
 
-/// Mode de sécurité d'une connexion FTP.
+/// Security mode of an FTP connection.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Security {
-    /// FTP en clair.
+    /// Plain FTP.
     #[default]
     None,
-    /// FTPS explicite : connexion en clair puis `AUTH TLS`.
+    /// Explicit FTPS: plain connection then `AUTH TLS`.
     Explicit(TlsOptions),
-    /// FTPS implicite : TLS dès l'ouverture de la connexion (port 990 en général).
+    /// Implicit FTPS: TLS from the start of the connection (usually port 990).
     Implicit(TlsOptions),
 }
 
@@ -69,7 +69,7 @@ impl Security {
     }
 }
 
-/// Empreinte SHA-256 d'un certificat au format `AB:CD:…`.
+/// SHA-256 fingerprint of a certificate in the `AB:CD:…` format.
 pub fn fingerprint_sha256(der: &[u8]) -> String {
     let d = ring::digest::digest(&ring::digest::SHA256, der);
     d.as_ref().iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(":")
@@ -84,7 +84,7 @@ struct Verifier {
     webpki: Option<Arc<WebPkiServerVerifier>>,
     pinned: Option<String>,
     provider: Arc<CryptoProvider>,
-    /// Empreinte du dernier certificat présenté (pour proposer de l'approuver en cas d'échec).
+    /// Fingerprint of the last certificate presented (to offer trusting it after a failure).
     seen: Arc<Mutex<Option<String>>>,
 }
 
@@ -103,7 +103,7 @@ impl ServerCertVerifier for Verifier {
             return if normalize_fingerprint(&fp) == *pinned {
                 Ok(ServerCertVerified::assertion())
             } else {
-                Err(rustls::Error::General("empreinte du certificat différente de celle approuvée".into()))
+                Err(rustls::Error::General("certificate fingerprint differs from the trusted one".into()))
             };
         }
         match &self.webpki {
@@ -135,7 +135,7 @@ impl ServerCertVerifier for Verifier {
     }
 }
 
-/// Contexte TLS d'une connexion : configuration partagée, nom du serveur, empreinte vue.
+/// TLS context of a connection: shared configuration, server name, fingerprint seen.
 pub(crate) struct TlsContext {
     connector: TlsConnector,
     server_name: ServerName<'static>,
@@ -153,7 +153,7 @@ impl TlsContext {
                 roots.add_parsable_certificates(native.certs);
                 let v = WebPkiServerVerifier::builder_with_provider(Arc::new(roots), provider.clone())
                     .build()
-                    .map_err(|e| FtpError::Tls(format!("magasin de certificats inutilisable : {e}")))?;
+                    .map_err(|e| FtpError::Tls(format!("certificate store unusable: {e}")))?;
                 (Some(v), None)
             }
             TlsVerify::AcceptAny => (None, None),
@@ -167,11 +167,11 @@ impl TlsContext {
             .with_custom_certificate_verifier(Arc::new(verifier))
             .with_no_client_auth();
         let server_name = ServerName::try_from(host.to_string())
-            .map_err(|_| FtpError::InvalidArgument(format!("nom de serveur invalide pour TLS : {host:?}")))?;
+            .map_err(|_| FtpError::InvalidArgument(format!("invalid server name for TLS: {host:?}")))?;
         Ok(Self { connector: TlsConnector::from(Arc::new(config)), server_name, seen })
     }
 
-    /// Négociation TLS côté client sur un flux existant.
+    /// Client-side TLS handshake on an existing stream.
     pub(crate) async fn wrap(&self, stream: BoxStream) -> Result<BoxStream> {
         match self.connector.connect(self.server_name.clone(), stream).await {
             Ok(tls) => Ok(Box::new(tls)),
@@ -182,7 +182,7 @@ impl TlsContext {
         }
     }
 
-    /// Empreinte du certificat présenté par le serveur lors de la dernière négociation.
+    /// Fingerprint of the certificate presented by the server during the last handshake.
     pub(crate) fn peer_fingerprint(&self) -> Option<String> {
         self.seen.lock().clone()
     }

@@ -1,9 +1,9 @@
-//! Masques de noms : joker (`*`, `?`) ou expression régulière, insensibles à la casse.
-//! Utilisés par la skiplist, la liste de priorités et les exceptions de proxy.
+//! Name masks: wildcard (`*`, `?`) or regular expression, case-insensitive.
+//! Used by the skip list, the priority list and the proxy exceptions.
 
 use std::fmt;
 
-/// Un masque compilé.
+/// A compiled mask.
 #[derive(Clone)]
 pub struct Pattern {
     text: String,
@@ -11,12 +11,12 @@ pub struct Pattern {
 }
 
 impl Pattern {
-    /// Masque joker : `*` = n'importe quelle suite, `?` = un caractère.
+    /// Wildcard mask: `*` = any sequence, `?` = one character.
     pub fn wildcard(text: impl Into<String>) -> Self {
         Self { text: text.into(), regex: None }
     }
 
-    /// Expression régulière (syntaxe Perl, insensible à la casse).
+    /// Regular expression (Perl syntax, case-insensitive).
     pub fn regex(text: impl Into<String>) -> Result<Self, regex::Error> {
         let text = text.into();
         let re = regex::RegexBuilder::new(&text).case_insensitive(true).build()?;
@@ -53,7 +53,7 @@ impl fmt::Debug for Pattern {
     }
 }
 
-/// Correspondance joker insensible à la casse : `*` (0..n caractères) et `?` (1 caractère).
+/// Case-insensitive wildcard match: `*` (0..n characters) and `?` (1 character).
 pub fn wildcard_match(pattern: &str, text: &str) -> bool {
     let p: Vec<char> = pattern.to_lowercase().chars().collect();
     let t: Vec<char> = text.to_lowercase().chars().collect();

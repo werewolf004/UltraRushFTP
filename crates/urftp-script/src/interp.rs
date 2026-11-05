@@ -1,22 +1,22 @@
-//! Exécution : variables, opérateurs, fonctions intégrées, appels vers l'hôte (`RushApp.*`).
+//! Execution: variables, operators, built-in functions, calls to the host (`RushApp.*`).
 
 use std::collections::HashMap;
 
 use crate::parser::{BinOp, Expr, Stmt, UnOp};
 use crate::{Host, HostError, ScriptError, ScriptErrorKind, Value, flag_value};
 
-/// Nombre maximal d'instructions exécutées (protection contre les boucles infinies).
+/// Maximum number of executed statements (protection against infinite loops).
 const MAX_STEPS: u64 = 1_000_000;
 
 pub struct Interpreter<'h> {
     host: &'h mut dyn Host,
     vars: HashMap<String, Value>,
     steps: u64,
-    /// Ligne de l'instruction en cours (pour les erreurs sans position précise).
+    /// Line of the current statement (for errors without a precise position).
     line: usize,
 }
 
-/// Interruption du déroulement normal.
+/// Interruption of the normal flow.
 enum Flow {
     Exit,
     Error(ScriptError),
@@ -137,14 +137,14 @@ impl<'h> Interpreter<'h> {
         match self.eval(e)? {
             Value::Bool(b) => Ok(b),
             Value::Int(i) => Ok(i != 0),
-            other => Err(err(line_of(e), format!("condition non booléenne ({})", other.type_name())).into()),
+            other => Err(err(line_of(e), format!("non-boolean condition ({})", other.type_name())).into()),
         }
     }
 
     fn int(&mut self, e: &Expr, line: usize) -> Result<i64, Flow> {
         match self.eval(e)? {
             Value::Int(i) => Ok(i),
-            other => Err(err(line, format!("entier attendu ({} reçu)", other.type_name())).into()),
+            other => Err(err(line, format!("integer expected ({} received)", other.type_name())).into()),
         }
     }
 
@@ -162,7 +162,7 @@ impl<'h> Interpreter<'h> {
                     (UnOp::Neg, Value::Int(i)) => Value::Int(-i),
                     (UnOp::Not, Value::Bool(b)) => Value::Bool(!b),
                     (UnOp::Not, Value::Int(i)) => Value::Int(!i),
-                    (_, v) => return Err(err(line_of(x), format!("opération impossible sur {}", v.type_name())).into()),
+                    (_, v) => return Err(err(line_of(x), format!("operation impossible on {}", v.type_name())).into()),
                 }
             }
             Expr::Binary(op, a, b) => {
@@ -182,7 +182,7 @@ impl<'h> Interpreter<'h> {
             if let Some(f) = flag_value(&path[0]) {
                 return Ok(Value::Int(f));
             }
-            // Fonction intégrée appelée sans parenthèses.
+            // Built-in function called without parentheses.
             if let Some(v) = self.builtin(&lower, &[], &[], line)? {
                 return Ok(v);
             }
@@ -200,16 +200,16 @@ impl<'h> Interpreter<'h> {
         self.host.call(&path.join("."), &values).map_err(|e| host_err(line, e).into())
     }
 
-    /// Fonctions intégrées du Pascal Script ; `None` si le nom n'en est pas une.
+    /// Built-in functions of Pascal Script; `None` when the name is not one of them.
     fn builtin(&mut self, name: &str, v: &[Value], raw: &[Expr], line: usize) -> Result<Option<Value>, Flow> {
         let arity = |n: usize| -> Result<(), Flow> {
-            if v.len() == n { Ok(()) } else { Err(err(line, format!("{name} attend {n} argument(s), {} reçu(s)", v.len())).into()) }
+            if v.len() == n { Ok(()) } else { Err(err(line, format!("{name} expects {n} argument(s), {} received", v.len())).into()) }
         };
         let s = |i: usize| v.get(i).map(Value::to_text).unwrap_or_default();
         let n = |i: usize| -> Result<i64, Flow> {
             match v.get(i) {
                 Some(Value::Int(x)) => Ok(*x),
-                _ => Err(err(line, format!("{name} : argument {} entier attendu", i + 1)).into()),
+                _ => Err(err(line, format!("{name}: argument {} must be an integer", i + 1)).into()),
             }
         };
         Ok(Some(match name {
@@ -219,7 +219,7 @@ impl<'h> Interpreter<'h> {
             }
             "strtoint" => {
                 arity(1)?;
-                Value::Int(s(0).trim().parse().map_err(|_| err(line, format!("« {} » n'est pas un entier", s(0))))?)
+                Value::Int(s(0).trim().parse().map_err(|_| err(line, format!("\"{}\" is not an integer", s(0))))?)
             }
             "strtointdef" => {
                 arity(2)?;
@@ -257,10 +257,10 @@ impl<'h> Interpreter<'h> {
                 Value::Nil
             }
             "inputquery" => {
-                // InputQuery(titre, invite, variable) : la variable reçoit la saisie.
+                // InputQuery(title, prompt, variable): the variable receives the input.
                 arity(3)?;
                 let Some(Expr::Name(target, _)) = raw.get(2).filter(|e| matches!(e, Expr::Name(p, _) if p.len() == 1)) else {
-                    return Err(err(line, "InputQuery : le 3e argument doit être une variable").into());
+                    return Err(err(line, "InputQuery: the 3rd argument must be a variable").into());
                 };
                 match self.host.call("InputQuery", v).map_err(|e| host_err(line, e))? {
                     Value::Str(answer) => {
@@ -286,7 +286,7 @@ fn line_of(e: &Expr) -> usize {
 
 fn binary(op: BinOp, x: Value, y: Value) -> Result<Value, ScriptErrorKind> {
     use Value::*;
-    let tn = |a: &Value, b: &Value| format!("{} et {}", a.type_name(), b.type_name());
+    let tn = |a: &Value, b: &Value| format!("{} and {}", a.type_name(), b.type_name());
     Ok(match (op, x, y) {
         (BinOp::Add, Int(a), Int(b)) => Int(a.wrapping_add(b)),
         (BinOp::Add, a @ (Str(_) | Int(_)), b @ (Str(_) | Int(_))) => Str(a.to_text() + &b.to_text()),
@@ -298,7 +298,7 @@ fn binary(op: BinOp, x: Value, y: Value) -> Result<Value, ScriptErrorKind> {
         (BinOp::And, Bool(a), Bool(b)) => Bool(a && b),
         (BinOp::Or, Bool(a), Bool(b)) => Bool(a || b),
         (BinOp::Xor, Bool(a), Bool(b)) => Bool(a ^ b),
-        // Sur des entiers : opérations bit à bit (`RS_BOOKMARK or RS_CHECKBM`).
+        // On integers: bitwise operations (`RS_BOOKMARK or RS_CHECKBM`).
         (BinOp::And, Int(a), Int(b)) => Int(a & b),
         (BinOp::Or, Int(a), Int(b)) => Int(a | b),
         (BinOp::Xor, Int(a), Int(b)) => Int(a ^ b),
@@ -308,7 +308,7 @@ fn binary(op: BinOp, x: Value, y: Value) -> Result<Value, ScriptErrorKind> {
             let o = match (&a, &b) {
                 (Int(x), Int(y)) => x.cmp(y),
                 (Str(x), Str(y)) => x.cmp(y),
-                _ => return Err(ScriptErrorKind::Runtime(format!("comparaison impossible entre {}", tn(&a, &b)))),
+                _ => return Err(ScriptErrorKind::Runtime(format!("cannot compare {}", tn(&a, &b)))),
             };
             Bool(match cmp {
                 BinOp::Lt => o.is_lt(),
@@ -317,6 +317,6 @@ fn binary(op: BinOp, x: Value, y: Value) -> Result<Value, ScriptErrorKind> {
                 _ => o.is_ge(),
             })
         }
-        (_, a, b) => return Err(ScriptErrorKind::Runtime(format!("opération impossible entre {}", tn(&a, &b)))),
+        (_, a, b) => return Err(ScriptErrorKind::Runtime(format!("operation impossible between {}", tn(&a, &b)))),
     })
 }

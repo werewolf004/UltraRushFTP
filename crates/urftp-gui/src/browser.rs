@@ -1,11 +1,12 @@
-//! Pont entre l'interface (thread egui) et une connexion de navigation (tâche tokio).
+//! Bridge between the interface (egui thread) and a browsing connection (tokio task).
 //!
-//! Chaque panneau distant possède son « acteur » : il reçoit des commandes (connexion,
-//! changement de dossier…) et renvoie des événements (listing, journal, erreurs). L'interface
-//! ne bloque jamais sur le réseau.
+//! Every remote panel has its "actor": it receives commands (connect, change folder...)
+//! and sends back events (listing, log, errors). The interface never blocks on the
+//! network.
 
 use std::sync::Arc;
 use std::sync::mpsc;
+use urftp_i18n::t;
 
 use eframe::egui;
 use tokio::runtime::Handle;
@@ -19,17 +20,17 @@ pub enum BrowserCmd {
     Cwd(String),
     Refresh,
     Disconnect,
-    /// Crée un dossier (chemin absolu).
+    /// Creates a folder (absolute path).
     Mkdir(String),
-    /// Supprime des éléments (chemin absolu, dossier ?), puis actualise.
+    /// Deletes items (absolute path, folder?), then refreshes.
     Delete(Vec<(String, bool)>),
-    /// Renomme (chemin absolu, nouveau nom), puis actualise.
+    /// Renames (absolute path, new name), then refreshes.
     Rename(String, String),
-    /// Commande FTP brute (`RushApp.FTP.RAW`) ; la réponse arrive en `RawReply`.
+    /// Raw FTP command (`RushApp.FTP.RAW`); the reply arrives as `RawReply`.
     Raw(String),
 }
 
-/// Type de confiance à accorder après un refus.
+/// Kind of trust to grant after a refusal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrustKind {
     TlsCertificate,
@@ -43,14 +44,14 @@ pub enum BrowserEvent {
     },
     Log(LogLine),
     Error(String),
-    /// Certificat TLS ou clé SSH inconnus : l'utilisateur peut les approuver.
+    /// Unknown TLS certificate or SSH key: the user may trust it.
     Trust {
         kind: TrustKind,
         fingerprint: String,
         reason: String,
     },
     Disconnected,
-    /// Réponse à une commande brute : (commande, lignes de la réponse).
+    /// Reply to a raw command: (command, reply lines).
     RawReply {
         command: String,
         lines: Vec<String>,
@@ -97,7 +98,7 @@ pub fn spawn(rt: &Handle, ctx: egui::Context) -> BrowserHandle {
                         Ok(()) => listing(s, &send).await,
                         Err(e) => send(BrowserEvent::Error(e.to_string())),
                     },
-                    None => send(BrowserEvent::Error("non connecté".into())),
+                    None => send(BrowserEvent::Error(t!("browser.not_connected"))),
                 },
                 BrowserCmd::Refresh => {
                     if let Some(s) = session.as_mut() {
@@ -132,7 +133,7 @@ pub fn spawn(rt: &Handle, ctx: egui::Context) -> BrowserHandle {
                         Ok(r) => send(BrowserEvent::RawReply { command, ok: r.code < 400, lines: r.lines }),
                         Err(e) => send(BrowserEvent::RawReply { command, ok: false, lines: vec![e.to_string()] }),
                     },
-                    None => send(BrowserEvent::Error(format!("« {command} » : commande brute impossible (non connecté ou SFTP)"))),
+                    None => send(BrowserEvent::Error(t!("browser.raw_impossible", command = command))),
                 },
                 BrowserCmd::Rename(from, to) => {
                     if let Some(s) = session.as_mut() {

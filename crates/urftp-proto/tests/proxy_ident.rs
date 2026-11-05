@@ -11,7 +11,7 @@ use urftp_proto::ident::{IdentConfig, IdentServer};
 use urftp_proto::proxy::{ProxyConfig, ProxyError, ProxyKind};
 
 fn proxy_cfg(p: &MockProxy, kind: ProxyKind) -> ProxyConfig {
-    // Le serveur de test est en 127.0.0.1 : il faut désactiver le contournement des adresses locales.
+    // The test server is on 127.0.0.1: the bypass of local addresses must be disabled.
     ProxyConfig { bypass_local: false, ..ProxyConfig::new(kind, "127.0.0.1", p.addr.port()) }
 }
 
@@ -27,7 +27,7 @@ async fn roundtrip(host: &str, srv: &MockServer, cfg: FtpConfig) -> FtpClient {
     c
 }
 
-/// Contrôle + 3 canaux de données passent tous par le proxy, vers le bon hôte.
+/// Control + 3 data channels all go through the proxy, to the right host.
 async fn check_through_proxy(kind: ProxyKind, host: &str, auth: Option<(&str, &str)>) {
     let srv = MockServer::start(MockConfig::default()).await;
     let px = MockProxy::start(kind, auth).await;
@@ -80,7 +80,7 @@ async fn wrong_proxy_credentials() {
 #[tokio::test]
 async fn proxy_reports_unreachable_target() {
     let px = MockProxy::start(ProxyKind::Socks5, None).await;
-    // Port fermé : on réserve un port puis on le libère.
+    // Closed port: reserve a port, then release it.
     let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let cfg = FtpConfig { proxy: Some(proxy_cfg(&px, ProxyKind::Socks5)), ..FtpConfig::default() };
     let err = FtpClient::connect("127.0.0.1", closed, cfg).await.err().unwrap();
@@ -118,7 +118,7 @@ async fn exceptions_and_local_bypass_skip_the_proxy() {
     let c = roundtrip("127.0.0.1", &srv, FtpConfig { proxy: Some(pc), ..FtpConfig::default() }).await;
     assert!(!c.uses_proxy());
 
-    // Contournement des adresses locales (réglage par défaut).
+    // Bypass of local addresses (default setting).
     let pc = ProxyConfig::new(ProxyKind::Socks5, "127.0.0.1", px.addr.port());
     roundtrip("127.0.0.1", &srv, FtpConfig { proxy: Some(pc), ..FtpConfig::default() }).await;
     assert!(px.targets().is_empty());
@@ -130,7 +130,7 @@ async fn data_channels_can_bypass_the_proxy() {
     let px = MockProxy::start(ProxyKind::Socks5, None).await;
     let pc = ProxyConfig { apply_to_data: false, ..proxy_cfg(&px, ProxyKind::Socks5) };
     roundtrip("127.0.0.1", &srv, FtpConfig { proxy: Some(pc), ..FtpConfig::default() }).await;
-    assert_eq!(px.targets().len(), 1, "seul le canal de contrôle passe par le proxy");
+    assert_eq!(px.targets().len(), 1, "only the control channel goes through the proxy");
 }
 
 #[tokio::test]
@@ -162,11 +162,11 @@ async fn ident_answers_site_name_then_default() {
     assert!(answers[0].ends_with(": USERID : UNIX : SITEUSER"), "{answers:?}");
     assert!(answers[1].ends_with(": USERID : UNIX : URUSHFTP"), "{answers:?}");
     let first_port: u16 = answers[0].split(',').next().unwrap().trim().parse().unwrap();
-    assert_ne!(first_port, srv.addr.port(), "le premier port est celui du client FTP");
+    assert_ne!(first_port, srv.addr.port(), "the first port is the FTP client's");
 
-    // Serveur Ident arrêté (« seulement pendant la connexion ») : la connexion FTP marche quand même.
+    // Ident server stopped ("only while connecting"): the FTP connection still works.
     drop(ident);
     let mut c3 = FtpClient::connect("127.0.0.1", srv.addr.port(), FtpConfig::default()).await.unwrap();
     c3.login("test", "secret").await.unwrap();
-    assert!(srv.stats.lock().unwrap().ident_answers[2].starts_with("échec"));
+    assert!(srv.stats.lock().unwrap().ident_answers[2].starts_with("failed"));
 }

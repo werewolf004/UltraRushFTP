@@ -1,4 +1,4 @@
-//! Analyse lexicale du Pascal Script (mots-clés insensibles à la casse).
+//! Lexical analysis of Pascal Script (case-insensitive keywords).
 
 use crate::ScriptError;
 
@@ -7,9 +7,9 @@ pub enum Tok {
     Ident(String),
     Int(i64),
     Str(String),
-    /// Symbole ou opérateur : `:=`, `;`, `(`, `<=`…
+    /// Symbol or operator: `:=`, `;`, `(`, `<=`...
     Sym(&'static str),
-    /// Mot-clé (en minuscules) : `begin`, `if`, `and`…
+    /// Keyword (lower case): `begin`, `if`, `and`...
     Kw(&'static str),
     Eof,
 }
@@ -79,7 +79,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ScriptError> {
                     i += 1;
                 }
                 if i >= chars.len() {
-                    return Err(err(start, "commentaire { non fermé".into()));
+                    return Err(err(start, "unclosed { comment".into()));
                 }
                 i += 1;
             }
@@ -93,13 +93,13 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ScriptError> {
                     i += 1;
                 }
                 if i + 1 >= chars.len() {
-                    return Err(err(start, "commentaire (* non fermé".into()));
+                    return Err(err(start, "unclosed (* comment".into()));
                 }
                 i += 2;
             }
             '\'' | '#' => {
-                // Chaîne : 'abc' avec '' pour une apostrophe, et #65 pour un caractère par code ;
-                // les deux peuvent s'enchaîner : 'a'#13#10'b'.
+                // String: 'abc' with '' for an apostrophe, and #65 for a character by code;
+                // both can be chained: 'a'#13#10'b'.
                 let mut s = String::new();
                 while i < chars.len() && (chars[i] == '\'' || chars[i] == '#') {
                     if chars[i] == '#' {
@@ -108,18 +108,15 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ScriptError> {
                         while i < chars.len() && chars[i].is_ascii_digit() {
                             i += 1;
                         }
-                        let code: u32 = chars[start..i]
-                            .iter()
-                            .collect::<String>()
-                            .parse()
-                            .map_err(|_| err(line, "code de caractère # invalide".into()))?;
-                        s.push(char::from_u32(code).ok_or_else(|| err(line, format!("caractère #{code} invalide")))?);
+                        let code: u32 =
+                            chars[start..i].iter().collect::<String>().parse().map_err(|_| err(line, "invalid # character code".into()))?;
+                        s.push(char::from_u32(code).ok_or_else(|| err(line, format!("invalid character #{code}")))?);
                         continue;
                     }
                     i += 1;
                     loop {
                         match chars.get(i) {
-                            None | Some('\n') => return Err(err(line, "chaîne non fermée".into())),
+                            None | Some('\n') => return Err(err(line, "unclosed string".into())),
                             Some('\'') if chars.get(i + 1) == Some(&'\'') => {
                                 s.push('\'');
                                 i += 2;
@@ -144,7 +141,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ScriptError> {
                     i += 1;
                 }
                 let hex: String = chars[start..i].iter().collect();
-                let v = i64::from_str_radix(&hex, 16).map_err(|_| err(line, format!("nombre ${hex} trop grand")))?;
+                let v = i64::from_str_radix(&hex, 16).map_err(|_| err(line, format!("number ${hex} too large")))?;
                 out.push(Token { tok: Tok::Int(v), line });
             }
             c if c.is_ascii_digit() => {
@@ -153,7 +150,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ScriptError> {
                     i += 1;
                 }
                 let text: String = chars[start..i].iter().collect();
-                let v = text.parse().map_err(|_| err(line, format!("nombre {text} trop grand")))?;
+                let v = text.parse().map_err(|_| err(line, format!("number {text} too large")))?;
                 out.push(Token { tok: Tok::Int(v), line });
             }
             c if c.is_alphabetic() || c == '_' => {
@@ -172,7 +169,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ScriptError> {
             _ => {
                 let rest: String = chars[i..chars.len().min(i + 2)].iter().collect();
                 let sym =
-                    SYMBOLS.iter().find(|s| rest.starts_with(**s)).ok_or_else(|| err(line, format!("caractère inattendu « {c} »")))?;
+                    SYMBOLS.iter().find(|s| rest.starts_with(**s)).ok_or_else(|| err(line, format!("unexpected character \"{c}\"")))?;
                 i += sym.chars().count();
                 out.push(Token { tok: Tok::Sym(sym), line });
             }

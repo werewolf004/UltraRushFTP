@@ -1,5 +1,5 @@
-//! Liste de priorités : un élément dont le nom correspond à un masque passe en tête de
-//! file ; plus le masque est haut dans la liste, plus la priorité est forte.
+//! Priority list: an item whose name matches a mask moves to the top of the queue; the
+//! higher the mask in the list, the higher the priority.
 
 use crate::pattern::Pattern;
 
@@ -13,7 +13,7 @@ impl PriorityList {
         Self { patterns: patterns.into_iter().collect() }
     }
 
-    /// Rang du premier masque correspondant (0 = le plus prioritaire), `None` sinon.
+    /// Rank of the first matching mask (0 = highest priority), `None` otherwise.
     pub fn rank(&self, name: &str) -> Option<usize> {
         self.patterns.iter().position(|p| p.matches(name))
     }
