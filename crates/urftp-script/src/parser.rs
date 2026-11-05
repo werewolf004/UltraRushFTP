@@ -77,7 +77,7 @@ impl Parser {
         t
     }
     fn err<T>(&self, m: impl Into<String>) -> Result<T, ScriptError> {
-        Err(ScriptError { line: self.line(), message: m.into() })
+        Err(ScriptError::syntax(self.line(), m))
     }
     fn is_kw(&self, k: &str) -> bool {
         matches!(self.peek(), Tok::Kw(w) if *w == k)
@@ -131,7 +131,7 @@ impl Parser {
             self.declarations()?;
         }
         if self.is_kw("procedure") || self.is_kw("function") {
-            return self.err("les procédures et fonctions ne sont pas encore prises en charge dans les scripts");
+            return Err(ScriptError::new(self.line(), crate::ScriptErrorKind::Unsupported("procedures and functions".into())));
         }
         let stmts = self.statements(&[])?;
         self.eat_sym(".");
@@ -148,7 +148,7 @@ impl Parser {
         while matches!(self.peek(), Tok::Ident(_)) {
             if is_const {
                 // `const NOM = valeur;` : non utilisé par les scripts FTPRush courants.
-                return self.err("les constantes déclarées ne sont pas encore prises en charge");
+                return Err(ScriptError::new(self.line(), crate::ScriptErrorKind::Unsupported("constant declarations".into())));
             }
             loop {
                 self.ident()?;

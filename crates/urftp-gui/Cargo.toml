@@ -12,10 +12,12 @@ name = "UltraRushFTP"
 path = "src/main.rs"
 
 [dependencies]
+parking_lot.workspace = true
+thiserror.workspace = true
 urftp-core.workspace = true
 urftp-proto.workspace = true
 urftp-script.workspace = true
-urftp-ipc.workspace = true
+urftp-sys.workspace = true
 eframe = "0.36"
 egui_dock = "0.21.1"
 egui_extras = "0.36"
@@ -23,3 +25,6 @@ tokio = { workspace = true, features = ["rt-multi-thread", "sync", "fs", "time"]
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+
+[lints]
+workspace = true

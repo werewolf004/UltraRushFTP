@@ -12,13 +12,7 @@ pub const LOG_STATUS: Color32 = Color32::from_rgb(0x9A, 0xA3, 0xB2);
 
 fn tune(mut v: Visuals, dark: bool) -> Visuals {
     let r = CornerRadius::same(7);
-    for w in [
-        &mut v.widgets.noninteractive,
-        &mut v.widgets.inactive,
-        &mut v.widgets.hovered,
-        &mut v.widgets.active,
-        &mut v.widgets.open,
-    ] {
+    for w in [&mut v.widgets.noninteractive, &mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
         w.corner_radius = r;
     }
     v.window_corner_radius = CornerRadius::same(12);

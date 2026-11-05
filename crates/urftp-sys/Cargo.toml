@@ -1,0 +1,36 @@
+[package]
+name = "urftp-sys"
+description = "The only crate of UltraRushFTP allowed to use `unsafe`: Win32 IPC (TfmRush window, shared memory, WM_COPYDATA), DPAPI and the rushmirc.dll exports."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+# Defines the `#[no_mangle]` mIRC exports (`LoadDll`, `Invoke`, ...); enabled by `rushmirc` only.
+mirc-dll = []
+
+[dependencies]
+thiserror.workspace = true
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Memory", "Win32_System_DataExchange", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_Security", "Win32_Security_Cryptography"] }
+
+[[test]]
+name = "mirc_ipc"
+required-features = ["mirc-dll"]
+
+[[example]]
+name = "mirc_driver"
+required-features = ["mirc-dll"]
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+missing_safety_doc = "deny"
+unwrap_used = "deny"
+expect_used = "deny"

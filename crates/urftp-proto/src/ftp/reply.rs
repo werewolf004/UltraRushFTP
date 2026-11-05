@@ -56,11 +56,7 @@ impl fmt::Display for Reply {
 }
 
 fn strip_code(line: &str) -> &str {
-    if parse_code(line).is_some() {
-        line.get(4..).unwrap_or("")
-    } else {
-        line.trim_start()
-    }
+    if parse_code(line).is_some() { line.get(4..).unwrap_or("") } else { line.trim_start() }
 }
 
 /// Code en tête de ligne si celle-ci a la forme `ddd`, `ddd ` ou `ddd-`.
@@ -105,8 +101,7 @@ where
     R: AsyncBufRead + Unpin + ?Sized,
 {
     let first = read_line(r, max_line).await?;
-    let code = parse_code(&first)
-        .ok_or_else(|| FtpError::Protocol(format!("réponse invalide : {first:?}")))?;
+    let code = parse_code(&first).ok_or_else(|| FtpError::Protocol(format!("réponse invalide : {first:?}")))?;
     let multi = first.as_bytes().get(3) == Some(&b'-');
     let mut lines = vec![first];
     if multi {
@@ -145,9 +140,7 @@ mod tests {
 
     #[tokio::test]
     async fn multi_line_with_inner_codes() {
-        let r = parse("211-Features:\r\n MDTM\r\n211-ceci n'est pas la fin\r\n PRET\r\n211 End\r\n")
-            .await
-            .unwrap();
+        let r = parse("211-Features:\r\n MDTM\r\n211-ceci n'est pas la fin\r\n PRET\r\n211 End\r\n").await.unwrap();
         assert_eq!(r.code, 211);
         assert_eq!(r.lines.len(), 5);
         assert_eq!(r.text(), "End");

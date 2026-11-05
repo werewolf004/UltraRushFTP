@@ -103,8 +103,7 @@ impl Fs {
 
     fn children(&self, dir: &str) -> (Vec<String>, Vec<(String, usize)>) {
         let dirs = self.dirs.iter().filter(|d| *d != "/" && parent(d) == dir).map(|d| name(d).to_string()).collect();
-        let files =
-            self.files.iter().filter(|(f, _)| parent(f) == dir).map(|(f, c)| (name(f).to_string(), c.len())).collect();
+        let files = self.files.iter().filter(|(f, _)| parent(f) == dir).map(|(f, c)| (name(f).to_string(), c.len())).collect();
         (dirs, files)
     }
 }
@@ -271,15 +270,14 @@ impl MockServer {
                 (Some(a), Some(fp))
             }
         };
-        let shared =
-            Arc::new(Shared {
-                cfg,
-                fs: fs.clone(),
-                stats: stats.clone(),
-                tls,
-                tls_client: make_tls_client(),
-                fail_counter: AtomicUsize::new(0),
-            });
+        let shared = Arc::new(Shared {
+            cfg,
+            fs: fs.clone(),
+            stats: stats.clone(),
+            tls,
+            tls_client: make_tls_client(),
+            fail_counter: AtomicUsize::new(0),
+        });
         tokio::spawn(async move {
             while let Ok((s, _)) = listener.accept().await {
                 let shared = shared.clone();
@@ -403,11 +401,8 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
         let answer = ident_lookup(&tcp, port).await.unwrap_or_else(|e| format!("échec : {e}"));
         sh.stats.lock().unwrap().ident_answers.push(answer);
     }
-    let stream: BoxStream = if sh.cfg.tls == MockTls::Implicit {
-        Box::new(sh.tls.clone().unwrap().accept(tcp).await?)
-    } else {
-        Box::new(tcp)
-    };
+    let stream: BoxStream =
+        if sh.cfg.tls == MockTls::Implicit { Box::new(sh.tls.clone().unwrap().accept(tcp).await?) } else { Box::new(tcp) };
     let mut c: Conn = BufReader::new(stream);
     reply(&mut c, "220 Serveur de test UltraRushFTP").await?;
     let mut st = State {

@@ -4,7 +4,9 @@
 //! tous les canaux de données : la reprise de session TLS est donc tentée automatiquement,
 //! ce qu'exigent beaucoup de serveurs (vsftpd `require_ssl_reuse`, glftpd, FileZilla Server…).
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -96,7 +98,7 @@ impl ServerCertVerifier for Verifier {
         now: UnixTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
         let fp = fingerprint_sha256(end_entity);
-        *self.seen.lock().unwrap() = Some(fp.clone());
+        *self.seen.lock() = Some(fp.clone());
         if let Some(pinned) = &self.pinned {
             return if normalize_fingerprint(&fp) == *pinned {
                 Ok(ServerCertVerified::assertion())
@@ -173,7 +175,7 @@ impl TlsContext {
     pub(crate) async fn wrap(&self, stream: BoxStream) -> Result<BoxStream> {
         match self.connector.connect(self.server_name.clone(), stream).await {
             Ok(tls) => Ok(Box::new(tls)),
-            Err(e) => Err(match self.seen.lock().unwrap().clone() {
+            Err(e) => Err(match self.seen.lock().clone() {
                 Some(fingerprint) if is_cert_error(&e) => FtpError::Certificate { fingerprint, reason: e.to_string() },
                 _ => FtpError::Tls(e.to_string()),
             }),
@@ -182,7 +184,7 @@ impl TlsContext {
 
     /// Empreinte du certificat présenté par le serveur lors de la dernière négociation.
     pub(crate) fn peer_fingerprint(&self) -> Option<String> {
-        self.seen.lock().unwrap().clone()
+        self.seen.lock().clone()
     }
 }
 

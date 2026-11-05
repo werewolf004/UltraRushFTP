@@ -100,15 +100,9 @@ fn parse_unix(line: &str) -> Option<RemoteEntry> {
     }
     // Cherche le mois : précédé de la taille, suivi du jour et de l'heure ou de l'année.
     let i = (3..=t.len() - 4).find(|&i| {
-        month(t[i].1).is_some()
-            && t[i - 1].1.parse::<u64>().is_ok()
-            && t[i + 1].1.parse::<u8>().is_ok_and(|d| (1..=31).contains(&d))
+        month(t[i].1).is_some() && t[i - 1].1.parse::<u64>().is_ok() && t[i + 1].1.parse::<u8>().is_ok_and(|d| (1..=31).contains(&d))
     })?;
-    let mut time = FtpTime {
-        month: month(t[i].1)?,
-        day: t[i + 1].1.parse().ok()?,
-        ..FtpTime::default()
-    };
+    let mut time = FtpTime { month: month(t[i].1)?, day: t[i + 1].1.parse().ok()?, ..FtpTime::default() };
     let ty = t[i + 2].1;
     if let Some((h, m)) = ty.split_once(':') {
         time.hour = h.parse().ok()?;
@@ -178,11 +172,8 @@ fn parse_dos(line: &str) -> Option<RemoteEntry> {
         Some(false) if hour == 12 => hour = 0,
         _ => {}
     }
-    let (kind, size) = if t[2].1.eq_ignore_ascii_case("<DIR>") {
-        (EntryKind::Dir, 0)
-    } else {
-        (EntryKind::File, t[2].1.replace(',', "").parse().ok()?)
-    };
+    let (kind, size) =
+        if t[2].1.eq_ignore_ascii_case("<DIR>") { (EntryKind::Dir, 0) } else { (EntryKind::File, t[2].1.replace(',', "").parse().ok()?) };
     Some(RemoteEntry {
         name: line[t[3].0..].to_string(),
         kind,
@@ -226,16 +217,7 @@ pub fn parse_mlsd_line(line: &str) -> Option<RemoteEntry> {
             _ => {}
         }
     }
-    Some(RemoteEntry {
-        name: name.to_string(),
-        kind: kind?,
-        size,
-        modified,
-        permissions,
-        owner,
-        group,
-        link_target: None,
-    })
+    Some(RemoteEntry { name: name.to_string(), kind: kind?, size, modified, permissions, owner, group, link_target: None })
 }
 
 /// `YYYYMMDDHHMMSS[.sss]` (UTC).
@@ -245,14 +227,7 @@ pub fn parse_mlsd_time(v: &str) -> Option<FtpTime> {
         return None;
     }
     let n = |a: usize, b: usize| v[a..b].parse::<u8>().ok();
-    Some(FtpTime {
-        year: v[0..4].parse().ok(),
-        month: n(4, 6)?,
-        day: n(6, 8)?,
-        hour: n(8, 10)?,
-        minute: n(10, 12)?,
-        second: n(12, 14)?,
-    })
+    Some(FtpTime { year: v[0..4].parse().ok(), month: n(4, 6)?, day: n(6, 8)?, hour: n(8, 10)?, minute: n(10, 12)?, second: n(12, 14)? })
 }
 
 #[cfg(test)]
@@ -294,14 +269,18 @@ mod tests {
 
     #[test]
     fn list_skips_noise() {
-        let v = parse_list("total 8\r\ndrwxr-xr-x 2 a b 0 Jan 1 00:00 .\r\ndrwxr-xr-x 2 a b 0 Jan 1 00:00 ..\r\n-rw-r--r-- 1 a b 5 Jan 1 00:00 ok\r\n");
+        let v = parse_list(
+            "total 8\r\ndrwxr-xr-x 2 a b 0 Jan 1 00:00 .\r\ndrwxr-xr-x 2 a b 0 Jan 1 00:00 ..\r\n-rw-r--r-- 1 a b 5 Jan 1 00:00 ok\r\n",
+        );
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].name, "ok");
     }
 
     #[test]
     fn mlsd_lines() {
-        let v = parse_mlsd("type=cdir;modify=20240101000000; .\r\ntype=file;size=42;modify=20240102030405.123;UNIX.mode=0644; a b.txt\r\ntype=dir;modify=20240101000000; sub\r\n");
+        let v = parse_mlsd(
+            "type=cdir;modify=20240101000000; .\r\ntype=file;size=42;modify=20240102030405.123;UNIX.mode=0644; a b.txt\r\ntype=dir;modify=20240101000000; sub\r\n",
+        );
         assert_eq!(v.len(), 2);
         assert_eq!((v[0].name.as_str(), v[0].size), ("a b.txt", 42));
         assert_eq!(v[0].modified.unwrap().second, 5);

@@ -16,7 +16,9 @@ pub enum ExistsAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExistsDecision {
     /// Transférer à partir de cet octet (0 = depuis le début, en écrasant).
-    Transfer { offset: u64 },
+    Transfer {
+        offset: u64,
+    },
     Skip,
     Rename,
     Ask,
@@ -34,12 +36,7 @@ pub struct ExistsRules {
 
 impl Default for ExistsRules {
     fn default() -> Self {
-        Self {
-            smaller: ExistsAction::Resume,
-            same: ExistsAction::Skip,
-            larger: ExistsAction::Rename,
-            overwrite_if_resume_fails: true,
-        }
+        Self { smaller: ExistsAction::Resume, same: ExistsAction::Skip, larger: ExistsAction::Rename, overwrite_if_resume_fails: true }
     }
 }
 

@@ -1,19 +1,16 @@
+// Test harness (mock servers, fixtures): a failed unwrap/expect is a test failure.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod common;
 
 use common::{MockConfig, MockServer, MockTls};
-use urftp_proto::ftp::{
-    FtpClient, FtpConfig, FxpMode, FxpOptions, FxpSecurity, Security, TlsOptions, TlsVerify, fxp,
-};
+use urftp_proto::ftp::{FtpClient, FtpConfig, FxpMode, FxpOptions, FxpSecurity, Security, TlsOptions, TlsVerify, fxp};
 
 fn payload(n: u32) -> Vec<u8> {
     (0..n).map(|i| (i % 227) as u8).collect()
 }
 
 fn tls_config() -> FtpConfig {
-    FtpConfig {
-        security: Security::Explicit(TlsOptions { verify: TlsVerify::AcceptAny, ..TlsOptions::default() }),
-        ..FtpConfig::default()
-    }
+    FtpConfig { security: Security::Explicit(TlsOptions { verify: TlsVerify::AcceptAny, ..TlsOptions::default() }), ..FtpConfig::default() }
 }
 
 async fn login(srv: &MockServer, cfg: FtpConfig) -> FtpClient {

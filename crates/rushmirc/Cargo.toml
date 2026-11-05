@@ -1,6 +1,6 @@
 [package]
 name = "rushmirc"
-description = "DLL mIRC compatible rushmirc.dll pour piloter UltraRushFTP."
+description = "mIRC DLL compatible with FTPRush's rushmirc.dll, to drive UltraRushFTP from mIRC."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,10 +12,7 @@ name = "rushmirc"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-urftp-ipc.workspace = true
+urftp-sys = { workspace = true, features = ["mirc-dll"] }
 
-[target."cfg(windows)".dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Memory", "Win32_System_DataExchange", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_Security"] }
-
-[target."cfg(windows)".dev-dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi"] }
+[lints]
+workspace = true

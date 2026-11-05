@@ -6,7 +6,9 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use std::task::{Context, Poll, ready};
 use std::time::Duration;
 
@@ -36,18 +38,18 @@ impl RateLimiter {
 
     /// Change le débit en cours de route (0 = illimité).
     pub fn set_rate(&self, bytes_per_sec: u64) {
-        let mut s = self.state.lock().unwrap();
+        let mut s = self.state.lock();
         s.rate = bytes_per_sec;
         s.next = Instant::now();
     }
 
     pub fn rate(&self) -> u64 {
-        self.state.lock().unwrap().rate
+        self.state.lock().rate
     }
 
     /// Compte `n` octets et renvoie l'attente nécessaire avant le prochain bloc.
     pub fn consume(&self, n: usize) -> Duration {
-        let mut s = self.state.lock().unwrap();
+        let mut s = self.state.lock();
         if s.rate == 0 || n == 0 {
             return Duration::ZERO;
         }

@@ -11,13 +11,18 @@ référence que pour les types de connexion.
 | `urftp-core` | Modèle : sites, signets, onglets, file d'attente, skiplist, priorités, statistiques |
 | `urftp-proto` | FTP, FTPS explicite/implicite, SFTP, FXP (dont SSCN/CPSV) |
 | `urftp-script` | Interpréteur du Pascal Script de FTPRush (`RushApp.*`, constantes `RS_*`) |
-| `urftp-ipc` | Côté application du protocole rushmirc (fenêtre `TfmRush`, mémoire `FTPRush`, `WM_COPYDATA`) |
-| `rushmirc` | DLL mIRC compatible (`Invoke`, `RushScript`, `RushCommand`, callbacks) |
+| `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : protocole rushmirc côté application (fenêtre `TfmRush`, mémoire `FTPRush`, `WM_COPYDATA`), DPAPI, exports de la DLL (fonctionnalité `mirc-dll`). Chaque bloc `unsafe` porte un commentaire `SAFETY:` (lint refusé sinon) |
+| `rushmirc` | DLL mIRC compatible (`Invoke`, `RushScript`, `RushCommand`, callbacks) : réexporte `urftp_sys::mirc`, sans code propre |
 | `urftp-cli` | Ligne de commande `urftp` |
 | `urftp-gui` | Interface Windows `UltraRushFTP.exe` |
 
-Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `proto` ;
-`rushmirc` → `ipc` seulement (la DLL reste légère et ne charge pas le moteur).
+Dépendances : `gui` → `core`, `proto`, `script`, `sys` ; `cli` → `core`, `proto` ; `core` → `sys`
+(DPAPI) ; `rushmirc` → `sys` seulement (la DLL reste légère et ne charge pas le moteur).
+
+Règles de qualité imposées par le compilateur (`[workspace.lints]`) : `unsafe_code = "forbid"`
+sur toutes les crates sauf `urftp-sys` ; `unwrap_used`, `expect_used`, `panic`, `todo`,
+`unimplemented`, `dbg_macro` refusés hors tests ; erreurs typées avec `thiserror` ; formatage
+`rustfmt.toml`.
 
 ## Exigences transverses (non négociables)
 
@@ -125,7 +130,7 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
     `DisableSite`, `Splitter`, `DeleteEmptyTabs`, statistiques (`stats.json`) et débits ;
     console « Script » (exécuter / `Invoke`), `URUSHFTP_SCRIPT` au démarrage. Reste :
     filtres et répétitions de `Transfer`, `InputQuery` interactif, `RushApp.UI.*`, procédures.
-12. ✅ Liaison mIRC : fenêtre cachée `TfmRush` dans l'application (`urftp-ipc::server`,
+12. ✅ Liaison mIRC : fenêtre cachée `TfmRush` dans l'application (`urftp-sys::server`,
     traitée même fenêtre réduite) et DLL `rushmirc.dll` 32 et 64 bits (`LoadDll`,
     `UnloadDll`, `Invoke`, `RushScript`, `RushCommand`, `EnableCallback`, `DisableCallback`),
     protocole identique à l'original (la DLL d'origine fonctionne aussi), réponses `RAW`

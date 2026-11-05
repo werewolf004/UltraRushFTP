@@ -12,7 +12,9 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use std::time::Duration;
 
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
@@ -25,7 +27,7 @@ use urftp_core::priority::PriorityList;
 use urftp_core::queue::{Endpoint, ItemId, ItemState, Load, Queue, QueueItem, SiteLimits};
 use urftp_core::skiplist::{Candidate, SkipList};
 
-use crate::ftp::{FxpOptions, EntryKind, fxp, path as rpath};
+use crate::ftp::{EntryKind, FxpOptions, fxp, path as rpath};
 use crate::session::{RemoteSession, SessionError, SiteProfile};
 use crate::throttle::{RateLimiter, Throttled};
 
@@ -66,17 +68,43 @@ impl Default for EngineOptions {
 /// Événements pour l'interface (file d'attente, barre d'état, journal des transferts).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineEvent {
-    Started { id: ItemId },
+    Started {
+        id: ItemId,
+    },
     /// `bytes` : position dans le fichier (reprise comprise).
-    Progress { id: ItemId, bytes: u64, total: Option<u64> },
-    Done { id: ItemId, bytes: u64 },
+    Progress {
+        id: ItemId,
+        bytes: u64,
+        total: Option<u64>,
+    },
+    Done {
+        id: ItemId,
+        bytes: u64,
+    },
     /// Dossier développé en `children` éléments.
-    Expanded { id: ItemId, children: usize },
-    Skipped { id: ItemId, reason: String },
-    NeedsConfirmation { id: ItemId },
-    Retrying { id: ItemId, attempt: u32, error: String },
-    Failed { id: ItemId, error: String },
-    Stopped { id: ItemId },
+    Expanded {
+        id: ItemId,
+        children: usize,
+    },
+    Skipped {
+        id: ItemId,
+        reason: String,
+    },
+    NeedsConfirmation {
+        id: ItemId,
+    },
+    Retrying {
+        id: ItemId,
+        attempt: u32,
+        error: String,
+    },
+    Failed {
+        id: ItemId,
+        error: String,
+    },
+    Stopped {
+        id: ItemId,
+    },
 }
 
 /// Connexions d'un site.
@@ -87,7 +115,7 @@ struct SitePool {
 
 impl SitePool {
     async fn acquire(&self) -> Result<RemoteSession, SessionError> {
-        let idle = self.idle.lock().unwrap().pop();
+        let idle = self.idle.lock().pop();
         match idle {
             Some(s) => Ok(s),
             None => RemoteSession::open(&self.profile, None).await,
@@ -97,7 +125,7 @@ impl SitePool {
     /// Rend la connexion au réservoir si elle est encore saine.
     fn release<T>(&self, session: RemoteSession, result: &Result<T, SessionError>) {
         if result.as_ref().err().is_none_or(SessionError::keeps_session) {
-            self.idle.lock().unwrap().push(session);
+            self.idle.lock().push(session);
         }
     }
 }
@@ -127,10 +155,7 @@ impl Engine {
         opts: EngineOptions,
         events: Option<UnboundedSender<EngineEvent>>,
     ) -> Arc<Self> {
-        let sites = sites
-            .into_iter()
-            .map(|p| (p.name.clone(), Arc::new(SitePool { profile: p, idle: Mutex::new(Vec::new()) })))
-            .collect();
+        let sites = sites.into_iter().map(|p| (p.name.clone(), Arc::new(SitePool { profile: p, idle: Mutex::new(Vec::new()) }))).collect();
         Arc::new(Self { queue, sites, opts, events, load: Mutex::default(), running: Mutex::default() })
     }
 
@@ -140,16 +165,16 @@ impl Engine {
 
     /// Connexions inactives gardées pour `site` (pour l'affichage / les tests).
     pub fn idle_connections(&self, site: &str) -> usize {
-        self.sites.get(site).map_or(0, |p| p.idle.lock().unwrap().len())
+        self.sites.get(site).map_or(0, |p| p.idle.lock().len())
     }
 
     /// Arrête un élément en cours : ses connexions sont fermées, il passe à l'état `Stopped`.
     pub fn stop(&self, id: ItemId) -> bool {
-        self.running.lock().unwrap().get(&id).map(AbortHandle::abort).is_some()
+        self.running.lock().get(&id).map(AbortHandle::abort).is_some()
     }
 
     pub fn stop_all(&self) {
-        for h in self.running.lock().unwrap().values() {
+        for h in self.running.lock().values() {
             h.abort();
         }
     }
@@ -165,7 +190,7 @@ impl Engine {
     }
 
     fn pool(&self, site: &str) -> Res<Arc<SitePool>> {
-        self.sites.get(site).cloned().ok_or_else(|| SessionError::Other(format!("site inconnu : {site}")))
+        self.sites.get(site).cloned().ok_or_else(|| SessionError::UnknownSite(site.to_string()))
     }
 
     /// Traite la file jusqu'à ce qu'il ne reste rien à lancer.
@@ -174,22 +199,26 @@ impl Engine {
         let mut by_task: HashMap<tokio::task::Id, ItemId> = HashMap::new();
         loop {
             loop {
-                let next = {
-                    let q = self.queue.lock().unwrap();
-                    let load = self.load.lock().unwrap();
-                    q.next_runnable(|it| load.allows(it, &|s| self.limits(s), self.opts.max_total))
-                };
-                let Some(id) = next else { break };
+                // Pick and mark the item under one lock: nobody can remove it in between.
                 let item = {
-                    let mut q = self.queue.lock().unwrap();
+                    let mut q = self.queue.lock();
+                    let next = {
+                        let load = self.load.lock();
+                        q.next_runnable(|it| load.allows(it, &|s| self.limits(s), self.opts.max_total))
+                    };
+                    let Some(id) = next else { break };
                     q.set_state(id, ItemState::Running);
-                    q.get(id).cloned().expect("élément présent")
+                    match q.get(id).cloned() {
+                        Some(item) => item,
+                        None => continue,
+                    }
                 };
-                self.load.lock().unwrap().start(&item);
+                let id = item.id;
+                self.load.lock().start(&item);
                 let me = self.clone();
                 let handle = tasks.spawn(async move { me.process(item).await });
                 by_task.insert(handle.id(), id);
-                self.running.lock().unwrap().insert(id, handle);
+                self.running.lock().insert(id, handle);
             }
             let Some(joined) = tasks.join_next_with_id().await else { break };
             let (task_id, cancelled) = match joined {
@@ -197,10 +226,10 @@ impl Engine {
                 Err(e) => (e.id(), e.is_cancelled()),
             };
             let Some(id) = by_task.remove(&task_id) else { continue };
-            self.running.lock().unwrap().remove(&id);
-            let mut q = self.queue.lock().unwrap();
+            self.running.lock().remove(&id);
+            let mut q = self.queue.lock();
             if let Some(item) = q.get(id).cloned() {
-                self.load.lock().unwrap().finish(&item);
+                self.load.lock().finish(&item);
                 if cancelled {
                     q.set_state(id, ItemState::Stopped);
                     self.emit(EngineEvent::Stopped { id });
@@ -227,7 +256,7 @@ impl Engine {
                 if attempt <= self.opts.retries {
                     self.emit(EngineEvent::Retrying { id, attempt, error });
                     tokio::time::sleep(self.opts.retry_delay).await;
-                    if let Some(i) = self.queue.lock().unwrap().get_mut(id) {
+                    if let Some(i) = self.queue.lock().get_mut(id) {
                         i.attempts = attempt;
                     }
                     (ItemState::Waiting, EngineEvent::Started { id })
@@ -237,7 +266,7 @@ impl Engine {
             }
         };
         let retry = state == ItemState::Waiting;
-        self.queue.lock().unwrap().set_state(id, state);
+        self.queue.lock().set_state(id, state);
         if !retry {
             self.emit(event);
         }
@@ -392,7 +421,7 @@ impl Engine {
             }
         };
         let (Some(src), Some(dstc)) = (a.as_ftp(), b.as_ftp()) else {
-            return Err(SessionError::Other("FXP possible uniquement entre deux serveurs FTP/FTPS".into()));
+            return Err(SessionError::FxpNeedsFtp);
         };
         let opts = FxpOptions { offset, ..self.opts.fxp.clone() };
         fxp(src, &item.src.path, dstc, &dst, &opts).await?;
@@ -405,14 +434,11 @@ impl Engine {
     async fn expand(&self, item: &QueueItem) -> Res<usize> {
         let kind = item.kind();
         let src_name = match kind {
-            TransferKind::Upload => Path::new(&item.src.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default(),
+            TransferKind::Upload => Path::new(&item.src.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             _ => rpath::split(&item.src.path).1.to_string(),
         };
         if let Some(r) = self.skip_reason(item, &src_name, true, None) {
-            self.queue.lock().unwrap().set_state(item.id, ItemState::Skipped(r));
+            self.queue.lock().set_state(item.id, ItemState::Skipped(r));
             return Ok(0);
         }
 
@@ -467,7 +493,7 @@ impl Engine {
             }
         }
         let n = children.len();
-        self.queue.lock().unwrap().insert_children(item.id, children);
+        self.queue.lock().insert_children(item.id, children);
         Ok(n)
     }
 }

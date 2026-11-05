@@ -17,11 +17,7 @@ pub fn normalize(path: &str) -> String {
 
 /// Résout `path` par rapport au répertoire absolu `base`.
 pub fn join(base: &str, path: &str) -> String {
-    if path.starts_with('/') {
-        normalize(path)
-    } else {
-        normalize(&format!("{base}/{path}"))
-    }
+    if path.starts_with('/') { normalize(path) } else { normalize(&format!("{base}/{path}")) }
 }
 
 /// Sépare un chemin en (répertoire parent, nom). `"a"` → `(None, "a")`, `"/a"` → `(Some("/"), "a")`.

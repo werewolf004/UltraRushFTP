@@ -12,11 +12,7 @@ use std::path::{Component, Path, PathBuf, Prefix};
 /// `/` sont remplacés par `\`. Un chemin relatif, déjà verbatim, ou non représentable en
 /// UTF-8 est renvoyé tel quel. Hors Windows, la fonction renvoie le chemin inchangé.
 pub fn to_verbatim(path: &Path) -> PathBuf {
-    if cfg!(windows) {
-        verbatim_windows(path).unwrap_or_else(|| path.to_path_buf())
-    } else {
-        path.to_path_buf()
-    }
+    if cfg!(windows) { verbatim_windows(path).unwrap_or_else(|| path.to_path_buf()) } else { path.to_path_buf() }
 }
 
 fn verbatim_windows(path: &Path) -> Option<PathBuf> {
@@ -58,19 +54,13 @@ mod tests {
 
     #[test]
     fn disk_path_is_normalized() {
-        assert_eq!(
-            to_verbatim(Path::new(r"C:\a\.\b\..\c/d")),
-            PathBuf::from(r"\\?\C:\a\c\d")
-        );
+        assert_eq!(to_verbatim(Path::new(r"C:\a\.\b\..\c/d")), PathBuf::from(r"\\?\C:\a\c\d"));
         assert_eq!(to_verbatim(Path::new(r"D:\")), PathBuf::from(r"\\?\D:\"));
     }
 
     #[test]
     fn unc_path() {
-        assert_eq!(
-            to_verbatim(Path::new(r"\\nas\share\x\y")),
-            PathBuf::from(r"\\?\UNC\nas\share\x\y")
-        );
+        assert_eq!(to_verbatim(Path::new(r"\\nas\share\x\y")), PathBuf::from(r"\\?\UNC\nas\share\x\y"));
     }
 
     #[test]

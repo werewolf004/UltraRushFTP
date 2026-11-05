@@ -28,8 +28,8 @@ impl MaskSetting {
     }
 
     /// Masque compilé ; `Err` si l'expression régulière est invalide.
-    pub fn compile(&self) -> Result<Pattern, String> {
-        if self.regex { Pattern::regex(&self.mask).map_err(|e| e.to_string()) } else { Ok(Pattern::wildcard(&self.mask)) }
+    pub fn compile(&self) -> Result<Pattern, regex::Error> {
+        if self.regex { Pattern::regex(&self.mask) } else { Ok(Pattern::wildcard(&self.mask)) }
     }
 }
 
@@ -85,13 +85,7 @@ impl SkipSettings {
                     Some(rest) => (true, MaskSetting { mask: rest.to_string(), regex: r.mask.regex }),
                     None => (r.full_path, r.mask.clone()),
                 };
-                Some(SkipRule {
-                    pattern: mask.compile().ok()?,
-                    action: r.action,
-                    target: r.target,
-                    directions: r.directions,
-                    full_path,
-                })
+                Some(SkipRule { pattern: mask.compile().ok()?, action: r.action, target: r.target, directions: r.directions, full_path })
             })
             .collect();
         SkipList { enabled: self.enabled, rules, skip_zero_byte_files: self.skip_zero_byte_files, skip_empty_dirs: self.skip_empty_dirs }

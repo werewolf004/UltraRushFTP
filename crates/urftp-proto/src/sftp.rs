@@ -9,7 +9,9 @@
 //! - Proxy SOCKS/HTTP via [`crate::proxy`].
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use std::time::Duration;
 
 use russh::client::{self, AuthResult, Handle};
@@ -31,9 +33,15 @@ const CHUNK: usize = 64 * 1024;
 pub enum SftpAuth {
     Password(String),
     /// Fichier de clé privée (OpenSSH, PEM ou PuTTY `.ppk`).
-    KeyFile { path: PathBuf, passphrase: Option<String> },
+    KeyFile {
+        path: PathBuf,
+        passphrase: Option<String>,
+    },
     /// Clé privée fournie en texte.
-    KeyText { text: String, passphrase: Option<String> },
+    KeyText {
+        text: String,
+        passphrase: Option<String>,
+    },
 }
 
 impl std::fmt::Debug for SftpAuth {
@@ -159,7 +167,7 @@ impl client::Handler for Handler {
 
     async fn check_server_key(&mut self, key: &PublicKeyOrCertificate) -> Result<bool, Self::Error> {
         let fp = host_key_fingerprint(key);
-        *self.seen.lock().unwrap() = Some(fp.clone());
+        *self.seen.lock() = Some(fp.clone());
         Ok(match &self.policy {
             HostKeyPolicy::AcceptAny => true,
             HostKeyPolicy::Known(list) => list.iter().any(|k| k.trim() == fp),
@@ -178,14 +186,7 @@ pub struct SftpClient {
 
 impl SftpClient {
     /// Connexion SSH, vérification de la clé d'hôte, authentification, ouverture du sous-système SFTP.
-    pub async fn connect(
-        host: &str,
-        port: u16,
-        user: &str,
-        auth: &SftpAuth,
-        config: SftpConfig,
-        log: Option<LogSink>,
-    ) -> Result<Self> {
+    pub async fn connect(host: &str, port: u16, user: &str, auth: &SftpAuth, config: SftpConfig, log: Option<LogSink>) -> Result<Self> {
         let status = |m: String| {
             if let Some(l) = &log {
                 l(LogLine::Status(m));
@@ -204,27 +205,22 @@ impl SftpClient {
 
         let seen = Arc::new(Mutex::new(None));
         let handler = Handler { policy: config.host_key.clone(), seen: seen.clone() };
-        let ssh_config = client::Config {
-            keepalive_interval: config.keepalive,
-            inactivity_timeout: None,
-            ..client::Config::default()
-        };
+        let ssh_config = client::Config { keepalive_interval: config.keepalive, inactivity_timeout: None, ..client::Config::default() };
         let connected = tokio::time::timeout(ct, client::connect_stream(Arc::new(ssh_config), tcp, handler)).await;
         let mut ssh = match connected {
             Err(_) => return Err(SftpError::Timeout),
             Ok(Ok(h)) => h,
             Ok(Err(e)) => {
-                let fingerprint = seen.lock().unwrap().clone();
+                let fingerprint = seen.lock().clone();
                 return Err(match (e, fingerprint) {
-                    (russh::Error::UnknownKey, Some(fingerprint)) => SftpError::HostKey {
-                        fingerprint,
-                        reason: "clé inconnue ou différente de celle approuvée".into(),
-                    },
+                    (russh::Error::UnknownKey, Some(fingerprint)) => {
+                        SftpError::HostKey { fingerprint, reason: "clé inconnue ou différente de celle approuvée".into() }
+                    }
                     (e, _) => SftpError::Ssh(e.to_string()),
                 });
             }
         };
-        let fingerprint = seen.lock().unwrap().clone().unwrap_or_default();
+        let fingerprint = seen.lock().clone().unwrap_or_default();
         status(format!("Clé du serveur : {fingerprint}"));
 
         let result = match auth {
@@ -294,10 +290,7 @@ impl SftpClient {
     pub async fn list(&mut self, dir: Option<&str>) -> Result<Vec<RemoteEntry>> {
         let target = dir.map_or_else(|| self.cwd.clone(), |d| self.abs(d));
         let entries = self.sftp.read_dir(target.clone()).await.map_err(op_err("LIST", &target))?;
-        Ok(entries
-            .filter(|e| e.file_name() != "." && e.file_name() != "..")
-            .map(|e| to_entry(e.file_name(), &e.metadata()))
-            .collect())
+        Ok(entries.filter(|e| e.file_name() != "." && e.file_name() != "..").map(|e| to_entry(e.file_name(), &e.metadata())).collect())
     }
 
     pub async fn mkdir(&mut self, p: &str) -> Result<()> {
@@ -318,11 +311,7 @@ impl SftpClient {
     /// Renomme ou déplace. `to` peut être un nom simple (même dossier) ou un chemin.
     pub async fn rename(&mut self, from: &str, to: &str) -> Result<()> {
         let f = self.abs(from);
-        let t = if to.contains('/') {
-            self.abs(to)
-        } else {
-            path::join(path::split(&f).0.unwrap_or("/"), to)
-        };
+        let t = if to.contains('/') { self.abs(to) } else { path::join(path::split(&f).0.unwrap_or("/"), to) };
         self.sftp.rename(f.clone(), t).await.map_err(op_err("RENAME", &f))
     }
 
@@ -369,11 +358,8 @@ impl SftpClient {
         R: AsyncRead + Unpin + ?Sized,
     {
         let t = self.abs(remote);
-        let flags = if offset > 0 {
-            OpenFlags::WRITE | OpenFlags::CREATE
-        } else {
-            OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE
-        };
+        let flags =
+            if offset > 0 { OpenFlags::WRITE | OpenFlags::CREATE } else { OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE };
         let mut file = self.sftp.open_with_flags(t.clone(), flags).await.map_err(op_err("OPEN", &t))?;
         if offset > 0 {
             file.seek(std::io::SeekFrom::Start(offset)).await?;
@@ -397,10 +383,7 @@ impl SftpClient {
     pub async fn quit(self) -> Result<()> {
         self.status("Déconnexion");
         let _ = self.sftp.close().await;
-        self.ssh
-            .disconnect(russh::Disconnect::ByApplication, "", "fr")
-            .await
-            .map_err(ssh_err)
+        self.ssh.disconnect(russh::Disconnect::ByApplication, "", "fr").await.map_err(ssh_err)
     }
 }
 
@@ -414,10 +397,9 @@ async fn limit<T>(d: Duration, f: impl Future<Output = Result<T>>) -> Result<T> 
 
 fn load_key(auth: &SftpAuth) -> Result<russh::keys::PrivateKey> {
     let (text, pass) = match auth {
-        SftpAuth::KeyFile { path, passphrase } => (
-            std::fs::read_to_string(path).map_err(|e| SftpError::Key(format!("{} : {e}", path.display())))?,
-            passphrase.as_deref(),
-        ),
+        SftpAuth::KeyFile { path, passphrase } => {
+            (std::fs::read_to_string(path).map_err(|e| SftpError::Key(format!("{} : {e}", path.display())))?, passphrase.as_deref())
+        }
         SftpAuth::KeyText { text, passphrase } => (text.clone(), passphrase.as_deref()),
         SftpAuth::Password(_) => unreachable!("pas de clé pour l'authentification par mot de passe"),
     };
@@ -457,14 +439,7 @@ pub fn unix_to_ftptime(secs: i64) -> FtpTime {
     let day = (doy - (153 * mp + 2) / 5 + 1) as u8;
     let month = if mp < 10 { mp + 3 } else { mp - 9 } as u8;
     let year = (yoe + era * 400 + i64::from(month <= 2)) as i32;
-    FtpTime {
-        year: Some(year),
-        month,
-        day,
-        hour: (rem / 3600) as u8,
-        minute: (rem % 3600 / 60) as u8,
-        second: (rem % 60) as u8,
-    }
+    FtpTime { year: Some(year), month, day, hour: (rem / 3600) as u8, minute: (rem % 3600 / 60) as u8, second: (rem % 60) as u8 }
 }
 
 /// Mode Unix → `drwxr-xr-x`.

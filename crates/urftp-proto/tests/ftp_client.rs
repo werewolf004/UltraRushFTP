@@ -1,3 +1,5 @@
+// Test harness (mock servers, fixtures): a failed unwrap/expect is a test failure.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod common;
 
 use std::sync::{Arc, Mutex};

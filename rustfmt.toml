@@ -1,0 +1,4 @@
+# Shared formatting rules; CI runs `cargo fmt --all -- --check`.
+edition = "2024"
+max_width = 140
+use_small_heuristics = "Max"

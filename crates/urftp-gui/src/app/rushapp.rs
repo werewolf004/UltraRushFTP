@@ -6,7 +6,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use urftp_core::pattern::Pattern;
-use urftp_script::{Host, Value, has_flag};
+use urftp_script::{Host, HostError, ScriptError, Value, has_flag};
 
 use super::*;
 
@@ -135,15 +135,15 @@ impl Drop for Stats {
 
 impl UltraRushApp {
     /// Exécute un script (`RushScript`) ; les erreurs portent leur numéro de ligne.
-    pub(super) fn run_script(&mut self, src: &str, ctx: &egui::Context) -> Result<(), String> {
+    pub(super) fn run_script(&mut self, src: &str, ctx: &egui::Context) -> Result<(), ScriptError> {
         let mut host = AppHost { app: self, ctx };
-        urftp_script::run(src, &mut host).map_err(|e| e.to_string())
+        urftp_script::run(src, &mut host)
     }
 
     /// Évalue une expression (`Invoke`) et renvoie son texte.
-    pub(super) fn invoke(&mut self, src: &str, ctx: &egui::Context) -> Result<String, String> {
+    pub(super) fn invoke(&mut self, src: &str, ctx: &egui::Context) -> Result<String, ScriptError> {
         let mut host = AppHost { app: self, ctx };
-        urftp_script::evaluate(src, &mut host).map(|v| v.to_text()).map_err(|e| e.to_string())
+        urftp_script::evaluate(src, &mut host).map(|v| v.to_text())
     }
 }
 
@@ -155,7 +155,7 @@ impl UltraRushApp {
         if self.ipc_rx.is_none() {
             let (tx, rx) = std::sync::mpsc::channel();
             let wake = ctx.clone();
-            match urftp_ipc::server::Server::start(move |req| {
+            match urftp_sys::server::Server::start(move |req| {
                 let _ = tx.send(req);
                 wake.request_repaint();
             }) {
@@ -169,7 +169,7 @@ impl UltraRushApp {
         }
         let requests: Vec<_> = self.ipc_rx.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
         for req in requests {
-            use urftp_ipc::server::Request;
+            use urftp_sys::server::Request;
             match req {
                 Request::Invoke { expression, reply } => {
                     let answer = self.invoke(&expression, ctx).unwrap_or_else(|e| format!("Erreur : {e}"));
@@ -189,7 +189,7 @@ impl UltraRushApp {
         }
     }
 
-    fn note_ipc(&mut self, what: &str, r: Result<(), String>) {
+    fn note_ipc(&mut self, what: &str, r: Result<(), ScriptError>) {
         let t = self.active;
         self.tabs[t].script_out.push(match r {
             Ok(()) => (true, format!("[mIRC] {what} exécuté")),
@@ -201,13 +201,10 @@ impl UltraRushApp {
     pub(super) fn forward_raw_replies(&mut self) {
         for t in 0..self.tabs.len() {
             for (site, cmd, lines, ok) in std::mem::take(&mut self.tabs[t].raw_replies) {
-                let pos = self
-                    .raw_callbacks
-                    .iter()
-                    .position(|(s, c, _)| s.eq_ignore_ascii_case(&site) && c == &cmd);
+                let pos = self.raw_callbacks.iter().position(|(s, c, _)| s.eq_ignore_ascii_case(&site) && c == &cmd);
                 if let Some(i) = pos {
                     let (_, _, cb) = self.raw_callbacks.remove(i);
-                    urftp_ipc::server::send_raw_callback(cb, ok, &site, &cmd, &lines);
+                    urftp_sys::server::send_raw_callback(cb, ok, &site, &cmd, &lines);
                 }
             }
         }
@@ -235,8 +232,8 @@ fn b(a: &[Value], i: usize) -> bool {
     a.get(i).and_then(Value::as_bool).unwrap_or(false)
 }
 
-fn want(a: &[Value], count: usize, name: &str) -> Result<(), String> {
-    if a.len() < count { Err(format!("{name} attend {count} argument(s), {} reçu(s)", a.len())) } else { Ok(()) }
+fn want(a: &[Value], count: usize, name: &str) -> Result<(), HostError> {
+    if a.len() < count { Err(HostError::Arity { name: name.into(), expected: count, got: a.len() }) } else { Ok(()) }
 }
 
 impl AppHost<'_> {
@@ -250,10 +247,10 @@ impl AppHost<'_> {
         list.split(sep).map(str::trim).filter(|x| !x.is_empty()).map(String::from).collect()
     }
 
-    fn site(&self, name: &str) -> Result<Site, String> {
-        let site = self.app.sites.book.find_by_name(name).cloned().ok_or_else(|| format!("site inconnu : {name}"))?;
+    fn site(&self, name: &str) -> Result<Site, HostError> {
+        let site = self.app.sites.book.find_by_name(name).cloned().ok_or_else(|| HostError::UnknownSite(name.into()))?;
         if !site.enabled {
-            return Err(format!("site désactivé : {name}"));
+            return Err(HostError::DisabledSite(name.into()));
         }
         Ok(site)
     }
@@ -309,14 +306,14 @@ impl AppHost<'_> {
     }
 
     /// Dossier de départ pour `Login`/`CWD` : signet (`RS_BOOKMARK`) ou chemin.
-    fn start_dir(site: &Site, param: &str, flags: i64) -> Result<Option<String>, String> {
+    fn start_dir(site: &Site, param: &str, flags: i64) -> Result<Option<String>, HostError> {
         if param.is_empty() {
             return Ok(None);
         }
         if has_flag(flags, "RS_BOOKMARK") {
             return match Self::bookmark(site, param) {
                 Some(bm) => Ok(Some(bm.remote_dir.clone())),
-                None => Err(format!("signet « {param} » absent du site {}", site.name)),
+                None => Err(HostError::UnknownBookmark { bookmark: param.into(), site: Some(site.name.clone()) }),
             };
         }
         Ok(Some(param.to_string()))
@@ -324,7 +321,7 @@ impl AppHost<'_> {
 
     // ------------------------------------------------------------------ RushApp.FTP.*
 
-    fn login(&mut self, a: &[Value]) -> Result<(), String> {
+    fn login(&mut self, a: &[Value]) -> Result<(), HostError> {
         want(a, 3, "Login")?;
         let (list, param, flags) = (s(a, 0), s(a, 1), n(a, 2));
         let mut sites = Vec::new();
@@ -369,7 +366,7 @@ impl AppHost<'_> {
         Ok(())
     }
 
-    fn logout(&mut self, a: &[Value]) -> Result<(), String> {
+    fn logout(&mut self, a: &[Value]) -> Result<(), HostError> {
         want(a, 2, "Logout")?;
         let names = self.names(&s(a, 0));
         for (t, side) in self.panels(&names) {
@@ -379,7 +376,7 @@ impl AppHost<'_> {
         Ok(())
     }
 
-    fn cwd(&mut self, a: &[Value]) -> Result<(), String> {
+    fn cwd(&mut self, a: &[Value]) -> Result<(), HostError> {
         want(a, 3, "CWD")?;
         let (names, param, flags) = (self.names(&s(a, 0)), s(a, 1), n(a, 2));
         for p in self.panels(&names) {
@@ -409,10 +406,13 @@ impl AppHost<'_> {
         let mut found = self.panels(names);
         if has_flag(flags, "RS_LOGIN") {
             for name in names {
-                if !found.iter().any(|&(t, sd)| matches!(&self.app.tabs[t].sides[sd], Side::Remote(r) if r.profile.name.eq_ignore_ascii_case(name))) {
+                if !found
+                    .iter()
+                    .any(|&(t, sd)| matches!(&self.app.tabs[t].sides[sd], Side::Remote(r) if r.profile.name.eq_ignore_ascii_case(name)))
+                {
                     match self.site(name) {
                         Ok(site) => found.push(self.connect(&site, None, flags)),
-                        Err(e) => self.log(LogKind::Error, e),
+                        Err(e) => self.log(LogKind::Error, e.to_string()),
                     }
                 }
             }
@@ -431,11 +431,11 @@ impl AppHost<'_> {
         found
     }
 
-    fn raw(&mut self, a: &[Value]) -> Result<(), String> {
+    fn raw(&mut self, a: &[Value]) -> Result<(), HostError> {
         want(a, 3, "RAW")?;
         let (names, cmd, flags) = (self.names(&s(a, 0)), s(a, 1), n(a, 2));
         if cmd.trim().is_empty() {
-            return Err("RAW : commande vide".into());
+            return Err(HostError::InvalidArgument { function: "RAW".into(), reason: "commande vide".into() });
         }
         let targets = self.targets(&names, flags);
         if targets.is_empty() {
@@ -455,11 +455,13 @@ impl AppHost<'_> {
         Ok(())
     }
 
-    fn delete(&mut self, a: &[Value]) -> Result<(), String> {
+    fn delete(&mut self, a: &[Value]) -> Result<(), HostError> {
         want(a, 4, "Delete")?;
         let (names, path, item, flags) = (self.names(&s(a, 0)), s(a, 1), s(a, 2), n(a, 3));
         if names.is_empty() {
-            return Err("Delete : la liste de sites ne peut pas être vide".into());
+            return Err(HostError::InvalidArgument {
+                function: "Delete".into(), reason: "la liste de sites ne peut pas être vide".into()
+            });
         }
         for p in self.targets(&names, flags) {
             let site_name = match &self.app.tabs[p.0].sides[p.1] {
@@ -490,15 +492,17 @@ impl AppHost<'_> {
     }
 
     /// Dossier d'une extrémité : chemin (`dir_flag`) ou signet du site / signet local.
-    fn folder(site: Option<&Site>, value: &str, dir_flag: bool, local: bool) -> Result<String, String> {
+    fn folder(site: Option<&Site>, value: &str, dir_flag: bool, local: bool) -> Result<String, HostError> {
         if dir_flag || value.is_empty() {
             return Ok(value.to_string());
         }
-        let bm = site.and_then(|st| Self::bookmark(st, value)).ok_or_else(|| format!("signet « {value} » introuvable"))?;
+        let bm = site
+            .and_then(|st| Self::bookmark(st, value))
+            .ok_or_else(|| HostError::UnknownBookmark { bookmark: value.into(), site: site.map(|st| st.name.clone()) })?;
         Ok(if local { bm.local_dir.clone() } else { bm.remote_dir.clone() })
     }
 
-    fn transfer(&mut self, a: &[Value]) -> Result<(), String> {
+    fn transfer(&mut self, a: &[Value]) -> Result<(), HostError> {
         want(a, 8, "Transfer")?;
         let handle = n(a, 0);
         let (src_list, src_folder, src_item) = (s(a, 1), s(a, 2), s(a, 3));
@@ -524,7 +528,9 @@ impl AppHost<'_> {
                 pairs.push((None, Some(self.site(d)?), src_folder.clone(), src_item.clone()));
             }
         } else if down {
-            let src = srcs.first().ok_or("Transfer : site source manquant")?;
+            let src = srcs
+                .first()
+                .ok_or_else(|| HostError::InvalidArgument { function: "Transfer".into(), reason: "site source manquant".into() })?;
             pairs.push((Some(self.site(src)?), None, src_folder.clone(), src_item.clone()));
         } else if let Some(src) = srcs.first() {
             let src = self.site(src)?;
@@ -538,7 +544,7 @@ impl AppHost<'_> {
             }
         }
         if pairs.is_empty() {
-            return Err("Transfer : aucune paire source/destination".into());
+            return Err(HostError::InvalidArgument { function: "Transfer".into(), reason: "aucune paire source/destination".into() });
         }
 
         let tab = if handle > 0 && (handle as usize) <= self.app.tabs.len() { handle as usize - 1 } else { self.app.active };
@@ -560,7 +566,7 @@ impl AppHost<'_> {
             let src = Endpoint { site: src_site.as_ref().map(|x| x.name.clone()), path: join(&src_site, &sdir, &sitem) };
             let dst = Endpoint { site: dst_site.as_ref().map(|x| x.name.clone()), path: join(&dst_site, &ddir, &dname) };
             let rank = prio.rank(&sitem);
-            self.app.tabs[tab].queue.lock().unwrap().push(src, dst, !is_file, None, rank);
+            self.app.tabs[tab].queue.lock().push(src, dst, !is_file, None, rank);
             added += 1;
         }
         self.log(LogKind::Status, format!("Transfer : {added} élément(s) ajouté(s) à la file"));
@@ -572,22 +578,31 @@ impl AppHost<'_> {
         Ok(())
     }
 
-    fn remove_queue(&mut self, a: &[Value]) -> Result<(), String> {
+    fn remove_queue(&mut self, a: &[Value]) -> Result<(), HostError> {
         want(a, 4, "RemoveQueue")?;
         let (source, dest, param, flags) = (s(a, 0), s(a, 1), s(a, 2), n(a, 3));
         let states = ["RS_TRANSFER", "RS_NORMAL", "RS_FAIL", "RS_WAITING"];
         if !states.iter().any(|f| has_flag(flags, f)) {
-            return Err("RemoveQueue : au moins un drapeau d'état est nécessaire (RS_TRANSFER, RS_NORMAL, RS_FAIL, RS_WAITING)".into());
+            return Err(HostError::InvalidArgument {
+                function: "RemoveQueue".into(),
+                reason: "au moins un drapeau d'état est nécessaire (RS_TRANSFER, RS_NORMAL, RS_FAIL, RS_WAITING)".into(),
+            });
         }
-        let pattern = if param.is_empty() {
-            None
-        } else if has_flag(flags, "RS_EXPR") {
-            Some(Pattern::regex(&param).map_err(|e| format!("RemoveQueue : expression invalide : {e}"))?)
-        } else {
-            Some(Pattern::wildcard(&param))
-        };
+        let pattern =
+            if param.is_empty() {
+                None
+            } else if has_flag(flags, "RS_EXPR") {
+                Some(Pattern::regex(&param).map_err(|e| HostError::InvalidArgument {
+                    function: "RemoveQueue".into(),
+                    reason: format!("expression invalide : {e}"),
+                })?)
+            } else {
+                Some(Pattern::wildcard(&param))
+            };
         let endpoint_ok = |want: &str, e: &Endpoint| -> bool {
-            want.is_empty() || (want.eq_ignore_ascii_case("local") && e.is_local()) || e.site.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(want))
+            want.is_empty()
+                || (want.eq_ignore_ascii_case("local") && e.is_local())
+                || e.site.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(want))
         };
         let tabs: Vec<usize> = if has_flag(flags, "RS_CURRENT") { vec![self.app.active] } else { (0..self.app.tabs.len()).collect() };
         let (mut removed, mut stopped) = (0, 0);
@@ -604,25 +619,34 @@ impl AppHost<'_> {
                 } else {
                     it.dst.path.rsplit(['/', '\\']).next().unwrap_or_default().to_string()
                 };
-                state_ok && endpoint_ok(&source, &it.src) && endpoint_ok(&dest, &it.dst) && pattern.as_ref().is_none_or(|p| p.matches(&target))
+                state_ok
+                    && endpoint_ok(&source, &it.src)
+                    && endpoint_ok(&dest, &it.dst)
+                    && pattern.as_ref().is_none_or(|p| p.matches(&target))
             };
-            let running: Vec<ItemId> =
-                self.app.tabs[t].queue.lock().unwrap().items().iter().filter(|i| i.state == ItemState::Running && matches(i)).map(|i| i.id).collect();
+            let running: Vec<ItemId> = self.app.tabs[t]
+                .queue
+                .lock()
+                .items()
+                .iter()
+                .filter(|i| i.state == ItemState::Running && matches(i))
+                .map(|i| i.id)
+                .collect();
             for id in running {
                 self.app.tabs[t].stop_item(id);
                 stopped += 1;
             }
-            removed += self.app.tabs[t].queue.lock().unwrap().remove_where(&matches);
+            removed += self.app.tabs[t].queue.lock().remove_where(&matches);
         }
         self.log(LogKind::Status, format!("RemoveQueue : {removed} retiré(s), {stopped} arrêté(s)"));
         self.popup(flags);
         Ok(())
     }
 
-    fn enable_site(&mut self, a: &[Value], enable: bool) -> Result<(), String> {
+    fn enable_site(&mut self, a: &[Value], enable: bool) -> Result<(), HostError> {
         want(a, 2, if enable { "EnableSite" } else { "DisableSite" })?;
         let (name, this_session) = (s(a, 0), b(a, 1));
-        let id = self.app.sites.book.find_by_name(&name).map(|x| x.id).ok_or_else(|| format!("site inconnu : {name}"))?;
+        let id = self.app.sites.book.find_by_name(&name).map(|x| x.id).ok_or_else(|| HostError::UnknownSite(name.clone()))?;
         if let Some(site) = self.app.sites.book.find_mut(id) {
             site.enabled = enable;
         }
@@ -637,7 +661,7 @@ impl AppHost<'_> {
         let mut i = 0;
         while i < self.app.tabs.len() && self.app.tabs.len() > 1 {
             let t = &self.app.tabs[i];
-            let empty = t.sides.iter().all(|s| matches!(s, Side::Local(_))) && t.queue.lock().unwrap().items().is_empty();
+            let empty = t.sides.iter().all(|s| matches!(s, Side::Local(_))) && t.queue.lock().items().is_empty();
             if empty {
                 self.app.tabs.remove(i);
             } else {
@@ -649,7 +673,7 @@ impl AppHost<'_> {
 }
 
 impl Host for AppHost<'_> {
-    fn call(&mut self, name: &str, a: &[Value]) -> Result<Value, String> {
+    fn call(&mut self, name: &str, a: &[Value]) -> Result<Value, HostError> {
         match name.to_ascii_lowercase().as_str() {
             "rushapp.ftp.login" => self.login(a)?,
             "rushapp.ftp.logout" => self.logout(a)?,
@@ -669,12 +693,12 @@ impl Host for AppHost<'_> {
                 self.log(LogKind::Status, "InputQuery : la saisie interactive n'est pas encore disponible, considérée comme annulée");
                 return Ok(Value::Nil);
             }
-            _ => return Err(format!("fonction inconnue : {name}")),
+            _ => return Err(HostError::UnknownFunction(name.into())),
         }
         Ok(Value::Nil)
     }
 
-    fn get(&mut self, name: &str) -> Result<Value, String> {
+    fn get(&mut self, name: &str) -> Result<Value, HostError> {
         let st = &self.app.stats;
         let remote = || self.app.tabs.iter().flat_map(|t| t.sides.iter());
         Ok(match name.to_ascii_lowercase().as_str() {
@@ -693,8 +717,12 @@ impl Host for AppHost<'_> {
                 Value::Int(days.max(0))
             }
             "rushapp.poolinfo" => {
-                let running: usize = self.app.tabs.iter().map(|t| t.queue.lock().unwrap().items().iter().filter(|i| i.state == ItemState::Running).count()).sum();
-                Value::Str(format!("{running} transfert(s) en cours, {} file(s) active(s)", self.app.tabs.iter().filter(|t| t.engine.is_some()).count()))
+                let running: usize =
+                    self.app.tabs.iter().map(|t| t.queue.lock().items().iter().filter(|i| i.state == ItemState::Running).count()).sum();
+                Value::Str(format!(
+                    "{running} transfert(s) en cours, {} file(s) active(s)",
+                    self.app.tabs.iter().filter(|t| t.engine.is_some()).count()
+                ))
             }
             "rushapp.containers.containercount" => Value::Int(self.app.tabs.len() as i64),
             "rushapp.containers.connectedsitecount" => {
@@ -703,21 +731,24 @@ impl Host for AppHost<'_> {
             "rushapp.containers.transfersitecount" => Value::Int(self.app.tabs.iter().filter(|t| t.engine.is_some()).count() as i64),
             "rushapp.downloadbw" => Value::Int(st.bandwidth().0.round() as i64),
             "rushapp.uploadbw" => Value::Int(st.bandwidth().1.round() as i64),
-            _ => return Err(format!("propriété inconnue : {name}")),
+            _ => return Err(HostError::UnknownProperty(name.into())),
         })
     }
 
-    fn set(&mut self, name: &str, value: Value) -> Result<(), String> {
+    fn set(&mut self, name: &str, value: Value) -> Result<(), HostError> {
         match name.to_ascii_lowercase().as_str() {
             "rushapp.ftp.splitter" => {
                 let v = value.to_text();
                 if v.is_empty() {
-                    return Err("le séparateur ne peut pas être vide".into());
+                    return Err(HostError::InvalidArgument {
+                        function: "RushApp.FTP.Splitter".into(),
+                        reason: "le séparateur ne peut pas être vide".into(),
+                    });
                 }
                 self.app.splitter = v;
                 Ok(())
             }
-            _ => Err(format!("propriété non modifiable : {name}")),
+            _ => Err(HostError::ReadOnlyProperty(name.into())),
         }
     }
 }

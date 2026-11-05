@@ -1,3 +1,5 @@
+// Test harness (mock servers, fixtures): a failed unwrap/expect is a test failure.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod common;
 
 use common::{MockConfig, MockServer, MockTls};
@@ -52,12 +54,7 @@ async fn implicit_tls() {
 #[tokio::test]
 async fn data_channels_reuse_the_tls_session() {
     // Comme vsftpd avec require_ssl_reuse=YES.
-    let srv = MockServer::start(MockConfig {
-        tls: MockTls::Explicit,
-        require_session_reuse: true,
-        ..MockConfig::default()
-    })
-    .await;
+    let srv = MockServer::start(MockConfig { tls: MockTls::Explicit, require_session_reuse: true, ..MockConfig::default() }).await;
     roundtrip(&srv, config(Security::Explicit(tls(TlsVerify::AcceptAny)))).await;
     let channels = srv.data_channels();
     assert!(channels.iter().all(|&(enc, resumed)| enc && resumed), "{channels:?}");
@@ -135,11 +132,7 @@ async fn active_mode_plain_and_tls() {
 #[tokio::test]
 async fn active_mode_port_range_and_external_ip() {
     let srv = MockServer::start(MockConfig::default()).await;
-    let cfg = FtpConfig {
-        active_mode: true,
-        active_port_range: Some((50_100, 50_200)),
-        ..FtpConfig::default()
-    };
+    let cfg = FtpConfig { active_mode: true, active_port_range: Some((50_100, 50_200)), ..FtpConfig::default() };
     roundtrip(&srv, cfg).await;
     let port_cmd = srv.received().into_iter().find(|l| l.starts_with("PORT ")).unwrap();
     let n: Vec<u16> = port_cmd[5..].split(',').map(|s| s.parse().unwrap()).collect();

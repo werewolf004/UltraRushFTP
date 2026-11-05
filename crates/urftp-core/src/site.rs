@@ -322,8 +322,11 @@ impl SiteBook {
     pub fn add_site(&mut self, group: &[usize], mut site: Site) -> u64 {
         site.id = self.next_id();
         let id = site.id;
-        let target: &[usize] = if self.root.group_mut(group).is_some() { group } else { &[] };
-        self.root.group_mut(target).expect("dossier racine").sites.push(site);
+        // Unknown folder: the site goes to the root.
+        match self.root.group_mut(group) {
+            Some(g) => g.sites.push(site),
+            None => self.root.sites.push(site),
+        }
         id
     }
 

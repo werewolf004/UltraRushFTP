@@ -11,8 +11,21 @@ use crate::site::SiteBook;
 
 pub const FILE_NAME: &str = "sites.json";
 
-/// Dossier des données de l'application.
+/// Data folder chosen on the command line (`-f` / `--data`), set once at startup.
+static DATA_DIR_OVERRIDE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Uses `dir` as the data folder for the rest of the process (portable mode, `-f`).
+/// Returns `false` if a folder was already chosen (the first one is kept).
+pub fn set_data_dir(dir: PathBuf) -> bool {
+    DATA_DIR_OVERRIDE.set(dir).is_ok()
+}
+
+/// Application data folder: command-line choice, then `URUSHFTP_DATA`, then
+/// `%APPDATA%/UltraRushFTP`.
 pub fn data_dir() -> PathBuf {
+    if let Some(d) = DATA_DIR_OVERRIDE.get() {
+        return d.clone();
+    }
     if let Some(d) = std::env::var_os("URUSHFTP_DATA") {
         return PathBuf::from(d);
     }

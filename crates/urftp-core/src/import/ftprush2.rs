@@ -111,7 +111,10 @@ mod tests {
         assert_eq!(fav.name, "Favoris");
         let a = &fav.groups[0].sites[0];
         assert_eq!(fav.groups[0].name, "Scène");
-        assert_eq!((a.name.as_str(), a.host.as_str(), a.port, a.protocol), ("00.ALPHA", "alpha.example.net", 2121, SiteProtocol::FtpsExplicit));
+        assert_eq!(
+            (a.name.as_str(), a.host.as_str(), a.port, a.protocol),
+            ("00.ALPHA", "alpha.example.net", 2121, SiteProtocol::FtpsExplicit)
+        );
         assert_eq!((a.user.as_str(), a.max_transfers, a.protect_data), ("bob", 4, false));
         assert!(a.password.is_empty(), "mot de passe non importé");
         assert_eq!((a.local_dir.as_str(), a.remote_dir.as_str()), (r"C:\dl", "/incoming"));

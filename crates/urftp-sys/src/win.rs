@@ -1,0 +1,136 @@
+//! Small Win32 helpers shared by the application and the DLL: UTF-16 strings and named
+//! shared memory.
+
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::System::Memory::{
+    CreateFileMappingW, FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW, PAGE_READWRITE, UnmapViewOfFile,
+};
+
+pub use crate::decode_ansi;
+
+/// NUL-terminated UTF-16 string for the `…W` APIs.
+pub fn wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// Errors of [`SharedMem`].
+#[derive(Debug, thiserror::Error)]
+pub enum SharedMemError {
+    /// `size` must be between 1 byte and 4 GiB.
+    #[error("invalid shared memory size: {0}")]
+    InvalidSize(usize),
+    /// `CreateFileMappingW` / `OpenFileMappingW` / `MapViewOfFile` failed.
+    #[error("shared memory {name}: {source}")]
+    Os {
+        /// Name of the mapping.
+        name: String,
+        /// Error reported by Windows.
+        source: std::io::Error,
+    },
+}
+
+/// View on a named shared memory (`FTPRush`, `mIRC`).
+pub struct SharedMem {
+    handle: HANDLE,
+    view: MEMORY_MAPPED_VIEW_ADDRESS,
+    size: usize,
+}
+
+// SAFETY: the view is plain memory owned by this value and the handle is only closed in
+// `Drop`; both may move to another thread.
+unsafe impl Send for SharedMem {}
+// SAFETY: `read_string` / `write_string` only copy bytes within the `size` bytes of the
+// view. Concurrent use of one region is serialised by the protocol (one synchronous
+// `SendMessage` exchange at a time); a race can garble text but never touch memory
+// outside the view.
+unsafe impl Sync for SharedMem {}
+
+impl SharedMem {
+    /// Creates (or opens when it already exists) the shared memory `name`.
+    pub fn create(name: &str, size: usize) -> Result<Self, SharedMemError> {
+        let size32 = u32::try_from(size).ok().filter(|&s| s > 0).ok_or(SharedMemError::InvalidSize(size))?;
+        let n = wide(name);
+        // SAFETY: `n` is a valid NUL-terminated UTF-16 string living across the call; null
+        // security attributes are allowed; the returned handle is owned by `map`.
+        let handle = unsafe { CreateFileMappingW(INVALID_HANDLE_VALUE, std::ptr::null(), PAGE_READWRITE, 0, size32, n.as_ptr()) };
+        Self::map(name, handle, size)
+    }
+
+    /// Opens an existing shared memory.
+    pub fn open(name: &str, size: usize) -> Result<Self, SharedMemError> {
+        if size == 0 {
+            return Err(SharedMemError::InvalidSize(size));
+        }
+        let n = wide(name);
+        // SAFETY: `n` is a valid NUL-terminated UTF-16 string living across the call.
+        let handle = unsafe { OpenFileMappingW(FILE_MAP_ALL_ACCESS, 0, n.as_ptr()) };
+        Self::map(name, handle, size)
+    }
+
+    fn map(name: &str, handle: HANDLE, size: usize) -> Result<Self, SharedMemError> {
+        let os = || SharedMemError::Os { name: name.to_string(), source: std::io::Error::last_os_error() };
+        if handle.is_null() {
+            return Err(os());
+        }
+        // SAFETY: `handle` is a valid file-mapping handle obtained just above.
+        let view = unsafe { MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, size) };
+        if view.Value.is_null() {
+            let err = os();
+            // SAFETY: `handle` is valid and not used after this point.
+            unsafe { CloseHandle(handle) };
+            return Err(err);
+        }
+        Ok(Self { handle, view, size })
+    }
+
+    fn ptr(&self) -> *mut u8 {
+        self.view.Value.cast()
+    }
+
+    /// Reads the NUL-terminated string at the start of the region.
+    pub fn read_string(&self) -> String {
+        // SAFETY: the view maps at least `size` readable bytes for the lifetime of `self`.
+        let bytes = unsafe { std::slice::from_raw_parts(self.ptr(), self.size) };
+        decode_ansi(bytes)
+    }
+
+    /// Writes a string (truncated to the region size) followed by a NUL.
+    pub fn write_string(&self, s: &str) {
+        let bytes = s.as_bytes();
+        let n = bytes.len().min(self.size - 1);
+        // SAFETY: `n + 1 <= size` bytes are written inside the writable view; the source
+        // slice does not overlap the mapping.
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr(), n);
+            *self.ptr().add(n) = 0;
+        }
+    }
+}
+
+impl Drop for SharedMem {
+    fn drop(&mut self) {
+        // SAFETY: view and handle were obtained in `map` and are released exactly once.
+        unsafe {
+            UnmapViewOfFile(self.view);
+            CloseHandle(self.handle);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_memory_round_trip() {
+        let name = format!("urftp-test-{}", std::process::id());
+        let a = SharedMem::create(&name, 64).unwrap();
+        let b = SharedMem::open(&name, 64).unwrap();
+        a.write_string("bonjour");
+        assert_eq!(b.read_string(), "bonjour");
+        b.write_string(&"x".repeat(200));
+        assert_eq!(a.read_string().len(), 63, "truncated to the region size");
+        assert!(matches!(SharedMem::create("x", 0), Err(SharedMemError::InvalidSize(0))));
+        assert!(matches!(SharedMem::open("urftp-test-missing-mapping", 8), Err(SharedMemError::Os { .. })));
+    }
+}

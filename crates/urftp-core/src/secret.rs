@@ -39,43 +39,16 @@ pub fn unprotect(stored: &str) -> Option<String> {
 
 #[cfg(windows)]
 mod dpapi {
-    use windows_sys::Win32::Foundation::LocalFree;
-    use windows_sys::Win32::Security::Cryptography::{
-        CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
-    };
-
-    /// Entropie propre à l'application : un autre logiciel utilisant DPAPI ne peut pas
-    /// déchiffrer nos secrets sans la connaître.
+    /// Application-specific entropy: another program using DPAPI cannot decrypt our
+    /// secrets without knowing it.
     const ENTROPY: &[u8] = b"UltraRushFTP/sites/v1";
 
-    fn call(input: &[u8], protect: bool) -> Option<Vec<u8>> {
-        let data_in = CRYPT_INTEGER_BLOB { cbData: input.len() as u32, pbData: input.as_ptr() as *mut u8 };
-        let entropy = CRYPT_INTEGER_BLOB { cbData: ENTROPY.len() as u32, pbData: ENTROPY.as_ptr() as *mut u8 };
-        let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
-        // SAFETY : les blobs d'entrée pointent sur des tampons valides pendant l'appel ; le
-        // tampon de sortie est alloué par Windows et libéré par LocalFree après copie.
-        let ok = unsafe {
-            if protect {
-                CryptProtectData(&data_in, std::ptr::null(), &entropy, std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut out)
-            } else {
-                CryptUnprotectData(&data_in, std::ptr::null_mut(), &entropy, std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut out)
-            }
-        };
-        if ok == 0 || out.pbData.is_null() {
-            return None;
-        }
-        // SAFETY : `out` décrit un tampon de `cbData` octets alloué par CryptProtectData.
-        let bytes = unsafe { std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec() };
-        unsafe { LocalFree(out.pbData.cast()) };
-        Some(bytes)
-    }
-
     pub fn protect(plain: &[u8]) -> Option<Vec<u8>> {
-        call(plain, true)
+        urftp_sys::dpapi::protect(plain, ENTROPY).ok()
     }
 
     pub fn unprotect(blob: &[u8]) -> Option<Vec<u8>> {
-        call(blob, false)
+        urftp_sys::dpapi::unprotect(blob, ENTROPY).ok()
     }
 }
 

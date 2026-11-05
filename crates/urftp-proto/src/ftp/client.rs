@@ -11,7 +11,7 @@ use crate::proxy::{self, ProxyConfig};
 use super::listing::{self, RemoteEntry};
 use super::reply::read_reply;
 use super::tls::{Security, TlsContext};
-use super::{path, BoxStream, Features, FtpError, Reply, Result};
+use super::{BoxStream, Features, FtpError, Reply, Result, path};
 
 /// Taille des blocs de copie des transferts.
 const CHUNK: usize = 64 * 1024;
@@ -343,9 +343,7 @@ impl FtpClient {
 
     pub(super) async fn send(&mut self, cmd: &str) -> Result<()> {
         if cmd.contains(['\r', '\n']) {
-            return Err(FtpError::InvalidArgument(
-                "retour à la ligne interdit dans une commande FTP".into(),
-            ));
+            return Err(FtpError::InvalidArgument("retour à la ligne interdit dans une commande FTP".into()));
         }
         self.emit(LogLine::Command(mask(cmd)));
         let io = self.config.io_timeout;
@@ -370,11 +368,7 @@ impl FtpClient {
 
     pub(super) async fn expect(&mut self, cmd: &str, accept: impl Fn(&Reply) -> bool) -> Result<Reply> {
         let reply = self.raw(cmd).await?;
-        if accept(&reply) {
-            Ok(reply)
-        } else {
-            Err(FtpError::Unexpected { command: mask(cmd), reply })
-        }
+        if accept(&reply) { Ok(reply) } else { Err(FtpError::Unexpected { command: mask(cmd), reply }) }
     }
 
     // ---------------------------------------------------------------- session
@@ -431,11 +425,7 @@ impl FtpClient {
     }
 
     fn resolve(&self, p: &str) -> Option<String> {
-        if p.starts_with('/') {
-            Some(path::normalize(p))
-        } else {
-            self.cwd.as_deref().map(|c| path::join(c, p))
-        }
+        if p.starts_with('/') { Some(path::normalize(p)) } else { self.cwd.as_deref().map(|c| path::join(c, p)) }
     }
 
     /// Change de répertoire. Si le serveur refuse le chemin entier (5xx), le client
@@ -524,8 +514,7 @@ impl FtpClient {
     pub async fn mdtm(&mut self, p: &str) -> Result<listing::FtpTime> {
         let name = self.enter_parent(p).await?;
         let r = self.expect(&format!("MDTM {name}"), |r| r.code == 213).await?;
-        listing::parse_mlsd_time(r.text().trim())
-            .ok_or_else(|| FtpError::Protocol(format!("réponse MDTM illisible : {r}")))
+        listing::parse_mlsd_time(r.text().trim()).ok_or_else(|| FtpError::Protocol(format!("réponse MDTM illisible : {r}")))
     }
 
     pub async fn set_type(&mut self, t: TransferType) -> Result<()> {
@@ -620,8 +609,7 @@ impl FtpClient {
         if self.config.prefer_epsv && !self.epsv_refused {
             let r = self.raw("EPSV").await?;
             if r.code == 229 {
-                let port = parse_epsv(r.text())
-                    .ok_or_else(|| FtpError::Protocol(format!("réponse EPSV illisible : {r}")))?;
+                let port = parse_epsv(r.text()).ok_or_else(|| FtpError::Protocol(format!("réponse EPSV illisible : {r}")))?;
                 // EPSV ne donne qu'un port : même hôte que le canal de contrôle.
                 target = Some(self.server_target(port));
             } else if r.is_permanent_negative() {
@@ -635,8 +623,7 @@ impl FtpClient {
             Some(t) => t,
             None => {
                 let r = self.expect("PASV", |r| r.code == 227).await?;
-                let (ip, port) = parse_pasv(r.text())
-                    .ok_or_else(|| FtpError::Protocol(format!("réponse PASV illisible : {r}")))?;
+                let (ip, port) = parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("réponse PASV illisible : {r}")))?;
                 let ip = IpAddr::V4(ip);
                 if self.config.pasv_fix_private_ip && needs_fix(ip, self.server_ip) {
                     let t = self.server_target(port);
@@ -697,11 +684,7 @@ impl FtpClient {
 
     async fn finish_transfer(&mut self, cmd: &str) -> Result<()> {
         let r = self.read_reply().await?;
-        if r.is_completion() {
-            Ok(())
-        } else {
-            Err(FtpError::Unexpected { command: cmd.into(), reply: r })
-        }
+        if r.is_completion() { Ok(()) } else { Err(FtpError::Unexpected { command: cmd.into(), reply: r }) }
     }
 
     /// Liste un répertoire (le répertoire courant si `dir` vaut `None`).
@@ -740,13 +723,7 @@ impl FtpClient {
 
     /// Télécharge `remote` vers `out`, à partir de l'octet `offset` (reprise via `REST`).
     /// `progress` reçoit le nombre d'octets reçus pendant cet appel. Renvoie ce nombre.
-    pub async fn retr<W>(
-        &mut self,
-        remote: &str,
-        offset: u64,
-        out: &mut W,
-        mut progress: impl FnMut(u64),
-    ) -> Result<u64>
+    pub async fn retr<W>(&mut self, remote: &str, offset: u64, out: &mut W, mut progress: impl FnMut(u64)) -> Result<u64>
     where
         W: AsyncWrite + Unpin + ?Sized,
     {
@@ -781,13 +758,7 @@ impl FtpClient {
 
     /// Envoie `input` vers `remote`. Avec `offset > 0`, reprend l'envoi (`REST` + `STOR`) :
     /// `input` doit alors déjà être positionné à `offset`.
-    pub async fn stor<R>(
-        &mut self,
-        remote: &str,
-        offset: u64,
-        input: &mut R,
-        mut progress: impl FnMut(u64),
-    ) -> Result<u64>
+    pub async fn stor<R>(&mut self, remote: &str, offset: u64, input: &mut R, mut progress: impl FnMut(u64)) -> Result<u64>
     where
         R: AsyncRead + Unpin + ?Sized,
     {
@@ -950,10 +921,7 @@ mod tests {
 
     #[test]
     fn pasv_epsv_pwd() {
-        assert_eq!(
-            parse_pasv("Entering Passive Mode (192,168,1,2,19,137)."),
-            Some((Ipv4Addr::new(192, 168, 1, 2), 19 * 256 + 137))
-        );
+        assert_eq!(parse_pasv("Entering Passive Mode (192,168,1,2,19,137)."), Some((Ipv4Addr::new(192, 168, 1, 2), 19 * 256 + 137)));
         assert_eq!(parse_pasv("Entering Passive Mode 10,0,0,1,0,21"), Some((Ipv4Addr::new(10, 0, 0, 1), 21)));
         assert_eq!(parse_pasv("pas de nombres"), None);
         assert_eq!(parse_epsv("Entering Extended Passive Mode (|||6446|)"), Some(6446));

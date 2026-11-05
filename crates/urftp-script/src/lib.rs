@@ -15,16 +15,45 @@ mod interp;
 mod lexer;
 mod parser;
 
-use std::fmt;
-
 /// Noms des constantes de drapeaux reconnues par l'API `RushApp.FTP.*` de FTPRush.
 pub const RS_FLAG_NAMES: &[&str] = &[
-    "RS_ALL", "RS_APPEND", "RS_ASYNC", "RS_BOOKMARK", "RS_BOTH", "RS_CHECKBM",
-    "RS_CHECKLOGIN", "RS_CURRENT", "RS_DELEMPTYTABS", "RS_DIRDES", "RS_DIRSRC", "RS_DOWN",
-    "RS_EXPR", "RS_FAIL", "RS_FILE", "RS_FOLDER", "RS_FULLPATH", "RS_FXP", "RS_GHOST",
-    "RS_INVERT", "RS_LOGIN", "RS_LOGOUT", "RS_NOCIRCLE", "RS_NOMKD", "RS_NORMAL",
-    "RS_NOSKIP", "RS_ONE", "RS_PAIR", "RS_POPUP", "RS_RECURSIVE", "RS_RELOGIN",
-    "RS_SORTDATE", "RS_SORTDES", "RS_SORTSIZE", "RS_TRANSFER", "RS_UP", "RS_WAITING",
+    "RS_ALL",
+    "RS_APPEND",
+    "RS_ASYNC",
+    "RS_BOOKMARK",
+    "RS_BOTH",
+    "RS_CHECKBM",
+    "RS_CHECKLOGIN",
+    "RS_CURRENT",
+    "RS_DELEMPTYTABS",
+    "RS_DIRDES",
+    "RS_DIRSRC",
+    "RS_DOWN",
+    "RS_EXPR",
+    "RS_FAIL",
+    "RS_FILE",
+    "RS_FOLDER",
+    "RS_FULLPATH",
+    "RS_FXP",
+    "RS_GHOST",
+    "RS_INVERT",
+    "RS_LOGIN",
+    "RS_LOGOUT",
+    "RS_NOCIRCLE",
+    "RS_NOMKD",
+    "RS_NORMAL",
+    "RS_NOSKIP",
+    "RS_ONE",
+    "RS_PAIR",
+    "RS_POPUP",
+    "RS_RECURSIVE",
+    "RS_RELOGIN",
+    "RS_SORTDATE",
+    "RS_SORTDES",
+    "RS_SORTSIZE",
+    "RS_TRANSFER",
+    "RS_UP",
+    "RS_WAITING",
     "RS_WILD",
 ];
 
@@ -88,27 +117,106 @@ impl Value {
 /// tenir compte de la casse.
 pub trait Host {
     /// Appel de procédure ou de fonction (`RushApp.FTP.Login(…)`, `ShowMessage`, `InputQuery`).
-    fn call(&mut self, name: &str, args: &[Value]) -> Result<Value, String>;
+    fn call(&mut self, name: &str, args: &[Value]) -> Result<Value, HostError>;
     /// Lecture d'une propriété (`RushApp.Version`, `RushApp.Containers.ContainerCount`).
-    fn get(&mut self, name: &str) -> Result<Value, String>;
+    fn get(&mut self, name: &str) -> Result<Value, HostError>;
     /// Écriture d'une propriété (`RushApp.FTP.Splitter := '|'`).
-    fn set(&mut self, name: &str, value: Value) -> Result<(), String>;
+    fn set(&mut self, name: &str, value: Value) -> Result<(), HostError>;
 }
 
-/// Erreur de script, avec son numéro de ligne (0 si inconnu).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Error reported by the host (the application) for a `RushApp.*` call or property.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum HostError {
+    /// No such procedure or function.
+    #[error("unknown function: {0}")]
+    UnknownFunction(String),
+    /// No such property.
+    #[error("unknown property: {0}")]
+    UnknownProperty(String),
+    /// The property exists but cannot be assigned.
+    #[error("read-only property: {0}")]
+    ReadOnlyProperty(String),
+    /// Wrong number of arguments.
+    #[error("{name} expects at least {expected} argument(s), got {got}")]
+    Arity {
+        /// Called function.
+        name: String,
+        /// Minimum number of arguments.
+        expected: usize,
+        /// Number received.
+        got: usize,
+    },
+    /// No site with this name in the site manager.
+    #[error("unknown site: {0}")]
+    UnknownSite(String),
+    /// The site exists but is disabled (`RushApp.FTP.DisableSite`).
+    #[error("disabled site: {0}")]
+    DisabledSite(String),
+    /// No bookmark with this name.
+    #[error("bookmark \"{bookmark}\" not found{}", site.as_ref().map(|s| format!(" on site {s}")).unwrap_or_default())]
+    UnknownBookmark {
+        /// Requested bookmark.
+        bookmark: String,
+        /// Site searched, when known.
+        site: Option<String>,
+    },
+    /// An argument has an invalid value.
+    #[error("{function}: {reason}")]
+    InvalidArgument {
+        /// Called function.
+        function: String,
+        /// What is wrong.
+        reason: String,
+    },
+}
+
+/// Category of a script error.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ScriptErrorKind {
+    /// The source cannot be tokenised or parsed.
+    #[error("syntax error: {0}")]
+    Syntax(String),
+    /// Valid syntax that the interpreter does not support yet.
+    #[error("not supported yet: {0}")]
+    Unsupported(String),
+    /// Type mismatch, bad argument to a built-in function...
+    #[error("{0}")]
+    Runtime(String),
+    /// Integer division or modulo by zero.
+    #[error("division by zero")]
+    DivisionByZero,
+    /// Too many statements executed: probable infinite loop.
+    #[error("script stopped: too many statements (infinite loop?)")]
+    StepLimit,
+    /// Error returned by the application.
+    #[error(transparent)]
+    Host(#[from] HostError),
+}
+
+/// Script error with its line number (1-based; 0 when unknown).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("line {line}: {kind}")]
 pub struct ScriptError {
+    /// Line of the failing statement.
     pub line: usize,
-    pub message: String,
+    /// What went wrong.
+    pub kind: ScriptErrorKind,
 }
 
-impl fmt::Display for ScriptError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.line > 0 { write!(f, "ligne {} : {}", self.line, self.message) } else { f.write_str(&self.message) }
+impl ScriptError {
+    /// Error of kind `kind` at `line`.
+    pub fn new(line: usize, kind: impl Into<ScriptErrorKind>) -> Self {
+        Self { line, kind: kind.into() }
+    }
+
+    pub(crate) fn syntax(line: usize, message: impl Into<String>) -> Self {
+        Self::new(line, ScriptErrorKind::Syntax(message.into()))
+    }
+
+    pub(crate) fn runtime(line: usize, message: impl Into<String>) -> Self {
+        Self::new(line, ScriptErrorKind::Runtime(message.into()))
     }
 }
-
-impl std::error::Error for ScriptError {}
 
 /// Exécute un script complet (`RushScript`).
 pub fn run(source: &str, host: &mut dyn Host) -> Result<(), ScriptError> {

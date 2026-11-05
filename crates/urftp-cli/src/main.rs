@@ -2,10 +2,13 @@
 //! options de l'interface (même dossier de réglages), sans fenêtre.
 
 mod args;
+mod error;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use std::time::Instant;
 
 use tokio::sync::mpsc::unbounded_channel;
@@ -21,8 +24,9 @@ use urftp_proto::session::{RemoteSession, SiteProfile};
 use urftp_proto::throttle::RateLimiter;
 
 use args::{Command, Options, Target};
+use error::CliError;
 
-type Res<T> = Result<T, String>;
+type Res<T> = Result<T, CliError>;
 
 /// Fiche de site et options chargées depuis le dossier des réglages.
 struct Ctx {
@@ -33,7 +37,8 @@ struct Ctx {
 
 impl Ctx {
     fn load(opts: Options) -> Res<Self> {
-        let book = sitestore::load(&sitestore::default_path()).map_err(|e| format!("gestionnaire de sites illisible : {e}"))?;
+        let path = sitestore::default_path();
+        let book = sitestore::load(&path).map_err(|source| CliError::SiteBook { path, source })?;
         let settings = Settings::load(&Settings::default_path()).unwrap_or_default();
         Ok(Self { book, settings, opts })
     }
@@ -42,9 +47,9 @@ impl Ctx {
     fn resolve(&self, target: &Target) -> Res<(SiteProfile, String)> {
         let (mut site, path) = match target {
             Target::Named { site, path } => {
-                let s = self.book.find_by_name(site).ok_or_else(|| format!("site inconnu : {site} (urftp sites)"))?;
+                let s = self.book.find_by_name(site).ok_or_else(|| CliError::UnknownSite(site.clone()))?;
                 if !s.enabled {
-                    return Err(format!("le site {} est désactivé", s.name));
+                    return Err(CliError::DisabledSite(s.name.clone()));
                 }
                 let path = if path.is_empty() { s.remote_dir.clone() } else { path.clone() };
                 (s.clone(), path)
@@ -75,13 +80,12 @@ impl Ctx {
     }
 
     async fn open(&self, profile: &SiteProfile) -> Res<RemoteSession> {
-        RemoteSession::open(profile, self.log_sink()).await.map_err(|e| connect_error(profile, &e.to_string()))
+        RemoteSession::open(profile, self.log_sink()).await.map_err(|source| CliError::Connect { site: profile.name.clone(), source })
     }
 }
 
-fn connect_error(p: &SiteProfile, e: &str) -> String {
-    let hint = if e.contains("empreinte") { "\n  (vérifiez l'empreinte puis relancez avec --fingerprint <empreinte>)" } else { "" };
-    format!("{} : {e}{hint}", p.name)
+fn remote(path: &str) -> impl FnOnce(urftp_proto::session::SessionError) -> CliError + '_ {
+    move |source| CliError::Remote { path: path.to_string(), source }
 }
 
 /// Chemin absolu : relatif au dossier courant de la session.
@@ -121,8 +125,8 @@ fn print_listing(entries: &mut [RemoteEntry]) {
 async fn stat(session: &mut RemoteSession, path: &str) -> Res<RemoteEntry> {
     let (parent, name) = rpath::split(path);
     let parent = parent.unwrap_or("/");
-    let entries = session.list(parent).await.map_err(|e| format!("{parent} : {e}"))?;
-    entries.into_iter().find(|e| e.name == name).ok_or_else(|| format!("introuvable : {path}"))
+    let entries = session.list(parent).await.map_err(remote(parent))?;
+    entries.into_iter().find(|e| e.name == name).ok_or_else(|| CliError::NotFound(path.to_string()))
 }
 
 async fn cmd_sites(ctx: &Ctx) -> Res<()> {
@@ -142,7 +146,7 @@ async fn cmd_ls(ctx: &Ctx, target: &str) -> Res<()> {
     let (profile, path) = ctx.resolve(&args::parse_target(target)?)?;
     let mut session = ctx.open(&profile).await?;
     let dir = absolute(&session, &path);
-    let mut entries = session.list(&dir).await.map_err(|e| format!("{dir} : {e}"))?;
+    let mut entries = session.list(&dir).await.map_err(remote(&dir))?;
     println!("{}:{dir}", profile.name);
     print_listing(&mut entries);
     Ok(())
@@ -151,7 +155,7 @@ async fn cmd_ls(ctx: &Ctx, target: &str) -> Res<()> {
 async fn cmd_raw(ctx: &Ctx, site: &str, commands: &[String]) -> Res<()> {
     let (profile, _) = ctx.resolve(&args::parse_target(site)?)?;
     let mut session = ctx.open(&profile).await?;
-    let ftp = session.as_ftp().ok_or("raw : commandes brutes disponibles en FTP/FTPS seulement")?;
+    let ftp = session.as_ftp().ok_or(CliError::RawNeedsFtp)?;
     let mut failed = false;
     for c in commands {
         match ftp.raw(c).await {
@@ -159,16 +163,16 @@ async fn cmd_raw(ctx: &Ctx, site: &str, commands: &[String]) -> Res<()> {
                 r.lines.iter().for_each(|l| println!("{l}"));
                 failed |= r.code >= 400;
             }
-            Err(e) => return Err(format!("{c} : {e}")),
+            Err(e) => return Err(CliError::Remote { path: c.clone(), source: e.into() }),
         }
     }
-    if failed { Err("le serveur a refusé au moins une commande".into()) } else { Ok(()) }
+    if failed { Err(CliError::RawRefused) } else { Ok(()) }
 }
 
 /// Transfert par le moteur de file (multi-transfert, dossiers, skiplist, priorités…).
 async fn run_queue(ctx: &Ctx, sites: Vec<SiteProfile>, src: Endpoint, dst: Endpoint, is_dir: bool, size: Option<u64>) -> Res<()> {
     let queue = Arc::new(Mutex::new(Queue::new()));
-    queue.lock().unwrap().push(src, dst, is_dir, size, None);
+    queue.lock().push(src, dst, is_dir, size, None);
     let s = &ctx.settings;
     let dl = RateLimiter::new(s.transfer.download_limit_kib * 1024);
     let ul = RateLimiter::new(s.transfer.upload_limit_kib * 1024);
@@ -183,7 +187,7 @@ async fn run_queue(ctx: &Ctx, sites: Vec<SiteProfile>, src: Endpoint, dst: Endpo
     let started = Instant::now();
     let mut starts = std::collections::HashMap::new();
     let (mut files, mut bytes_total) = (0u64, 0u64);
-    let name = |id| queue.lock().unwrap().get(id).map(|i| i.src.path.clone()).unwrap_or_default();
+    let name = |id| queue.lock().get(id).map(|i| i.src.path.clone()).unwrap_or_default();
     while let Some(ev) = rx.recv().await {
         match ev {
             EngineEvent::Started { id } => {
@@ -207,9 +211,10 @@ async fn run_queue(ctx: &Ctx, sites: Vec<SiteProfile>, src: Endpoint, dst: Endpo
     let _ = runner.await;
     let secs = started.elapsed().as_secs_f64().max(0.001);
     println!("{files} fichier(s), {} en {secs:.1} s ({}/s)", human(bytes_total), human((bytes_total as f64 / secs) as u64));
-    let q = queue.lock().unwrap();
-    let bad = q.items().iter().filter(|i| matches!(i.state, ItemState::Failed(_) | ItemState::NeedsConfirmation | ItemState::Stopped)).count();
-    if bad > 0 { Err(format!("{bad} élément(s) non transféré(s)")) } else { Ok(()) }
+    let q = queue.lock();
+    let bad =
+        q.items().iter().filter(|i| matches!(i.state, ItemState::Failed(_) | ItemState::NeedsConfirmation | ItemState::Stopped)).count();
+    if bad > 0 { Err(CliError::Incomplete(bad)) } else { Ok(()) }
 }
 
 fn local_string(p: &Path) -> String {
@@ -224,10 +229,10 @@ async fn cmd_get(ctx: &Ctx, src: &str, dest: Option<&str>) -> Res<()> {
     drop(session);
     let dir = match dest {
         Some(d) => PathBuf::from(d),
-        None => std::env::current_dir().map_err(|e| e.to_string())?,
+        None => std::env::current_dir().map_err(|source| CliError::Local { path: PathBuf::from("."), source })?,
     };
     let dir = std::path::absolute(&dir).unwrap_or(dir);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{} : {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir).map_err(|source| CliError::Local { path: dir.clone(), source })?;
     let local = dir.join(&entry.name);
     let size = (!entry.is_dir()).then_some(entry.size);
     let src = Endpoint::remote(profile.name.clone(), path);
@@ -235,9 +240,12 @@ async fn cmd_get(ctx: &Ctx, src: &str, dest: Option<&str>) -> Res<()> {
 }
 
 async fn cmd_put(ctx: &Ctx, src: &str, dest: &str) -> Res<()> {
-    let local = std::path::absolute(src).map_err(|e| format!("{src} : {e}"))?;
-    let meta = std::fs::metadata(&local).map_err(|e| format!("{} : {e}", local.display()))?;
-    let name = local.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or_else(|| format!("nom invalide : {src}"))?;
+    let local = std::path::absolute(src).map_err(|source| CliError::Local { path: PathBuf::from(src), source })?;
+    let meta = std::fs::metadata(&local).map_err(|source| CliError::Local { path: local.clone(), source })?;
+    let name = local.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or_else(|| CliError::Local {
+        path: local.clone(),
+        source: std::io::Error::new(std::io::ErrorKind::InvalidInput, "nom de fichier invalide"),
+    })?;
     let (profile, path) = ctx.resolve(&args::parse_target(dest)?)?;
     let session = ctx.open(&profile).await?;
     let dir = absolute(&session, &path);
@@ -251,7 +259,7 @@ async fn cmd_fxp(ctx: &Ctx, src: &str, dest: &str) -> Res<()> {
     let (sp, spath) = ctx.resolve(&args::parse_target(src)?)?;
     let (dp, dpath) = ctx.resolve(&args::parse_target(dest)?)?;
     if sp.name == dp.name {
-        return Err("FXP : la source et la destination doivent être deux sites différents".into());
+        return Err(CliError::FxpSameSite);
     }
     let mut s = ctx.open(&sp).await?;
     let spath = absolute(&s, &spath);
@@ -273,13 +281,13 @@ async fn run(cmd: Command, opts: Options) -> Res<()> {
     }
     let ctx = Ctx::load(opts)?;
     match &cmd {
+        Command::Help => Ok(()),
         Command::Sites => cmd_sites(&ctx).await,
         Command::Ls(t) => cmd_ls(&ctx, t).await,
         Command::Get { src, dest } => cmd_get(&ctx, src, dest.as_deref()).await,
         Command::Put { src, dest } => cmd_put(&ctx, src, dest).await,
         Command::Fxp { src, dest } => cmd_fxp(&ctx, src, dest).await,
         Command::Raw { site, commands } => cmd_raw(&ctx, site, commands).await,
-        Command::Help => unreachable!(),
     }
 }
 
@@ -292,13 +300,12 @@ fn main() -> ExitCode {
         }
     };
     if let Some(d) = &opts.data_dir {
-        // SAFETY : aucun autre thread n'existe encore.
-        unsafe { std::env::set_var("URUSHFTP_DATA", d) };
+        sitestore::set_data_dir(PathBuf::from(d));
     }
     let rt = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
         Ok(rt) => rt,
         Err(e) => {
-            eprintln!("urftp : {e}");
+            eprintln!("urftp : {}", CliError::Runtime(e));
             return ExitCode::FAILURE;
         }
     };

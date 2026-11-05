@@ -11,28 +11,28 @@ struct Mock {
 }
 
 impl Host for Mock {
-    fn call(&mut self, name: &str, args: &[Value]) -> Result<Value, String> {
+    fn call(&mut self, name: &str, args: &[Value]) -> Result<Value, HostError> {
         self.calls.push((name.to_string(), args.to_vec()));
         if name.eq_ignore_ascii_case("InputQuery") {
             return Ok(self.input.clone().map_or(Value::Nil, Value::Str));
         }
         if name.eq_ignore_ascii_case("RushApp.FTP.Fail") {
-            return Err("échec simulé".into());
+            return Err(HostError::InvalidArgument { function: name.into(), reason: "simulated failure".into() });
         }
         Ok(Value::Nil)
     }
 
-    fn get(&mut self, name: &str) -> Result<Value, String> {
+    fn get(&mut self, name: &str) -> Result<Value, HostError> {
         match name.to_ascii_lowercase().as_str() {
             "rushapp.version" => Ok(Value::Str("UltraRushFTP 0.1.0".into())),
             "rushapp.totaldownloadsize" => Ok(Value::Int(1234)),
             "rushapp.containers.containercount" => Ok(Value::Int(3)),
             "rushapp.language" => Ok(Value::Str("French".into())),
-            _ => Err(format!("propriété inconnue : {name}")),
+            _ => Err(HostError::UnknownProperty(name.into())),
         }
     }
 
-    fn set(&mut self, name: &str, value: Value) -> Result<(), String> {
+    fn set(&mut self, name: &str, value: Value) -> Result<(), HostError> {
         self.sets.push((name.to_string(), value));
         Ok(())
     }
@@ -129,7 +129,10 @@ fn invoke_expressions() {
     // L'exemple mIRC de l'aide termine certaines expressions par « ; ».
     assert_eq!(evaluate("RushApp.Containers.ContainerCount;", &mut m).unwrap().to_text(), "3");
     assert_eq!(evaluate("rushapp.version", &mut m).unwrap().to_text(), "UltraRushFTP 0.1.0");
-    assert!(evaluate("RushApp.Inconnu", &mut m).unwrap_err().message.contains("inconnue"));
+    assert_eq!(
+        evaluate("RushApp.Inconnu", &mut m).unwrap_err().kind,
+        ScriptErrorKind::Host(HostError::UnknownProperty("RushApp.Inconnu".into()))
+    );
     assert!(evaluate("1 2", &mut m).is_err());
 }
 
@@ -154,12 +157,12 @@ fn errors_report_lines() {
     let mut m = Mock::default();
     let e = run("x := 1;\ny := 'a' - 2;", &mut m).unwrap_err();
     assert_eq!(e.line, 2);
-    assert!(e.to_string().starts_with("ligne 2"));
+    assert!(e.to_string().starts_with("line 2: "), "{e}");
     let e = run("RushApp.FTP.Login('a', '', 0)\nRushApp.FTP.Logout('', 0);", &mut m).unwrap_err();
-    assert!(e.message.contains(";"), "{e}");
+    assert!(matches!(&e.kind, ScriptErrorKind::Syntax(m) if m.contains(";")), "{e}");
     assert_eq!(run("\n\nRushApp.FTP.Fail();", &mut m).unwrap_err().line, 3);
-    assert!(run("x := 1 div 0;", &mut m).unwrap_err().message.contains("zéro"));
-    assert!(run("procedure P; begin end;", &mut m).unwrap_err().message.contains("procédures"));
+    assert_eq!(run("x := 1 div 0;", &mut m).unwrap_err().kind, ScriptErrorKind::DivisionByZero);
+    assert!(matches!(run("procedure P; begin end;", &mut m).unwrap_err().kind, ScriptErrorKind::Unsupported(_)));
     assert!(check("begin if then end").is_err());
     assert!(check("begin RushApp.FTP.Logout('', RS_ASYNC); end.").is_ok());
 }
@@ -169,5 +172,5 @@ fn exit_and_infinite_loop_guard() {
     let m = run_ok("RushApp.FTP.A(); exit; RushApp.FTP.B();");
     assert_eq!(m.calls.len(), 1);
     let mut m = Mock::default();
-    assert!(run("while true do x := 1;", &mut m).unwrap_err().message.contains("boucle"));
+    assert_eq!(run("while true do x := 1;", &mut m).unwrap_err().kind, ScriptErrorKind::StepLimit);
 }

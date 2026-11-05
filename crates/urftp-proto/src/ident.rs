@@ -12,7 +12,9 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -62,7 +64,7 @@ pub struct IdentRegistration {
 
 impl Drop for IdentRegistration {
     fn drop(&mut self) {
-        self.registry.lock().unwrap().remove(&self.key);
+        self.registry.lock().remove(&self.key);
     }
 }
 
@@ -92,7 +94,7 @@ impl IdentServer {
     /// À appeler avant la connexion : le serveur FTP interroge dès l'ouverture TCP.
     pub fn register(&self, server_ip: IpAddr, server_port: u16, name: impl Into<String>) -> IdentRegistration {
         let key = (canonical(server_ip), server_port);
-        self.registry.lock().unwrap().insert(key, sanitize(&name.into()));
+        self.registry.lock().insert(key, sanitize(&name.into()));
         IdentRegistration { registry: self.registry.clone(), key }
     }
 }
@@ -129,12 +131,7 @@ fn answer(query: &str, peer: IpAddr, reg: &Registry, config: &IdentConfig) -> St
     let Some((local, remote)) = ports else {
         return format!("{} : ERROR : INVALID-PORT", query.trim());
     };
-    let name = reg
-        .lock()
-        .unwrap()
-        .get(&(canonical(peer), remote))
-        .cloned()
-        .unwrap_or_else(|| sanitize(&config.name));
+    let name = reg.lock().get(&(canonical(peer), remote)).cloned().unwrap_or_else(|| sanitize(&config.name));
     format!("{local} , {remote} : USERID : {} : {name}", sanitize(&config.system))
 }
 
@@ -162,7 +159,7 @@ mod tests {
         let reg: Registry = Arc::default();
         let cfg = IdentConfig::default();
         let srv: IpAddr = "203.0.113.4".parse().unwrap();
-        reg.lock().unwrap().insert((srv, 21), "monident".into());
+        reg.lock().insert((srv, 21), "monident".into());
         assert_eq!(answer("6193, 21", srv, &reg, &cfg), "6193 , 21 : USERID : UNIX : monident");
         assert_eq!(answer("6193 , 2121", srv, &reg, &cfg), "6193 , 2121 : USERID : UNIX : URUSHFTP");
         let other: IpAddr = "198.51.100.1".parse().unwrap();

@@ -103,9 +103,9 @@ fn server(n: Node, warnings: &mut Vec<String>) -> Option<Site> {
                 Some(pw) => site.password = pw,
                 None => warnings.push(format!("« {label} » : mot de passe illisible")),
             },
-            Some("crypt") => warnings.push(format!(
-                "« {label} » : mot de passe protégé par le mot de passe principal de FileZilla, non importé"
-            )),
+            Some("crypt") => {
+                warnings.push(format!("« {label} » : mot de passe protégé par le mot de passe principal de FileZilla, non importé"))
+            }
             _ => site.password = raw.to_string(),
         }
     }

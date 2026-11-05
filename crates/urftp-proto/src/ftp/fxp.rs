@@ -93,13 +93,7 @@ enum Method {
 }
 
 /// Transfère `src_path` (sur `src`) vers `dst_path` (sur `dst`) en FXP.
-pub async fn fxp(
-    src: &mut FtpClient,
-    src_path: &str,
-    dst: &mut FtpClient,
-    dst_path: &str,
-    opts: &FxpOptions,
-) -> Result<FxpOutcome> {
+pub async fn fxp(src: &mut FtpClient, src_path: &str, dst: &mut FtpClient, dst_path: &str, opts: &FxpOptions) -> Result<FxpOutcome> {
     let start = Instant::now();
     let src_name = src.enter_parent(src_path).await?.to_string();
     let dst_name = dst.enter_parent(dst_path).await?.to_string();
@@ -235,8 +229,7 @@ async fn run(
     if r.code != 227 {
         return Err(Attempt::Failed(FtpError::Unexpected { command: pasv_cmd.into(), reply: r }));
     }
-    let (ip, port) =
-        parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("réponse {pasv_cmd} illisible : {r}")))?;
+    let (ip, port) = parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("réponse {pasv_cmd} illisible : {r}")))?;
     let mut ip = IpAddr::V4(ip);
     if let Some(server) = passive.server_ip()
         && needs_fix(ip, Some(server))

@@ -1,8 +1,12 @@
+// Test harness (mock servers, fixtures): a failed unwrap/expect is a test failure.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod common;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+
+use parking_lot::Mutex;
 use std::time::{Duration, Instant};
 
 use common::sftp::{MockSftp, SftpMockConfig};
@@ -70,7 +74,7 @@ fn drain(rx: &mut UnboundedReceiver<EngineEvent>) -> Vec<EngineEvent> {
 }
 
 fn state(e: &Engine, id: ItemId) -> ItemState {
-    e.queue().lock().unwrap().get(id).unwrap().state.clone()
+    e.queue().lock().get(id).unwrap().state.clone()
 }
 
 #[tokio::test]
@@ -81,7 +85,13 @@ async fn multi_transfer_respects_the_site_limit() {
     let mut ids = Vec::new();
     for i in 0..6 {
         srv.fs.lock().unwrap().files.insert(format!("/f{i}.bin"), payload(50_000, i as u8));
-        ids.push(q.push(Endpoint::remote("A", format!("/f{i}.bin")), Endpoint::local(local(&dir.join(format!("f{i}.bin")))), false, None, None));
+        ids.push(q.push(
+            Endpoint::remote("A", format!("/f{i}.bin")),
+            Endpoint::local(local(&dir.join(format!("f{i}.bin")))),
+            false,
+            None,
+            None,
+        ));
     }
     let r = engine(q, vec![site("A", srv.addr.port(), 3)], opts());
     let start = Instant::now();
@@ -194,7 +204,9 @@ async fn file_exists_rules_skip_resume_and_rename() {
     let mut q = Queue::new();
     let ids: Vec<ItemId> = ["same", "small", "big"]
         .iter()
-        .map(|n| q.push(Endpoint::remote("A", format!("/{n}.bin")), Endpoint::local(local(&dir.join(format!("{n}.bin")))), false, None, None))
+        .map(|n| {
+            q.push(Endpoint::remote("A", format!("/{n}.bin")), Endpoint::local(local(&dir.join(format!("{n}.bin")))), false, None, None)
+        })
         .collect();
     let r = engine(q, vec![site("A", srv.addr.port(), 1)], EngineOptions { exists: ExistsRules::default(), ..opts() });
     r.engine.run().await;
@@ -320,5 +332,5 @@ async fn unknown_site_fails_cleanly() {
     let id = q.push(Endpoint::remote("absent", "/x"), Endpoint::local("C:/x"), false, None, None);
     let r = engine(q, vec![], EngineOptions { retries: 0, ..opts() });
     r.engine.run().await;
-    assert!(matches!(state(&r.engine, id), ItemState::Failed(e) if e.contains("site inconnu")));
+    assert!(matches!(state(&r.engine, id), ItemState::Failed(e) if e == "unknown site: absent"));
 }

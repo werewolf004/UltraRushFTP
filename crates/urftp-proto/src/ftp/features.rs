@@ -51,9 +51,7 @@ mod tests {
     fn parse_feat() {
         let reply = Reply {
             code: 211,
-            lines: ["211-Features:", " MLST type*;size*;modify*;", " pret", " AUTH TLS", " UTF8", "211 End"]
-                .map(String::from)
-                .to_vec(),
+            lines: ["211-Features:", " MLST type*;size*;modify*;", " pret", " AUTH TLS", " UTF8", "211 End"].map(String::from).to_vec(),
         };
         let f = Features::parse(&reply);
         assert!(f.has("MLST") && f.has("PRET") && f.has("utf8"));

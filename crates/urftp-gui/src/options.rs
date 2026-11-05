@@ -348,7 +348,12 @@ fn proxy_ui(ui: &mut egui::Ui, g: &mut GlobalProxy) {
         egui::Grid::new("opt-proxy").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
             ui.label("Type");
             ui.horizontal(|ui| {
-                for (k, l) in [(ProxyType::Socks4, "SOCKS4"), (ProxyType::Socks4a, "SOCKS4A"), (ProxyType::Socks5, "SOCKS5"), (ProxyType::HttpTunnel, "HTTP Tunnel")] {
+                for (k, l) in [
+                    (ProxyType::Socks4, "SOCKS4"),
+                    (ProxyType::Socks4a, "SOCKS4A"),
+                    (ProxyType::Socks5, "SOCKS5"),
+                    (ProxyType::HttpTunnel, "HTTP Tunnel"),
+                ] {
                     ui.radio_value(&mut p.kind, k, l);
                 }
             });

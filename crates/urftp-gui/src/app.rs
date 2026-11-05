@@ -3,8 +3,10 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+
+use parking_lot::Mutex;
 use std::time::Duration;
 
 use eframe::egui::{self, Color32, RichText, Sense};
@@ -23,11 +25,11 @@ use crate::browser::{self, BrowserCmd, BrowserEvent, BrowserHandle, TrustKind};
 use crate::cmdline::StartupOptions;
 use crate::options::{self, OptionsWindow};
 use crate::sites::{self, SiteManager};
+use crate::theme::{self, ACCENT, LOG_COMMAND, LOG_ERROR, LOG_REPLY, LOG_STATUS, human_size};
 use urftp_core::settings::IdentSettings;
+use urftp_core::site::Site;
 use urftp_proto::ident::{IdentConfig, IdentServer};
 use urftp_proto::throttle::RateLimiter;
-use urftp_core::site::Site;
-use crate::theme::{self, ACCENT, LOG_COMMAND, LOG_ERROR, LOG_REPLY, LOG_STATUS, human_size};
 
 mod rushapp;
 
@@ -429,14 +431,14 @@ impl Container {
             match e {
                 EngineEvent::Progress { id, bytes, total } => {
                     let before = self.progress.insert(id, (bytes, total)).map_or(0, |(b, _)| b);
-                    let kind = self.queue.lock().unwrap().get(id).map(QueueItem::kind);
+                    let kind = self.queue.lock().get(id).map(QueueItem::kind);
                     // Le FXP ne passe pas par cet ordinateur : il n'entre pas dans les débits.
                     if let Some(k @ (TransferKind::Upload | TransferKind::Download)) = kind {
                         traffic.push((k, bytes.saturating_sub(before)));
                     }
                 }
                 EngineEvent::Done { id, bytes } => {
-                    if self.queue.lock().unwrap().get(id).map(QueueItem::kind) == Some(TransferKind::Fxp) {
+                    if self.queue.lock().get(id).map(QueueItem::kind) == Some(TransferKind::Fxp) {
                         traffic.push((TransferKind::Fxp, bytes));
                     }
                 }
@@ -526,7 +528,7 @@ impl Container {
             self.push_log(from, LogKind::Error, "Transfert local → local non géré : connectez un site d'un côté");
             return;
         }
-        let mut q = self.queue.lock().unwrap();
+        let mut q = self.queue.lock();
         for row in &picks {
             let src = self.sides[from].endpoint(&row.name);
             let dst = self.sides[to].endpoint(&row.name);
@@ -648,7 +650,7 @@ impl Container {
     // ------------------------------------------------------------------ file d'attente
 
     fn move_item(&mut self, id: ItemId, m: Move) {
-        let mut q = self.queue.lock().unwrap();
+        let mut q = self.queue.lock();
         match m {
             Move::Up => q.move_up(id),
             Move::Down => q.move_down(id),
@@ -670,7 +672,7 @@ impl Container {
     }
 
     fn retry_item(&mut self, id: ItemId) {
-        if let Some(it) = self.queue.lock().unwrap().get_mut(id)
+        if let Some(it) = self.queue.lock().get_mut(id)
             && matches!(it.state, ItemState::Failed(_) | ItemState::Stopped | ItemState::NeedsConfirmation)
         {
             it.state = ItemState::Waiting;
@@ -738,8 +740,8 @@ pub struct UltraRushApp {
     splitter: String,
     startup_script_done: bool,
     /// Liaison mIRC : fenêtre `TfmRush`, demandes reçues, rappels `RAW` en attente.
-    ipc: Option<urftp_ipc::server::Server>,
-    ipc_rx: Option<std::sync::mpsc::Receiver<urftp_ipc::server::Request>>,
+    ipc: Option<urftp_sys::server::Server>,
+    ipc_rx: Option<std::sync::mpsc::Receiver<urftp_sys::server::Request>>,
     /// Fenêtre de rappel de la DLL pendant l'exécution d'un script venu de mIRC.
     ipc_callback: Option<isize>,
     /// (site, commande, fenêtre de rappel) des `RAW` dont la réponse doit revenir à mIRC.
@@ -904,7 +906,8 @@ impl UltraRushApp {
         let proxy = options::global_proxy(&s.proxy);
         let connect_timeout = Duration::from_secs(u64::from(s.transfer.connect_timeout_secs));
         let io_timeout = Duration::from_secs(u64::from(s.transfer.io_timeout_secs));
-        let ftp = |security| SiteProtocol::Ftp(FtpConfig { security, proxy: proxy.clone(), connect_timeout, io_timeout, ..FtpConfig::default() });
+        let ftp =
+            |security| SiteProtocol::Ftp(FtpConfig { security, proxy: proxy.clone(), connect_timeout, io_timeout, ..FtpConfig::default() });
         let protocol = match q.proto {
             QuickProto::Ftp => ftp(Security::None),
             QuickProto::FtpsExplicit => ftp(Security::Explicit(tls)),
@@ -1028,7 +1031,7 @@ impl UltraRushApp {
             let rt = self.rt.clone();
             let opts = self.engine_options();
             for t in 0..self.tabs.len() {
-                if self.tabs[t].queue.lock().unwrap().has_pending() {
+                if self.tabs[t].queue.lock().has_pending() {
                     let extra = self.queue_site_profiles(t);
                     self.tabs[t].start_queue(&rt, ctx, opts.clone(), &extra);
                 }
@@ -1100,7 +1103,8 @@ impl UltraRushApp {
             ui.add(egui::TextEdit::singleline(&mut self.quick.host).hint_text("Hôte").desired_width(180.0));
             ui.add(egui::TextEdit::singleline(&mut self.quick.port).hint_text("Port").desired_width(48.0));
             ui.add(egui::TextEdit::singleline(&mut self.quick.user).hint_text("Utilisateur").desired_width(120.0));
-            let pass = ui.add(egui::TextEdit::singleline(&mut self.quick.pass).hint_text("Mot de passe").password(true).desired_width(120.0));
+            let pass =
+                ui.add(egui::TextEdit::singleline(&mut self.quick.pass).hint_text("Mot de passe").password(true).desired_width(120.0));
             let enter = pass.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if ui.add(egui::Button::new(RichText::new("Connexion").color(Color32::WHITE)).fill(ACCENT)).clicked() || enter {
                 self.quick_connect(ui.ctx());
@@ -1187,7 +1191,7 @@ impl UltraRushApp {
                 }
                 Action::StartQueue => tab.start_queue(&rt, ctx, opts.clone(), &extra),
                 Action::ClearFinished => {
-                    tab.queue.lock().unwrap().remove_where(|i| i.state.is_finished());
+                    tab.queue.lock().remove_where(|i| i.state.is_finished());
                 }
                 Action::Focus(side) => tab.focus = side,
                 Action::Sort(side, col) => {
@@ -1202,14 +1206,14 @@ impl UltraRushApp {
                 Action::QueueStopAll => tab.stop_all(),
                 Action::QueueMove(id, m) => tab.move_item(id, m),
                 Action::QueueRemove(id) => {
-                    tab.queue.lock().unwrap().remove_where(|i| i.id == id);
+                    tab.queue.lock().remove_where(|i| i.id == id);
                 }
                 Action::QueueRetry(id) => {
                     tab.retry_item(id);
                     tab.start_queue(&rt, ctx, opts.clone(), &extra);
                 }
                 Action::QueueRetryAll => {
-                    tab.queue.lock().unwrap().reset_failed();
+                    tab.queue.lock().reset_failed();
                     tab.start_queue(&rt, ctx, opts.clone(), &extra);
                 }
             }
@@ -1229,7 +1233,7 @@ impl UltraRushApp {
             let t = &mut self.tabs[tab.min(last)];
             t.script_out.push(match out {
                 Ok(m) => (true, m),
-                Err(e) => (false, e),
+                Err(e) => (false, e.to_string()),
             });
             if t.script_out.len() > 200 {
                 t.script_out.remove(0);
@@ -1240,20 +1244,9 @@ impl UltraRushApp {
     /// Profils (depuis le gestionnaire de sites) de tous les sites cités dans la file d'un onglet.
     fn queue_site_profiles(&self, tab: usize) -> Vec<SiteProfile> {
         let Some(t) = self.tabs.get(tab) else { return Vec::new() };
-        let names: BTreeSet<String> = t
-            .queue
-            .lock()
-            .unwrap()
-            .items()
-            .iter()
-            .flat_map(|i| [i.src.site.clone(), i.dst.site.clone()])
-            .flatten()
-            .collect();
-        names
-            .iter()
-            .filter_map(|n| self.sites.book.find_by_name(n))
-            .map(|s| sites::to_profile(s, &self.options.settings))
-            .collect()
+        let names: BTreeSet<String> =
+            t.queue.lock().items().iter().flat_map(|i| [i.src.site.clone(), i.dst.site.clone()]).flatten().collect();
+        names.iter().filter_map(|n| self.sites.book.find_by_name(n)).map(|s| sites::to_profile(s, &self.options.settings)).collect()
     }
 
     /// Raccourcis clavier, appliqués au panneau actif quand aucun champ texte n'a le focus.
@@ -1357,11 +1350,11 @@ impl UltraRushApp {
                 }
             });
         });
-        if let Some(ok) = done {
-            let p = tab.prompt.take().unwrap();
-            if ok {
-                tab.run_prompt(p);
-            }
+        if let Some(ok) = done
+            && let Some(p) = tab.prompt.take()
+            && ok
+        {
+            tab.run_prompt(p);
         }
     }
 
@@ -1386,7 +1379,8 @@ impl UltraRushApp {
             ui.label("Ne l'approuvez que si elle correspond à celle donnée par l'administrateur du site.");
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                if ui.add(egui::Button::new(RichText::new("Faire confiance et se connecter").color(Color32::WHITE)).fill(ACCENT)).clicked() {
+                if ui.add(egui::Button::new(RichText::new("Faire confiance et se connecter").color(Color32::WHITE)).fill(ACCENT)).clicked()
+                {
                     decision = Some(true);
                 }
                 if ui.button("Annuler").clicked() {
@@ -1395,7 +1389,7 @@ impl UltraRushApp {
             });
         });
         let Some(trust) = decision else { return };
-        let prompt = tab.trust.take().unwrap();
+        let Some(prompt) = tab.trust.take() else { return };
         if !trust {
             return;
         }
@@ -1429,7 +1423,7 @@ impl eframe::App for UltraRushApp {
         // `-rx` : fermer quand aucune file ne tourne et qu'il ne reste rien à transférer.
         if self.exit_when_done
             && self.startup.is_none()
-            && self.tabs.iter().all(|t| t.engine_events.is_none() && !t.queue.lock().unwrap().has_pending())
+            && self.tabs.iter().all(|t| t.engine_events.is_none() && !t.queue.lock().has_pending())
         {
             self.stats.save();
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1730,7 +1724,7 @@ impl PaneViewer<'_> {
     }
 
     fn queue_pane(&mut self, ui: &mut egui::Ui) {
-        let items = self.queue.lock().unwrap().items().to_vec();
+        let items = self.queue.lock().items().to_vec();
         let failed = items.iter().filter(|i| matches!(i.state, ItemState::Failed(_) | ItemState::Stopped)).count();
         ui.horizontal(|ui| {
             if ui.button("▶ Démarrer").clicked() {
@@ -1778,8 +1772,12 @@ impl PaneViewer<'_> {
                         ui.label(dir);
                     });
                     row.col(|ui| {
-                        let name = Path::new(&it.src.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| it.src.path.clone());
-                        ui.label(format!("{}{}", if it.is_dir { "📁 " } else { "" }, name)).on_hover_text(format!("{} → {}", it.src.path, it.dst.path));
+                        let name = Path::new(&it.src.path)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| it.src.path.clone());
+                        ui.label(format!("{}{}", if it.is_dir { "📁 " } else { "" }, name))
+                            .on_hover_text(format!("{} → {}", it.src.path, it.dst.path));
                     });
                     row.col(|ui| {
                         ui.label(it.size.map(human_size).unwrap_or_default());
@@ -1818,7 +1816,12 @@ impl PaneViewer<'_> {
                             ui.close();
                         }
                         ui.separator();
-                        for (m, label) in [(Move::Top, "⏫ Tout en haut"), (Move::Up, "⏶ Monter"), (Move::Down, "⏷ Descendre"), (Move::Bottom, "⏬ Tout en bas")] {
+                        for (m, label) in [
+                            (Move::Top, "⏫ Tout en haut"),
+                            (Move::Up, "⏶ Monter"),
+                            (Move::Down, "⏷ Descendre"),
+                            (Move::Bottom, "⏬ Tout en bas"),
+                        ] {
                             if ui.button(label).clicked() {
                                 menu.push(Action::QueueMove(id, m));
                                 ui.close();

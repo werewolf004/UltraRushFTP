@@ -1,21 +1,18 @@
-//! DLL mIRC compatible avec `rushmirc.dll` de FTPRush, pour piloter UltraRushFTP depuis mIRC.
+//! mIRC DLL compatible with FTPRush's `rushmirc.dll`, to drive UltraRushFTP from mIRC.
 //!
-//! Exports (signature mIRC standard, convention `stdcall`) : `LoadDll`, `UnloadDll`,
-//! `Invoke`, `RushScript`, `RushCommand`, `EnableCallback`, `DisableCallback` (ces deux
-//! dernières manquaient aux exports de l'originale).
+//! This crate contains no code of its own: the exports (`LoadDll`, `UnloadDll`, `Invoke`,
+//! `RushScript`, `RushCommand`, `EnableCallback`, `DisableCallback`) live in
+//! `urftp_sys::mirc`, the only crate allowed to use `unsafe`, and are re-exported here so
+//! that the `cdylib` exposes them.
 //!
 //! ```text
 //! //echo -a $dll(rushmirc.dll, Invoke, RushApp.Version)
-//! //dll rushmirc.dll RushScript RushApp.FTP.RAW('MonSite', 'SITE WHO', RS_LOGIN);
+//! //dll rushmirc.dll RushScript RushApp.FTP.RAW('MySite', 'SITE WHO', RS_LOGIN);
 //! ```
 //!
-//! Les réponses des commandes `RAW` lancées par `RushScript` reviennent dans mIRC sous la
-//! forme `/echo -a (site) commande` puis une ligne par ligne de réponse.
-
-pub use urftp_ipc as ipc;
-
-#[cfg(windows)]
-mod dll;
+//! Replies of `RAW` commands started by `RushScript` come back into mIRC as
+//! `/echo -a (site) command`, then one line per reply line.
+#![forbid(unsafe_code)]
 
 #[cfg(windows)]
-pub use dll::*;
+pub use urftp_sys::mirc::*;

@@ -70,12 +70,7 @@ impl MockSftp {
         let (fs2, log2) = (fs.clone(), auth_log.clone());
         tokio::spawn(async move {
             while let Ok((tcp, _)) = listener.accept().await {
-                let handler = SshHandler {
-                    cfg: cfg.clone(),
-                    fs: fs2.clone(),
-                    auth_log: log2.clone(),
-                    channels: HashMap::new(),
-                };
+                let handler = SshHandler { cfg: cfg.clone(), fs: fs2.clone(), auth_log: log2.clone(), channels: HashMap::new() };
                 let config = config.clone();
                 tokio::spawn(async move {
                     if let Ok(running) = russh::server::run_stream(config, tcp, handler).await {
@@ -108,8 +103,7 @@ impl russh::server::Handler for SshHandler {
     }
 
     async fn auth_publickey(&mut self, user: &str, key: VerifiedPublicKey<'_>) -> Result<Auth, Self::Error> {
-        let ok = user == self.cfg.user
-            && self.cfg.authorized_key.as_ref().is_some_and(|k| k.key_data() == key.public_key.key_data());
+        let ok = user == self.cfg.user && self.cfg.authorized_key.as_ref().is_some_and(|k| k.key_data() == key.public_key.key_data());
         if ok {
             self.auth_log.lock().unwrap().push("publickey".into());
             Ok(Auth::Accept)

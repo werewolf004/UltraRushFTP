@@ -207,27 +207,13 @@ impl Queue {
 
     fn make(&mut self, src: Endpoint, dst: Endpoint, is_dir: bool, size: Option<u64>, priority: Option<usize>) -> QueueItem {
         self.next_id += 1;
-        QueueItem {
-            id: self.next_id,
-            src,
-            dst,
-            is_dir,
-            size,
-            priority,
-            state: ItemState::Waiting,
-            attempts: 0,
-            transferred: 0,
-        }
+        QueueItem { id: self.next_id, src, dst, is_dir, size, priority, state: ItemState::Waiting, attempts: 0, transferred: 0 }
     }
 
     /// Ajoute un élément : il passe devant les éléments en attente moins prioritaires.
     pub fn push(&mut self, src: Endpoint, dst: Endpoint, is_dir: bool, size: Option<u64>, priority: Option<usize>) -> ItemId {
         let item = self.make(src, dst, is_dir, size, priority);
-        let pos = self
-            .items
-            .iter()
-            .position(|i| i.state == ItemState::Waiting && i.rank() > item.rank())
-            .unwrap_or(self.items.len());
+        let pos = self.items.iter().position(|i| i.state == ItemState::Waiting && i.rank() > item.rank()).unwrap_or(self.items.len());
         let id = item.id;
         self.items.insert(pos, item);
         id
@@ -235,8 +221,7 @@ impl Queue {
 
     /// Insère le contenu d'un dossier juste après lui, trié par priorité (ordre stable).
     pub fn insert_children(&mut self, parent: ItemId, children: Vec<NewItem>) -> Vec<ItemId> {
-        let mut made: Vec<QueueItem> =
-            children.into_iter().map(|(s, d, dir, size, prio)| self.make(s, d, dir, size, prio)).collect();
+        let mut made: Vec<QueueItem> = children.into_iter().map(|(s, d, dir, size, prio)| self.make(s, d, dir, size, prio)).collect();
         made.sort_by_key(QueueItem::rank);
         let ids = made.iter().map(|i| i.id).collect();
         let at = self.position(parent).map_or(self.items.len(), |p| p + 1);

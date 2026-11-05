@@ -1,3 +1,5 @@
+// Test harness (mock servers, fixtures): a failed unwrap/expect is a test failure.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod common;
 
 use std::net::{IpAddr, SocketAddr};
@@ -144,12 +146,7 @@ async fn active_mode_switches_to_passive_through_proxy() {
 
 #[tokio::test]
 async fn ident_answers_site_name_then_default() {
-    let ident = IdentServer::start(IdentConfig {
-        bind: SocketAddr::from(([127, 0, 0, 1], 0)),
-        ..IdentConfig::default()
-    })
-    .await
-    .unwrap();
+    let ident = IdentServer::start(IdentConfig { bind: SocketAddr::from(([127, 0, 0, 1], 0)), ..IdentConfig::default() }).await.unwrap();
     let srv = MockServer::start(MockConfig { ident_port: Some(ident.local_addr().port()), ..MockConfig::default() }).await;
     let localhost: IpAddr = [127, 0, 0, 1].into();
 

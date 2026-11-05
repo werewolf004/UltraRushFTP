@@ -3932,8 +3932,7 @@ dependencies = [
 name = "rushmirc"
 version = "0.1.0"
 dependencies = [
- "urftp-ipc",
- "windows-sys 0.61.2",
+ "urftp-sys",
 ]
 
 [[package]]
@@ -5047,6 +5046,8 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 name = "urftp-cli"
 version = "0.1.0"
 dependencies = [
+ "parking_lot",
+ "thiserror 2.0.21",
  "tokio",
  "urftp-core",
  "urftp-proto",
@@ -5062,7 +5063,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
- "windows-sys 0.61.2",
+ "urftp-sys",
 ]
 
 [[package]]
@@ -5072,27 +5073,23 @@ dependencies = [
  "eframe",
  "egui_dock",
  "egui_extras",
+ "parking_lot",
  "rfd",
  "serde",
  "serde_json",
+ "thiserror 2.0.21",
  "tokio",
  "urftp-core",
- "urftp-ipc",
  "urftp-proto",
  "urftp-script",
-]
-
-[[package]]
-name = "urftp-ipc"
-version = "0.1.0"
-dependencies = [
- "windows-sys 0.61.2",
+ "urftp-sys",
 ]
 
 [[package]]
 name = "urftp-proto"
 version = "0.1.0"
 dependencies = [
+ "parking_lot",
  "rand 0.10.3",
  "rcgen",
  "ring",
@@ -5109,6 +5106,17 @@ dependencies = [
 [[package]]
 name = "urftp-script"
 version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "urftp-sys"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.21",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "url"

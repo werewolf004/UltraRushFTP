@@ -35,8 +35,15 @@ pub enum SessionError {
     Sftp(#[from] SftpError),
     #[error("fichier local : {0}")]
     Local(#[from] std::io::Error),
-    #[error("{0}")]
-    Other(String),
+    /// The queue refers to a site the engine was not given.
+    #[error("unknown site: {0}")]
+    UnknownSite(String),
+    /// FXP needs two FTP/FTPS servers.
+    #[error("FXP is only possible between two FTP/FTPS servers")]
+    FxpNeedsFtp,
+    /// Every renamed variant of the target already exists.
+    #[error("no free name left for {0}")]
+    NoFreeName(String),
 }
 
 impl SessionError {
@@ -48,7 +55,9 @@ impl SessionError {
             SessionError::Ftp(FtpError::Unexpected { .. })
                 | SessionError::Sftp(SftpError::Status { .. })
                 | SessionError::Local(_)
-                | SessionError::Other(_)
+                | SessionError::UnknownSite(_)
+                | SessionError::FxpNeedsFtp
+                | SessionError::NoFreeName(_)
         )
     }
 
@@ -246,6 +255,6 @@ impl RemoteSession {
                 return Ok(candidate);
             }
         }
-        Err(SessionError::Other(format!("aucun nom libre pour {name}")))
+        Err(SessionError::NoFreeName(name.to_string()))
     }
 }

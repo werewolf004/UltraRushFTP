@@ -2,7 +2,6 @@
 
 use std::path::PathBuf;
 
-
 use eframe::egui::{self, Color32, RichText};
 use urftp_core::import::{self, ImportResult};
 use urftp_core::settings::Settings;
@@ -12,9 +11,6 @@ use urftp_core::site::{
 use urftp_core::sitestore;
 
 use urftp_proto::session::SiteProfile;
-
-
-
 
 use crate::browser::TrustKind;
 use crate::theme::{ACCENT, LOG_ERROR, LOG_REPLY};
@@ -95,9 +91,7 @@ impl SiteManager {
     pub fn save(&mut self) {
         match sitestore::save(&self.path, &self.book) {
             Ok(()) => self.dirty = false,
-            Err(e) => {
-                self.report = Some(Report { title: "Enregistrement impossible".into(), lines: vec![e.to_string()], error: true })
-            }
+            Err(e) => self.report = Some(Report { title: "Enregistrement impossible".into(), lines: vec![e.to_string()], error: true }),
         }
     }
 
@@ -141,7 +135,8 @@ impl SiteManager {
                 self.report = Some(Report { title: "Import terminé".into(), lines, error: false });
             }
             Err(e) => {
-                self.report = Some(Report { title: "Import impossible".into(), lines: vec![format!("{} : {e}", path.display())], error: true })
+                self.report =
+                    Some(Report { title: "Import impossible".into(), lines: vec![format!("{} : {e}", path.display())], error: true })
             }
         }
     }
@@ -151,12 +146,9 @@ impl SiteManager {
             return;
         }
         let mut open = true;
-        egui::Window::new("☰ Gestionnaire de sites")
-            .open(&mut open)
-            .default_size([900.0, 600.0])
-            .min_width(720.0)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        egui::Window::new("☰ Gestionnaire de sites").open(&mut open).default_size([900.0, 600.0]).min_width(720.0).collapsible(false).show(
+            ctx,
+            |ui| {
                 self.toolbar(ui);
                 ui.separator();
                 ui.horizontal_top(|ui| {
@@ -175,7 +167,8 @@ impl SiteManager {
                         egui::ScrollArea::vertical().id_salt("site-form").show(ui, |ui| self.form(ui));
                     });
                 });
-            });
+            },
+        );
         if !open {
             self.open = false;
             if self.dirty {
@@ -563,7 +556,12 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
         if let ProxyChoice::Custom(p) = &mut s.proxy {
             egui::Grid::new("site-proxy-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
                 row(ui, "Type", |ui| {
-                    for (k, l) in [(ProxyType::Socks4, "SOCKS4"), (ProxyType::Socks4a, "SOCKS4A"), (ProxyType::Socks5, "SOCKS5"), (ProxyType::HttpTunnel, "HTTP Tunnel")] {
+                    for (k, l) in [
+                        (ProxyType::Socks4, "SOCKS4"),
+                        (ProxyType::Socks4a, "SOCKS4A"),
+                        (ProxyType::Socks5, "SOCKS5"),
+                        (ProxyType::HttpTunnel, "HTTP Tunnel"),
+                    ] {
                         ui.radio_value(&mut p.kind, k, l);
                     }
                 });
@@ -634,4 +632,3 @@ fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
         add(ui);
     });
 }
-

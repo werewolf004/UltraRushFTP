@@ -54,11 +54,7 @@ fn walk(item: &Value, parent: &mut SiteGroup, warnings: &mut Vec<String>) {
 /// `/K:/dossier/` (notation de la v3) → `K:\dossier\`.
 fn local_path(p: &str) -> String {
     let b = p.as_bytes();
-    if b.len() >= 3 && b[0] == b'/' && b[2] == b':' {
-        p[1..].replace('/', "\\")
-    } else {
-        p.to_string()
-    }
+    if b.len() >= 3 && b[0] == b'/' && b[2] == b':' { p[1..].replace('/', "\\") } else { p.to_string() }
 }
 
 fn site(name: &str, sv: &Value, warnings: &mut Vec<String>) -> Site {
@@ -134,7 +130,10 @@ mod tests {
         let g = &r.group.groups[0];
         assert_eq!(g.name, "FTPRush Sites");
         let a = &g.sites[0];
-        assert_eq!((a.name.as_str(), a.host.as_str(), a.port, a.protocol), ("00.TEST", "ftp.example.com", 36969, SiteProtocol::FtpsExplicit));
+        assert_eq!(
+            (a.name.as_str(), a.host.as_str(), a.port, a.protocol),
+            ("00.TEST", "ftp.example.com", 36969, SiteProtocol::FtpsExplicit)
+        );
         assert_eq!((a.user.as_str(), a.password.as_str()), ("Bob", "fauxMdp"));
         assert_eq!((a.local_dir.as_str(), a.remote_dir.as_str()), (r"K:\_PRE\TEST\", "/_PRE/TEST"));
         assert_eq!(a.bookmarks[0].remote_dir, "/_PRE");

@@ -1,3 +1,5 @@
+// Test harness (mock servers, fixtures): a failed unwrap/expect is a test failure.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Serveur FTP de développement (localhost) réutilisant le serveur des tests d'intégration.
 //! Identifiants : `test` / `secret`. Affiche le port choisi puis tourne jusqu'à Ctrl+C.
 //!

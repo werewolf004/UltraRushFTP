@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::parser::{BinOp, Expr, Stmt, UnOp};
-use crate::{Host, ScriptError, Value, flag_value};
+use crate::{Host, HostError, ScriptError, ScriptErrorKind, Value, flag_value};
 
 /// Nombre maximal d'instructions exécutées (protection contre les boucles infinies).
 const MAX_STEPS: u64 = 1_000_000;
@@ -29,7 +29,11 @@ impl From<ScriptError> for Flow {
 }
 
 fn err(line: usize, m: impl Into<String>) -> ScriptError {
-    ScriptError { line, message: m.into() }
+    ScriptError::runtime(line, m)
+}
+
+fn host_err(line: usize, e: HostError) -> ScriptError {
+    ScriptError::new(line, e)
 }
 
 impl<'h> Interpreter<'h> {
@@ -66,7 +70,7 @@ impl<'h> Interpreter<'h> {
         }
         self.steps += 1;
         if self.steps > MAX_STEPS {
-            return Err(err(line, "script interrompu : trop d'instructions (boucle infinie ?)").into());
+            return Err(ScriptError::new(line, ScriptErrorKind::StepLimit).into());
         }
         Ok(())
     }
@@ -83,7 +87,7 @@ impl<'h> Interpreter<'h> {
                     self.vars.insert(path[0].to_ascii_lowercase(), v);
                     Ok(())
                 } else {
-                    self.host.set(&path.join("."), v).map_err(|m| err(*line, m).into())
+                    self.host.set(&path.join("."), v).map_err(|e| host_err(*line, e).into())
                 }
             }
             Stmt::Call(path, args, line) => {
@@ -164,7 +168,7 @@ impl<'h> Interpreter<'h> {
             Expr::Binary(op, a, b) => {
                 let line = line_of(a);
                 let (x, y) = (self.eval(a)?, self.eval(b)?);
-                binary(*op, x, y).map_err(|m| err(line, m))?
+                binary(*op, x, y).map_err(|k| ScriptError::new(line, k))?
             }
         })
     }
@@ -183,7 +187,7 @@ impl<'h> Interpreter<'h> {
                 return Ok(v);
             }
         }
-        self.host.get(&path.join(".")).map_err(|m| err(line, m).into())
+        self.host.get(&path.join(".")).map_err(|e| host_err(line, e).into())
     }
 
     fn call(&mut self, path: &[String], args: &[Expr], line: usize) -> Result<Value, Flow> {
@@ -193,7 +197,7 @@ impl<'h> Interpreter<'h> {
         {
             return Ok(v);
         }
-        self.host.call(&path.join("."), &values).map_err(|m| err(line, m).into())
+        self.host.call(&path.join("."), &values).map_err(|e| host_err(line, e).into())
     }
 
     /// Fonctions intégrées du Pascal Script ; `None` si le nom n'en est pas une.
@@ -249,7 +253,7 @@ impl<'h> Interpreter<'h> {
             }
             "showmessage" => {
                 arity(1)?;
-                self.host.call("ShowMessage", v).map_err(|m| err(line, m))?;
+                self.host.call("ShowMessage", v).map_err(|e| host_err(line, e))?;
                 Value::Nil
             }
             "inputquery" => {
@@ -258,7 +262,7 @@ impl<'h> Interpreter<'h> {
                 let Some(Expr::Name(target, _)) = raw.get(2).filter(|e| matches!(e, Expr::Name(p, _) if p.len() == 1)) else {
                     return Err(err(line, "InputQuery : le 3e argument doit être une variable").into());
                 };
-                match self.host.call("InputQuery", v).map_err(|m| err(line, m))? {
+                match self.host.call("InputQuery", v).map_err(|e| host_err(line, e))? {
                     Value::Str(answer) => {
                         self.vars.insert(target[0].to_ascii_lowercase(), Value::Str(answer));
                         Value::Bool(true)
@@ -280,7 +284,7 @@ fn line_of(e: &Expr) -> usize {
     }
 }
 
-fn binary(op: BinOp, x: Value, y: Value) -> Result<Value, String> {
+fn binary(op: BinOp, x: Value, y: Value) -> Result<Value, ScriptErrorKind> {
     use Value::*;
     let tn = |a: &Value, b: &Value| format!("{} et {}", a.type_name(), b.type_name());
     Ok(match (op, x, y) {
@@ -288,7 +292,7 @@ fn binary(op: BinOp, x: Value, y: Value) -> Result<Value, String> {
         (BinOp::Add, a @ (Str(_) | Int(_)), b @ (Str(_) | Int(_))) => Str(a.to_text() + &b.to_text()),
         (BinOp::Sub, Int(a), Int(b)) => Int(a.wrapping_sub(b)),
         (BinOp::Mul, Int(a), Int(b)) => Int(a.wrapping_mul(b)),
-        (BinOp::Div | BinOp::Mod, Int(_), Int(0)) => return Err("division par zéro".into()),
+        (BinOp::Div | BinOp::Mod, Int(_), Int(0)) => return Err(ScriptErrorKind::DivisionByZero),
         (BinOp::Div, Int(a), Int(b)) => Int(a / b),
         (BinOp::Mod, Int(a), Int(b)) => Int(a % b),
         (BinOp::And, Bool(a), Bool(b)) => Bool(a && b),
@@ -304,7 +308,7 @@ fn binary(op: BinOp, x: Value, y: Value) -> Result<Value, String> {
             let o = match (&a, &b) {
                 (Int(x), Int(y)) => x.cmp(y),
                 (Str(x), Str(y)) => x.cmp(y),
-                _ => return Err(format!("comparaison impossible entre {}", tn(&a, &b))),
+                _ => return Err(ScriptErrorKind::Runtime(format!("comparaison impossible entre {}", tn(&a, &b)))),
             };
             Bool(match cmp {
                 BinOp::Lt => o.is_lt(),
@@ -313,6 +317,6 @@ fn binary(op: BinOp, x: Value, y: Value) -> Result<Value, String> {
                 _ => o.is_ge(),
             })
         }
-        (_, a, b) => return Err(format!("opération impossible entre {}", tn(&a, &b))),
+        (_, a, b) => return Err(ScriptErrorKind::Runtime(format!("opération impossible entre {}", tn(&a, &b)))),
     })
 }

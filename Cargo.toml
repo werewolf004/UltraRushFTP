@@ -4,7 +4,7 @@ members = [
     "crates/urftp-core",
     "crates/urftp-proto",
     "crates/urftp-script",
-    "crates/urftp-ipc",
+    "crates/urftp-sys",
     "crates/rushmirc",
     "crates/urftp-cli",
     "crates/urftp-gui",
@@ -21,9 +21,23 @@ repository = "https://github.com/werewolf004/UltraRushFTP"
 urftp-core = { path = "crates/urftp-core" }
 urftp-proto = { path = "crates/urftp-proto" }
 urftp-script = { path = "crates/urftp-script" }
-urftp-ipc = { path = "crates/urftp-ipc" }
+urftp-sys = { path = "crates/urftp-sys" }
 tokio = { version = "1", features = ["net", "io-util", "time", "rt", "sync", "macros", "fs"] }
 thiserror = "2"
+parking_lot = "0.12"
+
+# Quality gates shared by every crate except `urftp-sys` (the only one allowed `unsafe`,
+# with its own stricter rules in its manifest).
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
 
 [profile.release]
 lto = "thin"

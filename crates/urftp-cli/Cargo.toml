@@ -12,6 +12,11 @@ name = "urftp"
 path = "src/main.rs"
 
 [dependencies]
+thiserror.workspace = true
+parking_lot.workspace = true
 urftp-core.workspace = true
 urftp-proto.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "fs", "time"] }
+
+[lints]
+workspace = true

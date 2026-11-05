@@ -106,7 +106,10 @@ mod tests {
     #[test]
     fn combined_and_invalid() {
         let o = p(&["-w2", "-cftp://u:p@h:21", "-rx", "/d"]);
-        assert_eq!((o.windows, o.connect.as_deref(), o.run_queues, o.exit_when_done, o.debug), (Some(2), Some("ftp://u:p@h:21"), true, true, true));
+        assert_eq!(
+            (o.windows, o.connect.as_deref(), o.run_queues, o.exit_when_done, o.debug),
+            (Some(2), Some("ftp://u:p@h:21"), true, true, true)
+        );
         assert_eq!(p(&["-w0", "-wx", "-z", "fichier.txt"]).unknown.len(), 4);
     }
 }

@@ -37,14 +37,25 @@ pub enum TrustKind {
 }
 
 pub enum BrowserEvent {
-    Listing { dir: String, entries: Vec<RemoteEntry> },
+    Listing {
+        dir: String,
+        entries: Vec<RemoteEntry>,
+    },
     Log(LogLine),
     Error(String),
     /// Certificat TLS ou clé SSH inconnus : l'utilisateur peut les approuver.
-    Trust { kind: TrustKind, fingerprint: String, reason: String },
+    Trust {
+        kind: TrustKind,
+        fingerprint: String,
+        reason: String,
+    },
     Disconnected,
     /// Réponse à une commande brute : (commande, lignes de la réponse).
-    RawReply { command: String, lines: Vec<String>, ok: bool },
+    RawReply {
+        command: String,
+        lines: Vec<String>,
+        ok: bool,
+    },
 }
 
 pub struct BrowserHandle {
@@ -77,10 +88,7 @@ pub fn spawn(rt: &Handle, ctx: egui::Context) -> BrowserHandle {
                         log_ctx.request_repaint();
                     });
                     match RemoteSession::open(&profile, Some(log)).await {
-                        Ok(s) => {
-                            session = Some(s);
-                            listing(session.as_mut().unwrap(), &send).await;
-                        }
+                        Ok(s) => listing(session.insert(s), &send).await,
                         Err(e) => send(error_event(e)),
                     }
                 }

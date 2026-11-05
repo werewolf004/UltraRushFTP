@@ -3,6 +3,8 @@
 use urftp_core::exists::ExistsAction;
 use urftp_core::site::{Site, SiteProtocol};
 
+use crate::error::{ArgsError, TargetError};
+
 pub const USAGE: &str = "\
 urftp — UltraRushFTP en ligne de commande (sites du gestionnaire ou URL)
 
@@ -47,18 +49,18 @@ pub struct Options {
     pub data_dir: Option<String>,
 }
 
-pub fn parse(args: impl IntoIterator<Item = String>) -> Result<(Command, Options), String> {
+pub fn parse(args: impl IntoIterator<Item = String>) -> Result<(Command, Options), ArgsError> {
     let mut opts = Options::default();
     let mut pos: Vec<String> = Vec::new();
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
-        let mut value = |name: &str| it.next().ok_or_else(|| format!("{name} : valeur manquante"));
+        let mut value = |name: &str| it.next().ok_or_else(|| ArgsError::MissingValue(name.into()));
         match a.as_str() {
             "-h" | "--help" | "/?" => return Ok((Command::Help, opts)),
             "-v" | "--verbose" => opts.verbose = true,
             "-n" | "--transfers" => {
                 let v = value(&a)?;
-                opts.transfers = Some(v.parse().map_err(|_| format!("{a} : nombre attendu, pas « {v} »"))?);
+                opts.transfers = Some(v.parse().map_err(|_| ArgsError::NotANumber { option: a.clone(), value: v.clone() })?);
             }
             "--exists" => {
                 let v = value(&a)?;
@@ -67,13 +69,13 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<(Command, Options
                     "resume" | "reprendre" => ExistsAction::Resume,
                     "skip" | "ignorer" => ExistsAction::Skip,
                     "rename" | "renommer" => ExistsAction::Rename,
-                    _ => return Err(format!("--exists : action inconnue « {v} »")),
+                    _ => return Err(ArgsError::UnknownExistsAction(v)),
                 });
             }
             "--insecure" => opts.insecure = true,
             "--fingerprint" => opts.fingerprint = Some(value(&a)?),
             "--data" => opts.data_dir = Some(value(&a)?),
-            s if s.starts_with("--") => return Err(format!("option inconnue : {s}")),
+            s if s.starts_with("--") => return Err(ArgsError::UnknownOption(s.into())),
             _ => pos.push(a),
         }
     }
@@ -81,7 +83,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<(Command, Options
     let Some(verb) = pos.next() else { return Ok((Command::Help, opts)) };
     let rest: Vec<String> = pos.collect();
     let n = rest.len();
-    let need = |ok: bool, form: &str| if ok { Ok(()) } else { Err(format!("utilisation : urftp {form}")) };
+    let need = |ok: bool, form: &'static str| if ok { Ok(()) } else { Err(ArgsError::Usage(form)) };
     let cmd = match verb.to_ascii_lowercase().as_str() {
         "sites" | "list" => Command::Sites,
         "ls" | "dir" => {
@@ -105,7 +107,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<(Command, Options
             Command::Raw { site: rest[0].clone(), commands: rest[1..].to_vec() }
         }
         "help" => Command::Help,
-        v => return Err(format!("commande inconnue : {v} (urftp --help)")),
+        v => return Err(ArgsError::UnknownCommand(v.into())),
     };
     Ok((cmd, opts))
 }
@@ -139,14 +141,14 @@ fn percent_decode(s: &str) -> String {
 }
 
 /// `NomDuSite:/chemin`, `NomDuSite` (dossier de départ) ou `ftp://user:pass@hôte:port/chemin`.
-pub fn parse_target(s: &str) -> Result<Target, String> {
+pub fn parse_target(s: &str) -> Result<Target, TargetError> {
     if let Some((scheme, rest)) = s.split_once("://") {
         let protocol = match scheme.to_ascii_lowercase().as_str() {
             "ftp" => SiteProtocol::Ftp,
             "ftps" | "ftpes" => SiteProtocol::FtpsExplicit,
             "ftpsi" => SiteProtocol::FtpsImplicit,
             "sftp" => SiteProtocol::Sftp,
-            _ => return Err(format!("protocole inconnu : {scheme}")),
+            _ => return Err(TargetError::UnknownScheme(scheme.into())),
         };
         let (authority, path) = match rest.find('/') {
             Some(i) => (&rest[..i], percent_decode(&rest[i..])),
@@ -155,12 +157,12 @@ pub fn parse_target(s: &str) -> Result<Target, String> {
         let (creds, hostport) = authority.rsplit_once('@').unwrap_or(("", authority));
         let (user, pass) = creds.split_once(':').unwrap_or((creds, ""));
         let (host, port) = match hostport.rsplit_once(':') {
-            Some((h, p)) => (h, p.parse::<u16>().map_err(|_| format!("port invalide : {p}"))?),
+            Some((h, p)) => (h, p.parse::<u16>().ok().filter(|&n| n > 0).ok_or_else(|| TargetError::InvalidPort(p.into()))?),
             None => (hostport, protocol.default_port()),
         };
         let host = host.trim_start_matches('[').trim_end_matches(']');
         if host.is_empty() {
-            return Err(format!("hôte manquant : {s}"));
+            return Err(TargetError::MissingHost(s.into()));
         }
         let user = percent_decode(user);
         let site = Site {
@@ -177,7 +179,7 @@ pub fn parse_target(s: &str) -> Result<Target, String> {
     }
     let (site, path) = s.split_once(':').unwrap_or((s, ""));
     if site.trim().is_empty() {
-        return Err(format!("site manquant : {s}"));
+        return Err(TargetError::MissingSite(s.into()));
     }
     Ok(Target::Named { site: site.trim().to_string(), path: path.to_string() })
 }
@@ -186,7 +188,7 @@ pub fn parse_target(s: &str) -> Result<Target, String> {
 mod tests {
     use super::*;
 
-    fn p(args: &[&str]) -> Result<(Command, Options), String> {
+    fn p(args: &[&str]) -> Result<(Command, Options), ArgsError> {
         parse(args.iter().map(|s| s.to_string()))
     }
 
@@ -200,8 +202,8 @@ mod tests {
             p(&["raw", "Dev", "SITE WHO", "STAT"]).unwrap().0,
             Command::Raw { site: "Dev".into(), commands: vec!["SITE WHO".into(), "STAT".into()] }
         );
-        assert!(p(&["put", "x"]).is_err());
-        assert!(p(&["frobnicate"]).is_err());
+        assert_eq!(p(&["put", "x"]).unwrap_err(), ArgsError::Usage("put <fichier|dossier> <cible>"));
+        assert_eq!(p(&["frobnicate"]).unwrap_err(), ArgsError::UnknownCommand("frobnicate".into()));
     }
 
     #[test]
@@ -209,7 +211,8 @@ mod tests {
         let (c, o) = p(&["-v", "get", "--exists", "overwrite", "Dev:/a", "C:\\dl", "-n", "4", "--insecure"]).unwrap();
         assert_eq!(c, Command::Get { src: "Dev:/a".into(), dest: Some("C:\\dl".into()) });
         assert_eq!((o.verbose, o.transfers, o.exists, o.insecure), (true, Some(4), Some(ExistsAction::Overwrite), true));
-        assert!(p(&["-n", "x", "sites"]).is_err());
+        assert_eq!(p(&["-n", "x", "sites"]).unwrap_err(), ArgsError::NotANumber { option: "-n".into(), value: "x".into() });
+        assert_eq!(p(&["-n"]).unwrap_err(), ArgsError::MissingValue("-n".into()));
         assert!(p(&["--exists", "peut-être", "sites"]).is_err());
         assert!(p(&["--bogus"]).is_err());
     }
@@ -223,8 +226,10 @@ mod tests {
         assert_eq!((site.protocol, path.as_str(), site.anonymous), (SiteProtocol::FtpsExplicit, "/pub/f x.bin", false));
         let Target::Url { site, .. } = parse_target("sftp://h").unwrap() else { panic!() };
         assert_eq!((site.port, site.anonymous), (22, true));
-        assert!(parse_target("gopher://h").is_err());
-        assert!(parse_target("ftp://h:99999").is_err());
-        assert!(parse_target(":/x").is_err());
+        assert_eq!(parse_target("gopher://h").unwrap_err(), TargetError::UnknownScheme("gopher".into()));
+        assert_eq!(parse_target("ftp://h:99999").unwrap_err(), TargetError::InvalidPort("99999".into()));
+        assert!(matches!(parse_target("ftp://h:0"), Err(TargetError::InvalidPort(_))));
+        assert!(matches!(parse_target("ftp://u@/x"), Err(TargetError::MissingHost(_))));
+        assert_eq!(parse_target(":/x").unwrap_err(), TargetError::MissingSite(":/x".into()));
     }
 }

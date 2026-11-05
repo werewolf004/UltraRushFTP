@@ -21,8 +21,33 @@ pub struct Token {
 }
 
 const KEYWORDS: &[&str] = &[
-    "and", "begin", "div", "do", "downto", "else", "end", "exit", "false", "for", "if", "mod", "nil", "not", "or", "repeat",
-    "then", "to", "true", "until", "uses", "var", "while", "xor", "const", "procedure", "function",
+    "and",
+    "begin",
+    "div",
+    "do",
+    "downto",
+    "else",
+    "end",
+    "exit",
+    "false",
+    "for",
+    "if",
+    "mod",
+    "nil",
+    "not",
+    "or",
+    "repeat",
+    "then",
+    "to",
+    "true",
+    "until",
+    "uses",
+    "var",
+    "while",
+    "xor",
+    "const",
+    "procedure",
+    "function",
 ];
 
 const SYMBOLS: &[&str] = &[":=", "<=", ">=", "<>", ";", ",", ".", "(", ")", "[", "]", "+", "-", "*", "/", "=", "<", ">", ":"];
@@ -31,7 +56,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ScriptError> {
     let chars: Vec<char> = src.chars().collect();
     let mut out = Vec::new();
     let (mut i, mut line) = (0, 1);
-    let err = |line: usize, m: String| ScriptError { line, message: m };
+    let err = |line: usize, m: String| ScriptError::syntax(line, m);
     while i < chars.len() {
         let c = chars[i];
         match c {
@@ -83,7 +108,11 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ScriptError> {
                         while i < chars.len() && chars[i].is_ascii_digit() {
                             i += 1;
                         }
-                        let code: u32 = chars[start..i].iter().collect::<String>().parse().map_err(|_| err(line, "code de caractère # invalide".into()))?;
+                        let code: u32 = chars[start..i]
+                            .iter()
+                            .collect::<String>()
+                            .parse()
+                            .map_err(|_| err(line, "code de caractère # invalide".into()))?;
                         s.push(char::from_u32(code).ok_or_else(|| err(line, format!("caractère #{code} invalide")))?);
                         continue;
                     }
@@ -142,10 +171,8 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ScriptError> {
             }
             _ => {
                 let rest: String = chars[i..chars.len().min(i + 2)].iter().collect();
-                let sym = SYMBOLS
-                    .iter()
-                    .find(|s| rest.starts_with(**s))
-                    .ok_or_else(|| err(line, format!("caractère inattendu « {c} »")))?;
+                let sym =
+                    SYMBOLS.iter().find(|s| rest.starts_with(**s)).ok_or_else(|| err(line, format!("caractère inattendu « {c} »")))?;
                 i += sym.chars().count();
                 out.push(Token { tok: Tok::Sym(sym), line });
             }

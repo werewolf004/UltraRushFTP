@@ -104,7 +104,10 @@ mod tests {
     fn imports_sites_without_passwords() {
         let r = import(SAMPLE).unwrap();
         let a = &r.group.sites[0];
-        assert_eq!((a.name.as_str(), a.host.as_str(), a.port, a.protocol), ("00.ALPHA", "alpha.example.net", 2121, SiteProtocol::FtpsExplicit));
+        assert_eq!(
+            (a.name.as_str(), a.host.as_str(), a.port, a.protocol),
+            ("00.ALPHA", "alpha.example.net", 2121, SiteProtocol::FtpsExplicit)
+        );
         assert_eq!(a.user, "bob");
         assert!(a.password.is_empty(), "mot de passe non importé");
         assert_eq!((a.local_dir.as_str(), a.remote_dir.as_str()), (r"C:\dl", "/incoming"));
