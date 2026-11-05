@@ -21,4 +21,4 @@ russh-sftp = "3.0.1"
 [dev-dependencies]
 rand = { version = "0.10", features = ["thread_rng"] }
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "fs", "signal"] }

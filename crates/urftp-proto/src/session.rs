@@ -108,6 +108,31 @@ impl RemoteSession {
         }
     }
 
+    /// Change de répertoire (chemin absolu ou relatif, `..` accepté).
+    pub async fn cwd(&mut self, dir: &str) -> Result<()> {
+        match self {
+            RemoteSession::Ftp(c) => c.cwd(dir).await?,
+            RemoteSession::Sftp(c) => c.cwd(dir).await?,
+        }
+        Ok(())
+    }
+
+    /// Répertoire courant connu.
+    pub fn current_dir(&self) -> Option<String> {
+        match self {
+            RemoteSession::Ftp(c) => c.current_dir().map(String::from),
+            RemoteSession::Sftp(c) => Some(c.current_dir().to_string()),
+        }
+    }
+
+    /// Liste le répertoire courant.
+    pub async fn list_current(&mut self) -> Result<Vec<RemoteEntry>> {
+        Ok(match self {
+            RemoteSession::Ftp(c) => c.list(None).await?,
+            RemoteSession::Sftp(c) => c.list(None).await?,
+        })
+    }
+
     pub async fn list(&mut self, dir: &str) -> Result<Vec<RemoteEntry>> {
         Ok(match self {
             RemoteSession::Ftp(c) => c.list(Some(dir)).await?,

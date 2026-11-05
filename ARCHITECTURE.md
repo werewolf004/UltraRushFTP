@@ -91,7 +91,12 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
    Restent pour la phase 3 : `RS_NOCIRCLE`, répétitions / `CompleteFlag`, XDupe.
 
 ### Phase 2 — application
-7. Interface à onglets : chaque onglet = deux panneaux (local ou distant) + sa file.
+7. 🟡 Interface à onglets (egui 0.36 + egui_dock 0.21) : thème moderne clair/sombre à coins
+   arrondis, polices Segoe UI ; onglets de sites ; dans chaque onglet un dock (deux panneaux
+   local/distant, file d'attente, journal) déplaçable ; connexion rapide FTP/FTPS/SFTP ;
+   approbation des certificats TLS et clés SSH ; transfert de la sélection vers l'autre
+   panneau et file branchée sur le moteur. Reste : menus contextuels, glisser-déposer,
+   sélection au clavier, tri des colonnes, contrôle des éléments de la file.
 8. Gestionnaire de sites (groupes, signets, proxy, ident, keep-alive, ghost/`!user`).
 9. Journaux (FTP, transferts, système), barre d'état, statistiques.
 10. Thèmes clair/sombre, raccourcis, actions de souris, langues.

@@ -4,7 +4,8 @@ Client FTP / FTPS / SFTP / FXP moderne pour Windows, écrit en Rust.
 Héritier spirituel d'UltraFXP et de FTPRush : transferts rapides, FXP site à site,
 files d'attente, et pilotage depuis mIRC via une DLL compatible `rushmirc.dll`.
 
-> Statut : démarrage du projet — rien n'est encore utilisable.
+> Statut : moteur complet (FTP, FTPS, FXP, SFTP, proxys, Ident, file d'attente) ;
+> première version de l'interface à onglets. Pas encore testé sur des serveurs réels.
 
 ## Objectifs
 
@@ -33,6 +34,17 @@ Notes de protocole extraites de la source Delphi d'origine (non redistribuée da
 
 Note : dans l'original, `EnableCallback` / `DisableCallback` sont définies mais absentes
 des exports ; UltraRushFTP les exportera.
+
+## Développement
+
+```text
+cargo run -p urftp-gui                               # interface
+cargo run -p urftp-proto --example dev_server        # serveur FTP local de test (test / secret)
+cargo test --workspace                               # tests
+```
+
+`URUSHFTP_CONNECT=ftp://test:secret@127.0.0.1:PORT` (ou `ftps://`, `ftpsi://`, `sftp://`)
+remplit la connexion rapide et se connecte au démarrage.
 
 ## Prérequis de développement
 
