@@ -15,7 +15,10 @@ rustls = { version = "0.23.46", default-features = false, features = ["ring", "s
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12", "logging"] }
 rustls-native-certs = "0.8.5"
 ring = "0.17.14"
+russh = { version = "0.65.1", default-features = false, features = ["ring", "rsa", "flate2"] }
+russh-sftp = "3.0.1"
 
 [dev-dependencies]
+rand = { version = "0.10", features = ["thread_rng"] }
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }

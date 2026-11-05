@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod proxy;
+pub mod sftp;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;

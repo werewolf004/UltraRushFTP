@@ -7,10 +7,10 @@
 //!   et FXP site à site ([`ftp::fxp`]) : clair ou chiffré (`SSCN`, `CPSV`), inversion auto.
 //! - [`proxy`] : SOCKS4, SOCKS4A, SOCKS5, HTTP Tunnel, règles de contournement.
 //! - [`ident`] : serveur Ident (RFC 1413) avec nom global ou par site.
-//!
-//! À venir :
-//! - `sftp` : client SSH/SFTP (mot de passe et clé publique).
+//! - [`sftp`] : client SFTP (SSH) par mot de passe ou clé (OpenSSH, PEM, PuTTY), clé d'hôte
+//!   vérifiée par empreinte, proxy.
 
 pub mod ftp;
 pub mod ident;
 pub mod proxy;
+pub mod sftp;

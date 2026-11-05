@@ -79,7 +79,10 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
 4. ✅ FXP : `PASV`/`PORT` croisés (source ou destination passive), `PRET`, reprise `REST`,
    FXP chiffré `SSCN` / `CPSV` (repli en clair optionnel), inversion automatique si `PORT`
    est refusé, `ABOR` de l'autre côté en cas d'échec, restauration de `PROT`/`SSCN`.
-5. SFTP : mot de passe et clé publique.
+5. ✅ SFTP (russh, fournisseur ring) : mot de passe ou clé (OpenSSH, PEM, PuTTY `.ppk`,
+   chiffrée ou non), clé d'hôte vérifiée par empreinte `SHA256:…`, reprise, proxy.
+   À optimiser avec la file d'attente : requêtes en parallèle (pipelining) pour les liens
+   à forte latence.
 6. File d'attente : upload / download / FXP, pool de connexions et multi-transfert par site,
    reprise, priorités, skiplist, règles « fichier existant », limitation de bande passante.
 
