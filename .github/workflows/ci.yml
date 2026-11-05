@@ -55,6 +55,11 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Tests
         run: cargo test --workspace --all-features --locked
+      - name: Dependency list is up to date
+        shell: pwsh
+        run: |
+          ./scripts/generate-dependencies.ps1
+          git diff --exit-code -- docs/dependencies-full.md
       - name: Documentation
         run: cargo doc --workspace --no-deps --all-features --locked
         env:

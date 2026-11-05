@@ -49,6 +49,10 @@ jobs:
           ./scripts/check-dll-exports.ps1 -Path target/release/rushmirc.dll -Bits 64
           ./scripts/check-dll-exports.ps1 -Path target/i686-pc-windows-msvc/release/rushmirc.dll -Bits 32
 
+      - name: Third-party licence notices
+        shell: pwsh
+        run: ./scripts/generate-dependencies.ps1 -Notices
+
       - name: Package
         id: package
         shell: pwsh
@@ -59,7 +63,8 @@ jobs:
           Copy-Item target/release/UltraRushFTP.exe, target/release/urftp.exe $dir
           Copy-Item target/release/rushmirc.dll "$dir/mirc/x64/"
           Copy-Item target/i686-pc-windows-msvc/release/rushmirc.dll "$dir/mirc/x86/"
-          Get-ChildItem -File -Include 'LICENSE*', 'README*.md', 'CHANGELOG*.md' -Path * | Copy-Item -Destination $dir
+          Get-ChildItem -File -Include 'LICENSE*', 'README*.md', 'CHANGELOG*.md', 'SECURITY*.md', 'THIRD-PARTY-LICENSES.txt' -Path * | Copy-Item -Destination $dir
+          Copy-Item -Recurse docs "$dir/docs"
           Compress-Archive -Path "$dir/*" -DestinationPath "dist/$name.zip"
           $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
           "$hash  $name.zip" | Set-Content -Encoding ascii "dist/$name.zip.sha256"

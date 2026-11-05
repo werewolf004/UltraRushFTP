@@ -3,18 +3,20 @@
 **/*.rs.bk
 *.pdb
 
-# Références locales : logiciels tiers non redistribuables ET exports réels de sites
-# (adresses, identifiants, mots de passe). Rien de ce dossier ne doit jamais être versionné.
+# Local references: non-redistributable third-party software AND real site exports
+# (addresses, logins, passwords). Nothing from this folder may ever be committed.
 /thirdparty_source/
 
-# Carnets de sites et exports d'autres clients, où qu'ils soient
+# Site books, options and statistics of the application or of other clients, anywhere
 sites.json
 sites.json.bak
+settings.json
+stats.json
 sitemanager.xml
 RushSite.xml
 *.ftp
 
-# Éditeurs / OS
+# Editors / OS
 .vscode/
 .idea/
 *.swp
@@ -22,6 +24,9 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Données locales de l'application (sites, mots de passe, logs)
+# Local application data (logs, local configuration)
 *.log
 /config.local.*
+
+# Generated at release time (scripts/generate-dependencies.ps1 -Notices)
+/THIRD-PARTY-LICENSES.txt

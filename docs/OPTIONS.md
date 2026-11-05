@@ -1,0 +1,266 @@
+# Options reference
+
+**English** | [Français](OPTIONS.fr.md)
+
+Every setting of UltraRushFTP, with its default value. Contents:
+[interface](#interface) · [Options window](#options-window) · [site record](#site-record) ·
+[command line](#command-line) · [`urftp` tool](#urftp-tool) ·
+[scripts](#scripts-rushapp) · [mIRC DLL](#mirc-dll) ·
+[environment variables](#environment-variables) · [files](#files)
+
+## Interface
+
+### Menus and top bar
+
+| Element | Effect |
+|---|---|
+| File → Site manager | Opens the site manager |
+| File → New tab | New empty tab (also `+` next to the tabs) |
+| File → Options… | Opens the Options window (also `⚙`) |
+| File → Quit | Quits |
+| View → Light theme / Dark theme | Switches the theme (also stored in the options) |
+| Quick connect | Protocol (FTP, FTPS explicit, FTPS implicit, SFTP), host, port, user, password, **Connect**: opens the site in the right panel of the current tab (or in a new tab, see *General*) |
+| Tabs | One tab per site container; `✕` closes it, the title is the host or "Tab n" |
+
+### File panels
+
+| Action | Mouse | Keyboard |
+|---|---|---|
+| Open a folder | double-click | `Enter` |
+| Parent folder | `⬆` | `Backspace` |
+| Refresh | `⟳` | `F5` |
+| New folder | `📁+` | `F7` |
+| Rename | right-click → Rename | `F2` |
+| Delete (with confirmation) | right-click → Delete | `Del` |
+| Transfer to the other panel | `Transfer` button, drag and drop, right-click | `Space` or `Insert` |
+| Switch panel | click | `Tab` |
+| Select all / several | `Ctrl`+click, `Shift`+click | `Ctrl+A` |
+| Copy the full path | right-click → Copy path | — |
+| Sort | click a column header (again: reverse order) | — |
+
+### Queue
+
+Buttons: **Start**, **Stop all**, **Retry failed**, **Remove finished**. Right-click on an
+item: stop, retry, move to top / up / down / to bottom, remove from the queue. States:
+waiting, running, done, skipped (with the reason), needs confirmation, stopped, failed.
+
+## Options window
+
+Saved automatically in `settings.json` one second after a change.
+
+### General
+
+![General](images/options-general.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Dark theme | on | Dark or light theme |
+| Language | Windows language | Windows language, English or Français; applied immediately |
+| Open a new tab when the right panel is already connected | on | Otherwise the new connection replaces the current one |
+
+### Transfers
+
+![Transfers](images/options-transfers.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Retries after a failure | 3 | Attempts after the first failure of an item |
+| Delay between retries (s) | 3 | Wait before a retry |
+| Simultaneous transfers in total | 0 (no limit) | Limit across all sites, on top of the per-site limits |
+| Simultaneous transfers for quick connect | 2 | Per-site limit used by quick connect |
+| Connection timeout (s) | 30 | Control and data connections |
+| Server idle timeout (s) | 120 | Maximum wait for a reply or a data block |
+
+### Speed
+
+| Option | Default | Effect |
+|---|---|---|
+| Download (KiB/s) | 0 (unlimited) | Shared by every download, applied immediately |
+| Upload (KiB/s) | 0 (unlimited) | Shared by every upload, applied immediately |
+
+FXP is not limited: its data does not go through this computer.
+
+### Existing file
+
+![Existing file](images/options-existing-file.en.png)
+
+| Case | Default | Choices |
+|---|---|---|
+| The target is smaller | Resume | Resume, Skip, Rename ("name (1)"), Overwrite, Ask |
+| The target has the same size | Skip | same |
+| The target is larger | Rename | same |
+| Start over if resuming is refused | on | Overwrite when the server refuses `REST` |
+
+### Skipped files
+
+![Skip list](images/options-skiplist.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Use the skip list | on | Enables the rules below |
+| Skip 0-byte files | off | — |
+| Do not create empty folders | off | — |
+| Rules | none | Applied in order, the first match decides: **Skip** or **Allow**, mask (wildcard `*` `?`, or regular expression with *regex*), target (files, folders, both), directions (upload ⬆, download ⬇, FXP ↔), *path* = the mask applies to the full path (also written `%W%mask`) |
+
+### Priorities
+
+Ordered list of masks (`*.sfv`, `*.nfo` by default): matching items move to the top of the
+queue, the first mask having the highest priority.
+
+### Proxy
+
+![Proxy](images/options-proxy.en.png)
+
+Used by the sites set to *Global setting*.
+
+| Option | Default | Effect |
+|---|---|---|
+| Use a proxy… | off | Enables the global proxy |
+| Type | SOCKS5 | SOCKS4, SOCKS4A, SOCKS5, HTTP tunnel |
+| Host and port | — / 1080 | Proxy address |
+| User, password | empty | Authentication (SOCKS5, HTTP Basic); password encrypted with DPAPI |
+| Exceptions | empty | Host masks reached directly, `;`-separated (`220.67.*;*.lan`) |
+| Also route transfers through the proxy | on | Data channels too |
+| No proxy for the local network | on | `localhost`, private addresses, names without a dot |
+
+### Ident
+
+![Ident](images/options-ident.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Enable the Ident server | off | RFC 1413 server queried by many FTP servers when you connect |
+| Name answered | `URUSHFTP` | User name returned |
+| System | `UNIX` | System returned |
+| TCP port | 113 | Forward it from your router to this computer when behind NAT |
+
+## Site record
+
+![Site manager](images/site-manager.en.png)
+
+| Field | Default | Notes |
+|---|---|---|
+| Name | "New site" | Used by scripts, mIRC and `urftp` (case-insensitive) |
+| Protocol | FTP | FTP, FTPS (explicit), FTPS (implicit), SFTP; the port follows (21, 990, 22) |
+| Host, port | — / 21 | — |
+| User, password, anonymous | — | Password encrypted with DPAPI; with an SSH key it is the passphrase |
+| Site enabled | on | A disabled site cannot be connected (`RushApp.FTP.DisableSite`) |
+| Also encrypt transfers (PROT P) | on | FTPS: encrypted data channels |
+| Certificate | Verify with the Windows authorities | or Accept any certificate (not recommended), or Trusted certificate (SHA-256 fingerprint, filled in when you trust a server) |
+| Private key | none | SFTP: OpenSSH, PEM or PuTTY `.ppk` key file |
+| Trusted server keys | none | SFTP host key fingerprints (`SHA256:…`) added when you trust a server |
+| Mode | Passive | Passive or Active (`PORT`/`EPRT`) |
+| Simultaneous transfers | 2 | 0 = single connection |
+| Max. downloads / Max. uploads | not set | Extra limits per direction |
+| Remote folder, local folder | empty | Opened on connection |
+| Proxy | Global setting | Global setting, Never use a proxy, or a proxy specific to the site (same fields as the global one) |
+| Ident name specific to this site | off | Stored; not yet answered by the Ident server (see the roadmap) |
+| Bookmarks | none | Name, remote folder, local folder; used by `RS_BOOKMARK` in scripts |
+| Notes | empty | Free text |
+
+**Import** (site manager toolbar): FileZilla (`sitemanager.xml` or export), FTPRush v3
+(`site.json`), FTPRush v1/v2 (`RushSite.xml`), FlashFXP (`.ftp`). The format is detected
+automatically; files found on this computer are offered directly. Passwords are not
+imported from FTPRush v1/v2 and FlashFXP.
+
+## Command line
+
+Startup options of `UltraRushFTP.exe` (FTPRush v2 syntax, `-` or `/`):
+
+| Option | Effect |
+|---|---|
+| `-w<n>` | Open n tabs (1 to 50) |
+| `-c<url>` | Connect: `ftp://user:pass@host:port/`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`, the name of a site of the site manager, or a host alone (anonymous FTP) |
+| `-f"folder"` | Settings and sites in this folder; `-f` alone: the program folder (portable mode) |
+| `-r[t][x]` | Start the queues at startup; `t`: minimise the window; `x`: quit when nothing is left to transfer |
+| `-s"file"` | Run this Pascal Script at startup (UltraRushFTP addition) |
+| `-d` | Debug mode (accepted; the log is already complete) |
+| `-b` | FTPRush v2 "BetaUser" licence switch: ignored |
+
+Unknown options are reported in the script console.
+
+## `urftp` tool
+
+```text
+urftp [options] <command> [arguments]
+```
+
+| Command | Effect |
+|---|---|
+| `sites` | Lists the sites of the site manager |
+| `ls <target>` | Lists a remote folder |
+| `get <target> [local folder]` | Downloads a file or a folder (current folder by default) |
+| `put <file\|folder> <target>` | Uploads into the remote folder |
+| `fxp <source> <destination>` | Site-to-site transfer |
+| `raw <site> <command>...` | Raw FTP commands, replies printed |
+
+A *target* is `SiteName:/path` (site manager, case-insensitive name; `SiteName` alone =
+its remote folder) or a URL `ftp://user:pass@host:port/path` (`ftps://`, `ftpsi://`,
+`sftp://`; `%XX` escapes are decoded).
+
+| Option | Effect |
+|---|---|
+| `-v`, `--verbose` | Protocol log on stderr (password masked) |
+| `-n`, `--transfers <n>` | Simultaneous transfers per site |
+| `--exists <action>` | Existing file: `overwrite`, `resume`, `skip`, `rename` |
+| `--insecure` | Accept any TLS certificate |
+| `--fingerprint <fp>` | Expected SHA-256 fingerprint (FTPS certificate or SFTP host key) |
+| `--data <folder>` | Settings folder (like `-f`) |
+| `--lang <en\|fr>` | Language of the messages (default: the option, then Windows) |
+| `-h`, `--help` | Help |
+
+Exit codes: `0` everything transferred, `1` failure (connection, refused command,
+incomplete transfer), `2` invalid arguments.
+
+## Scripts (`RushApp`)
+
+Pascal Script as in FTPRush v2, run from the *Script* console, `-s`, `URUSHFTP_SCRIPT` or
+mIRC. Supported language: variables, strings, integers, booleans, operators (bitwise
+`or`/`and` on flags), `if/then/else`, `while`, `repeat/until`, `for … to/downto`,
+`begin/end`, `exit`; built-in functions `IntToStr`, `StrToInt`, `StrToIntDef`, `Length`,
+`UpperCase`, `LowerCase`, `Trim`, `Copy`, `Pos`, `ShowMessage`, `InputQuery`.
+
+| Procedures | Properties (read) | Properties (write) |
+|---|---|---|
+| `RushApp.FTP.Login`, `Logout`, `CWD`, `RAW`, `Delete`, `Transfer`, `RemoveQueue`, `EnableSite`, `DisableSite`; `RushApp.DeleteEmptyTabs` (`DeleteEmptyContainers`) | `RushApp.Version`, `Language`, `StartDate`, `DayCount`, `TotalDownloadSize`, `TotalUploadSize`, `TotalFxpSize`, `CurDownloadSize`, `CurUploadSize`, `CurFxpSize`, `DownloadBW`, `UploadBW`, `PoolInfo`, `FTP.Splitter`, `Containers.ContainerCount`, `Containers.ConnectedSiteCount`, `Containers.TransferSiteCount` | `RushApp.FTP.Splitter` |
+
+Flags handled: `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`, `RS_DIRDES`, `RS_DIRSRC`,
+`RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`, `RS_FOLDER`, `RS_FULLPATH`, `RS_GHOST`,
+`RS_LOGIN`, `RS_LOGOUT`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`, `RS_POPUP`, `RS_TRANSFER`,
+`RS_UP`, `RS_WAITING`. `RS_INVERT`, the filters and repeat count of `Transfer` and
+interactive `InputQuery` are recognised but not supported yet (a message says so).
+
+## mIRC DLL
+
+| Export | Use |
+|---|---|
+| `LoadDll` / `UnloadDll` | Called by mIRC; the DLL stays loaded |
+| `Invoke` | `$dll(rushmirc.dll, Invoke, <expression>)` returns a value |
+| `RushScript` | `/dll rushmirc.dll RushScript <script>` runs a script; `RAW` replies come back to mIRC |
+| `RushCommand` | Same, without replies |
+| `EnableCallback` / `DisableCallback` | Turn the `RAW` replies on (default) or off |
+
+Use `mirc/x86/rushmirc.dll` for 32-bit mIRC and `mirc/x64/rushmirc.dll` for 64-bit mIRC.
+
+## Environment variables
+
+| Variable | Effect |
+|---|---|
+| `URUSHFTP_DATA` | Settings folder (overridden by `-f` / `--data`) |
+| `URUSHFTP_LANG` | `en` or `fr`: forces the language (interface and `urftp`) |
+| `URUSHFTP_THEME` | `light` (or `clair`) / anything else: forces the theme at startup |
+| `URUSHFTP_CONNECT` | URL connected at startup (like `-c`) |
+| `URUSHFTP_SCRIPT` | Script source run at startup |
+| `URUSHFTP_IPC_CLASS` | Window class used for the mIRC link instead of `TfmRush` (tests next to a running FTPRush) |
+| `URUSHFTP_OPEN_SITES` | Development: opens the site manager on this site id |
+| `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 7) |
+
+## Files
+
+In the data folder (`%APPDATA%\UltraRushFTP` by default):
+
+| File | Content |
+|---|---|
+| `sites.json` | Site book (passwords `dpapi:…`); written atomically, previous version kept as `sites.json.bak` |
+| `settings.json` | Options above (proxy password `dpapi:…`); missing keys take their default value |
+| `stats.json` | Transfer totals and first-use date (`RushApp.Total*`, `StartDate`) |

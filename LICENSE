@@ -1,21 +1,37 @@
-MIT License
+UltraRushFTP — Proprietary Software License
 
-Copyright (c) 2026 werewolf004
+Copyright (c) 2026 werewolf004. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software, including its source code, object code, documentation, images and any
+associated files (the "Software"), is the exclusive property of the copyright holder.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. No licence is granted except as stated here. Without the prior written permission of
+   the copyright holder, you may not copy, modify, merge, publish, distribute, sublicense,
+   sell, rent, lend, host as a service, or otherwise make the Software available to any
+   third party, in whole or in part.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Persons expressly authorised in writing by the copyright holder (for example
+   contributors invited to the private repository) may use, build and modify the Software
+   solely to contribute to it. Contributions become part of the Software under this licence
+   (see CONTRIBUTING.md).
+
+3. You may not remove or alter any copyright, licence or attribution notice, and you may
+   not reverse engineer the binaries except to the extent applicable law expressly permits
+   it notwithstanding this limitation.
+
+4. Third-party components included in the Software remain under their own licences, listed
+   in docs/DEPENDENCIES.md; their notices are shipped in THIRD-PARTY-LICENSES.txt with every
+   release. Nothing in this licence restricts the rights those licences grant.
+
+5. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+   PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
+   CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+   ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+6. Any use in breach of these terms terminates every permission automatically.
+
+A French translation is provided in LICENSE.fr.md for convenience; this English text
+prevails in case of discrepancy.
+
+Contact: through the GitHub repository werewolf004/UltraRushFTP.
