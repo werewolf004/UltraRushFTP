@@ -68,9 +68,11 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
 ## Feuille de route
 
 ### Phase 1 — protocoles et moteur
-1. Client FTP maison (contrôle complet des commandes, parseurs LIST Unix/DOS, MLSD),
+1. ✅ Client FTP maison (contrôle complet des commandes, parseurs LIST Unix/DOS, MLSD),
    chemins longs locaux et distants dès le départ.
-2. FTPS explicite (`AUTH TLS`, `PBSZ`, `PROT`) et implicite ; TLS sur le canal de données.
+2. ✅ FTPS explicite (`AUTH TLS`, `PBSZ`, `PROT`) et implicite ; TLS sur le canal de données
+   avec reprise de session ; certificats : magasin Windows, empreinte approuvée, ou sans
+   vérification ; mode actif `PORT`/`EPRT` (IP externe, plage de ports).
 3. Proxy (SOCKS4/4A/5, HTTP Tunnel) et serveur Ident.
 4. FXP : `PASV`/`PORT` croisés, `PRET`, FXP sécurisé `SSCN` / `CPSV`, inversion automatique.
 5. SFTP : mot de passe et clé publique.

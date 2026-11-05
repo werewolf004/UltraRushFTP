@@ -4,10 +4,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufStream};
-use tokio::net::TcpStream;
+use tokio::net::{TcpListener, TcpStream};
 
 use super::listing::{self, RemoteEntry};
 use super::reply::read_reply;
+use super::tls::{Security, TlsContext};
 use super::{path, BoxStream, Features, FtpError, Reply, Result};
 
 /// Taille des blocs de copie des transferts.
@@ -30,11 +31,23 @@ pub struct FtpConfig {
     pub pasv_fix_private_ip: bool,
     /// Longueur maximale d'une ligne de réponse.
     pub max_line_len: usize,
+    /// FTP en clair, FTPS explicite ou implicite.
+    pub security: Security,
+    /// Mode actif (`PORT`/`EPRT`) au lieu du mode passif.
+    pub active_mode: bool,
+    /// Adresse annoncée en mode actif (IP publique derrière un NAT) ; par défaut l'IP locale.
+    pub active_external_ip: Option<IpAddr>,
+    /// Plage de ports locaux pour le mode actif (redirections de ports du routeur).
+    pub active_port_range: Option<(u16, u16)>,
 }
 
 impl Default for FtpConfig {
     fn default() -> Self {
         Self {
+            security: Security::None,
+            active_mode: false,
+            active_external_ip: None,
+            active_port_range: None,
             connect_timeout: Duration::from_secs(30),
             io_timeout: Duration::from_secs(120),
             prefer_epsv: true,
@@ -74,7 +87,12 @@ pub enum TransferType {
 /// [`FtpClient::cwd`] se replie sur une navigation segment par segment.
 pub struct FtpClient {
     ctrl: BufStream<BoxStream>,
+    host: String,
     peer: SocketAddr,
+    local: SocketAddr,
+    tls: Option<TlsContext>,
+    /// Canaux de données chiffrés (`PROT P` accepté).
+    prot_p: bool,
     config: FtpConfig,
     features: Features,
     welcome: Reply,
@@ -85,24 +103,46 @@ pub struct FtpClient {
 }
 
 impl FtpClient {
-    /// Ouvre une connexion TCP et lit le message d'accueil.
+    /// Ouvre la connexion TCP, applique la sécurité demandée (TLS implicite ou `AUTH TLS`)
+    /// et lit le message d'accueil.
     pub async fn connect(host: &str, port: u16, config: FtpConfig) -> Result<Self> {
-        let tcp = timeout(config.connect_timeout, TcpStream::connect((host, port))).await?;
-        tcp.set_nodelay(true)?;
-        let peer = tcp.peer_addr()?;
-        Self::from_stream(Box::new(tcp), peer, config, None).await
+        Self::connect_with_log(host, port, config, None).await
     }
 
-    /// Démarre sur un flux déjà établi (TLS implicite, tunnel proxy…).
-    pub async fn from_stream(
+    /// Comme [`FtpClient::connect`], avec un journal actif dès l'accueil du serveur.
+    pub async fn connect_with_log(host: &str, port: u16, config: FtpConfig, log: Option<LogSink>) -> Result<Self> {
+        let tcp = timeout(config.connect_timeout, TcpStream::connect((host, port))).await?;
+        tcp.set_nodelay(true)?;
+        let (peer, local) = (tcp.peer_addr()?, tcp.local_addr()?);
+        Self::connect_over(Box::new(tcp), host, peer, local, config, log).await
+    }
+
+    /// Démarre sur un flux TCP déjà établi (par exemple à travers un proxy).
+    /// `host` sert à la vérification TLS ; `peer` est l'adresse du serveur FTP pour les
+    /// connexions de données, `local` l'adresse locale annoncée en mode actif.
+    pub async fn connect_over(
         stream: BoxStream,
+        host: &str,
         peer: SocketAddr,
+        local: SocketAddr,
         config: FtpConfig,
         log: Option<LogSink>,
     ) -> Result<Self> {
+        let tls = match &config.security {
+            Security::Implicit(opts) => Some(TlsContext::new(host, opts)?),
+            _ => None,
+        };
+        let stream = match &tls {
+            Some(ctx) => timeout_ftp(config.connect_timeout, ctx.wrap(stream)).await?,
+            None => stream,
+        };
         let mut c = Self {
             ctrl: BufStream::new(stream),
+            host: host.to_string(),
             peer,
+            local,
+            tls,
+            prot_p: false,
             config,
             features: Features::default(),
             welcome: Reply { code: 0, lines: Vec::new() },
@@ -119,7 +159,48 @@ impl FtpClient {
             return Err(FtpError::Unexpected { command: "(connexion)".into(), reply: welcome });
         }
         c.welcome = welcome;
+        if matches!(c.config.security, Security::Explicit(_)) {
+            c.auth_tls().await?;
+        }
         Ok(c)
+    }
+
+    /// Passe le canal de contrôle en TLS (`AUTH TLS`, repli `AUTH SSL` si autorisé).
+    pub async fn auth_tls(&mut self) -> Result<()> {
+        if self.tls.is_some() {
+            return Ok(());
+        }
+        let opts = self.config.security.options().cloned().unwrap_or_default();
+        let r = self.raw("AUTH TLS").await?;
+        if r.code != 234 {
+            let retry = opts.auth_ssl_fallback && r.is_permanent_negative();
+            let r2 = if retry { Some(self.raw("AUTH SSL").await?) } else { None };
+            if !r2.as_ref().is_some_and(|r| r.code == 234 || r.code == 334) {
+                return Err(FtpError::Unexpected { command: "AUTH TLS".into(), reply: r2.unwrap_or(r) });
+            }
+        }
+        let ctx = TlsContext::new(&self.host, &opts)?;
+        let plain = std::mem::replace(&mut self.ctrl, BufStream::new(Box::new(tokio::io::duplex(1).0)));
+        let secured = timeout_ftp(self.config.connect_timeout, ctx.wrap(plain.into_inner())).await?;
+        self.ctrl = BufStream::new(secured);
+        self.status("Canal de contrôle chiffré (TLS)");
+        self.tls = Some(ctx);
+        Ok(())
+    }
+
+    /// Le canal de contrôle est-il chiffré ?
+    pub fn is_secure(&self) -> bool {
+        self.tls.is_some()
+    }
+
+    /// Les canaux de données sont-ils chiffrés (`PROT P`) ?
+    pub fn is_data_protected(&self) -> bool {
+        self.prot_p
+    }
+
+    /// Empreinte SHA-256 du certificat du serveur (pour l'afficher ou l'approuver).
+    pub fn peer_certificate_fingerprint(&self) -> Option<String> {
+        self.tls.as_ref().and_then(TlsContext::peer_fingerprint)
     }
 
     pub fn set_logger(&mut self, log: Option<LogSink>) {
@@ -209,6 +290,12 @@ impl FtpClient {
         };
         if !r.is_completion() {
             return Err(FtpError::Unexpected { command: "PASS ****".into(), reply: r });
+        }
+        if self.tls.is_some() {
+            let protect = self.config.security.options().is_some_and(|o| o.protect_data);
+            self.ok("PBSZ 0").await?;
+            self.ok(if protect { "PROT P" } else { "PROT C" }).await?;
+            self.prot_p = protect;
         }
         self.refresh_features().await?;
         if self.features.has("UTF8") {
@@ -357,6 +444,68 @@ impl FtpClient {
 
     // ---------------------------------------------------------------- canal de données
 
+    /// Prépare le canal de données avant la commande de transfert : connexion passive,
+    /// ou écoute locale annoncée par `PORT`/`EPRT` en mode actif.
+    async fn prepare_data(&mut self, transfer_cmd: &str) -> Result<PendingData> {
+        if self.config.active_mode {
+            self.open_active().await.map(PendingData::Listening)
+        } else {
+            self.open_passive(transfer_cmd).await.map(PendingData::Connected)
+        }
+    }
+
+    /// Termine l'ouverture après la réponse 1xx : accepte la connexion active (uniquement
+    /// depuis l'adresse du serveur), puis négocie TLS si `PROT P`.
+    async fn complete_data(&mut self, pending: PendingData) -> Result<BoxStream> {
+        let stream: BoxStream = match pending {
+            PendingData::Connected(s) => s,
+            PendingData::Listening(listener) => {
+                let (tcp, from) = timeout(self.config.connect_timeout, listener.accept()).await?;
+                if from.ip() != self.peer.ip() {
+                    return Err(FtpError::Protocol(format!(
+                        "connexion de données refusée : elle vient de {from} et non du serveur {}",
+                        self.peer.ip()
+                    )));
+                }
+                tcp.set_nodelay(true)?;
+                Box::new(tcp)
+            }
+        };
+        match (&self.tls, self.prot_p) {
+            (Some(ctx), true) => timeout_ftp(self.config.connect_timeout, ctx.wrap(stream)).await,
+            _ => Ok(stream),
+        }
+    }
+
+    /// Mode actif : écoute sur l'IP locale du canal de contrôle et annonce l'adresse.
+    async fn open_active(&mut self) -> Result<TcpListener> {
+        let ip = self.local.ip();
+        let listener = match self.config.active_port_range {
+            Some((first, last)) => {
+                let mut found = None;
+                for port in first..=last {
+                    if let Ok(l) = TcpListener::bind((ip, port)).await {
+                        found = Some(l);
+                        break;
+                    }
+                }
+                found.ok_or_else(|| FtpError::Protocol(format!("aucun port libre entre {first} et {last}")))?
+            }
+            None => TcpListener::bind((ip, 0)).await?,
+        };
+        let port = listener.local_addr()?.port();
+        let advertised = self.config.active_external_ip.unwrap_or(ip);
+        let cmd = match advertised {
+            IpAddr::V4(v4) => {
+                let o = v4.octets();
+                format!("PORT {},{},{},{},{},{}", o[0], o[1], o[2], o[3], port >> 8, port & 0xff)
+            }
+            IpAddr::V6(v6) => format!("EPRT |2|{v6}|{port}|"),
+        };
+        self.ok(&cmd).await?;
+        Ok(listener)
+    }
+
     /// Ouvre une connexion de données passive (`PRET` si annoncé, `EPSV` puis `PASV`).
     async fn open_passive(&mut self, transfer_cmd: &str) -> Result<BoxStream> {
         if self.features.has("PRET") {
@@ -432,12 +581,21 @@ impl FtpClient {
         let mlsd = self.config.use_mlsd && self.features.has("MLST");
         let cmd = if mlsd { "MLSD".to_string() } else { self.config.list_command.clone() };
         self.set_type(TransferType::Ascii).await?;
-        let mut data = self.open_passive(&cmd).await?;
+        let pending = self.prepare_data(&cmd).await?;
         if !self.start_transfer(&cmd).await? {
             return Ok((String::new(), mlsd));
         }
+        let mut data = self.complete_data(pending).await?;
+        let io = self.config.io_timeout;
         let mut buf = Vec::new();
-        timeout(self.config.io_timeout, data.read_to_end(&mut buf)).await?;
+        let mut chunk = vec![0u8; CHUNK];
+        loop {
+            let n = timeout(io, read_data(&mut data, &mut chunk)).await?;
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+        }
         drop(data);
         self.finish_transfer(&cmd).await?;
         Ok((String::from_utf8_lossy(&buf).into_owned(), mlsd))
@@ -458,18 +616,19 @@ impl FtpClient {
         let name = self.enter_parent(remote).await?;
         let cmd = format!("RETR {name}");
         self.set_type(TransferType::Binary).await?;
-        let mut data = self.open_passive(&cmd).await?;
+        let pending = self.prepare_data(&cmd).await?;
         if offset > 0 {
             self.expect(&format!("REST {offset}"), |r| r.code == 350).await?;
         }
         if !self.start_transfer(&cmd).await? {
             return Ok(0);
         }
+        let mut data = self.complete_data(pending).await?;
         let io = self.config.io_timeout;
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
         loop {
-            let n = timeout(io, data.read(&mut buf)).await?;
+            let n = timeout(io, read_data(&mut data, &mut buf)).await?;
             if n == 0 {
                 break;
             }
@@ -498,13 +657,14 @@ impl FtpClient {
         let name = self.enter_parent(remote).await?;
         let cmd = format!("STOR {name}");
         self.set_type(TransferType::Binary).await?;
-        let mut data = self.open_passive(&cmd).await?;
+        let pending = self.prepare_data(&cmd).await?;
         if offset > 0 {
             self.expect(&format!("REST {offset}"), |r| r.code == 350).await?;
         }
         if !self.start_transfer(&cmd).await? {
             return Ok(0);
         }
+        let mut data = self.complete_data(pending).await?;
         let io = self.config.io_timeout;
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
@@ -517,20 +677,46 @@ impl FtpClient {
             total += n as u64;
             progress(total);
         }
+        // Envoie la fin de flux (close_notify en TLS) mais garde la socket ouverte jusqu'à
+        // la réponse 226 : la fermer tout de suite ferait répondre l'OS par un RST aux
+        // derniers paquets du serveur (tickets TLS 1.3…), et celui-ci pourrait perdre la fin
+        // du fichier.
         timeout(io, data.shutdown()).await?;
+        let done = self.finish_transfer(&cmd).await;
         drop(data);
-        self.finish_transfer(&cmd).await?;
+        done?;
         Ok(total)
     }
 }
 
 // -------------------------------------------------------------------- utilitaires
 
+/// Canal de données en cours d'ouverture.
+enum PendingData {
+    /// Mode passif : déjà connecté au serveur.
+    Connected(BoxStream),
+    /// Mode actif : le serveur va se connecter à nous.
+    Listening(TcpListener),
+}
+
+/// Lecture sur un canal de données. Beaucoup de serveurs ferment la connexion TLS sans
+/// `close_notify` : on la traite comme une fin normale, la réponse 226 confirmant le transfert.
+async fn read_data(data: &mut BoxStream, buf: &mut [u8]) -> std::io::Result<usize> {
+    match data.read(buf).await {
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => Ok(0),
+        r => r,
+    }
+}
+
 async fn timeout<T>(d: Duration, f: impl Future<Output = std::io::Result<T>>) -> Result<T> {
     match tokio::time::timeout(d, f).await {
         Ok(r) => Ok(r?),
         Err(_) => Err(FtpError::Timeout),
     }
+}
+
+async fn timeout_ftp<T>(d: Duration, f: impl Future<Output = Result<T>>) -> Result<T> {
+    tokio::time::timeout(d, f).await.unwrap_or(Err(FtpError::Timeout))
 }
 
 /// Masque les secrets dans le journal.

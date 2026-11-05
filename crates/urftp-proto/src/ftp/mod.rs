@@ -8,10 +8,12 @@ mod features;
 pub mod listing;
 pub mod path;
 mod reply;
+mod tls;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
 pub use client::{FtpClient, FtpConfig, LogLine, LogSink, TransferType};
+pub use tls::{fingerprint_sha256, Security, TlsOptions, TlsVerify};
 pub use features::Features;
 pub use listing::{EntryKind, FtpTime, RemoteEntry};
 pub use reply::Reply;
@@ -38,6 +40,11 @@ pub enum FtpError {
     Protocol(String),
     #[error("argument invalide : {0}")]
     InvalidArgument(String),
+    #[error("erreur TLS : {0}")]
+    Tls(String),
+    /// Certificat refusé ; `fingerprint` (SHA-256) permet de proposer de l'approuver.
+    #[error("certificat du serveur refusé ({reason}) — empreinte SHA-256 : {fingerprint}")]
+    Certificate { fingerprint: String, reason: String },
 }
 
 impl FtpError {
