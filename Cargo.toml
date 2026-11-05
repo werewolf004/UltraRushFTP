@@ -22,6 +22,8 @@ urftp-core = { path = "crates/urftp-core" }
 urftp-proto = { path = "crates/urftp-proto" }
 urftp-script = { path = "crates/urftp-script" }
 urftp-ipc = { path = "crates/urftp-ipc" }
+tokio = { version = "1", features = ["net", "io-util", "time", "rt", "sync", "macros"] }
+thiserror = "2"
 
 [profile.release]
 lto = "thin"

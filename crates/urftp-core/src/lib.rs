@@ -7,6 +7,8 @@
 //! - `skiplist` : règles allow/skip (joker, regex, `%W%` chemin complet), par sens de transfert
 //! - `stats` : compteurs totaux et de session exposés à `RushApp.*`
 
+pub mod localpath;
+
 /// Nom Ident (RFC 1413) répondu par défaut aux serveurs FTP.
 pub const DEFAULT_IDENT_NAME: &str = "URUSHFTP";
 /// Port TCP par défaut du serveur Ident.
