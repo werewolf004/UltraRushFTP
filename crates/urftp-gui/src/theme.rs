@@ -36,12 +36,31 @@ fn tune(mut v: Visuals, dark: bool) -> Visuals {
         v.widgets.inactive.weak_bg_fill = Color32::from_rgb(0x2A, 0x2F, 0x38);
         v.widgets.hovered.weak_bg_fill = Color32::from_rgb(0x33, 0x39, 0x44);
     } else {
-        v.panel_fill = Color32::from_rgb(0xF4, 0xF6, 0xF9);
-        v.window_fill = Color32::WHITE;
-        v.extreme_bg_color = Color32::WHITE;
-        v.faint_bg_color = Color32::from_rgb(0xEE, 0xF1, 0xF5);
+        // Clair mais doux : gris bleutés au lieu du blanc pur, texte gris foncé plutôt que
+        // noir, pour limiter l'éblouissement sur les longues sessions.
+        v.panel_fill = Color32::from_rgb(0xD9, 0xDD, 0xE3);
+        v.window_fill = Color32::from_rgb(0xE2, 0xE5, 0xEA);
+        v.extreme_bg_color = Color32::from_rgb(0xE6, 0xE9, 0xED);
+        v.faint_bg_color = Color32::from_rgb(0xDE, 0xE2, 0xE8);
+        v.code_bg_color = Color32::from_rgb(0xD0, 0xD5, 0xDC);
+        v.widgets.noninteractive.bg_fill = v.panel_fill;
+        v.widgets.noninteractive.weak_bg_fill = v.panel_fill;
+        v.widgets.inactive.weak_bg_fill = Color32::from_rgb(0xC9, 0xCF, 0xD7);
+        v.widgets.inactive.bg_fill = Color32::from_rgb(0xC9, 0xCF, 0xD7);
+        v.widgets.hovered.weak_bg_fill = Color32::from_rgb(0xBD, 0xC4, 0xCE);
+        v.widgets.hovered.bg_fill = Color32::from_rgb(0xBD, 0xC4, 0xCE);
+        v.widgets.active.weak_bg_fill = Color32::from_rgb(0xB2, 0xBA, 0xC5);
+        let text = Color32::from_rgb(0x2B, 0x30, 0x38);
+        v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, text);
+        v.widgets.inactive.fg_stroke = Stroke::new(1.0, text);
+        v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0xC2, 0xC8, 0xD0));
     }
     v
+}
+
+/// Thème au démarrage : `URUSHFTP_THEME=light` pour le clair, sombre sinon.
+pub fn start_dark() -> bool {
+    !std::env::var("URUSHFTP_THEME").is_ok_and(|t| t.eq_ignore_ascii_case("light") || t.eq_ignore_ascii_case("clair"))
 }
 
 /// Utilise Segoe UI (texte) et Segoe UI Symbol (flèches, symboles) de Windows quand elles

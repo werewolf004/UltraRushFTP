@@ -19,6 +19,12 @@ pub enum BrowserCmd {
     Cwd(String),
     Refresh,
     Disconnect,
+    /// Crée un dossier (chemin absolu).
+    Mkdir(String),
+    /// Supprime des éléments (chemin absolu, dossier ?), puis actualise.
+    Delete(Vec<(String, bool)>),
+    /// Renomme (chemin absolu, nouveau nom), puis actualise.
+    Rename(String, String),
 }
 
 /// Type de confiance à accorder après un refus.
@@ -89,6 +95,33 @@ pub fn spawn(rt: &Handle, ctx: egui::Context) -> BrowserHandle {
                 BrowserCmd::Disconnect => {
                     session = None;
                     send(BrowserEvent::Disconnected);
+                }
+                BrowserCmd::Mkdir(p) => {
+                    if let Some(s) = session.as_mut() {
+                        if let Err(e) = s.mkdir(&p).await {
+                            send(BrowserEvent::Error(e.to_string()));
+                        }
+                        listing(s, &send).await;
+                    }
+                }
+                BrowserCmd::Delete(items) => {
+                    if let Some(s) = session.as_mut() {
+                        for (p, is_dir) in items {
+                            let r = if is_dir { s.remove_tree(&p).await.map(drop) } else { s.delete_file(&p).await };
+                            if let Err(e) = r {
+                                send(BrowserEvent::Error(e.to_string()));
+                            }
+                        }
+                        listing(s, &send).await;
+                    }
+                }
+                BrowserCmd::Rename(from, to) => {
+                    if let Some(s) = session.as_mut() {
+                        if let Err(e) = s.rename(&from, &to).await {
+                            send(BrowserEvent::Error(e.to_string()));
+                        }
+                        listing(s, &send).await;
+                    }
                 }
             }
         }

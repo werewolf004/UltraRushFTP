@@ -95,8 +95,11 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
    arrondis, polices Segoe UI ; onglets de sites ; dans chaque onglet un dock (deux panneaux
    local/distant, file d'attente, journal) déplaçable ; connexion rapide FTP/FTPS/SFTP ;
    approbation des certificats TLS et clés SSH ; transfert de la sélection vers l'autre
-   panneau et file branchée sur le moteur. Reste : menus contextuels, glisser-déposer,
-   sélection au clavier, tri des colonnes, contrôle des éléments de la file.
+   panneau et file branchée sur le moteur ; clic droit (transférer, ouvrir, renommer,
+   supprimer avec confirmation, nouveau dossier, copier le chemin), glisser-déposer entre
+   panneaux, tri des colonnes, sélection Ctrl/Maj/Ctrl+A, raccourcis (Entrée, Retour
+   arrière, F2, F5, F7, Suppr, Espace/Inser, Tab), contrôle de la file (arrêter, relancer,
+   monter/descendre, retirer, tout arrêter, relancer les échecs).
 8. 🟡 Gestionnaire de sites (`urftp-core::site` / `sitestore`, fenêtre `urftp-gui::sites`) :
    dossiers imbriqués, fiche complète (protocole, TLS/empreinte, clé SSH et clés d'hôte,
    mode passif/actif, limites de connexions, proxy, Ident, signets, notes, activé),

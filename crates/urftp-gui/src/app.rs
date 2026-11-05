@@ -39,12 +39,67 @@ struct FileRow {
     is_dir: bool,
     size: u64,
     modified: String,
+    /// Clé de tri de la date.
+    mtime: i64,
 }
 
 impl FileRow {
     fn from_remote(e: &RemoteEntry) -> Self {
-        Self { name: e.name.clone(), is_dir: e.is_dir(), size: e.size, modified: e.modified.map(fmt_time).unwrap_or_default() }
+        Self {
+            name: e.name.clone(),
+            is_dir: e.is_dir(),
+            size: e.size,
+            modified: e.modified.map(fmt_time).unwrap_or_default(),
+            mtime: e.modified.map(time_key).unwrap_or(0),
+        }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SortCol {
+    Name,
+    Size,
+    Modified,
+}
+
+/// Tri d'un panneau ; les dossiers restent toujours en tête.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Sort {
+    col: SortCol,
+    asc: bool,
+}
+
+impl Default for Sort {
+    fn default() -> Self {
+        Self { col: SortCol::Name, asc: true }
+    }
+}
+
+impl Sort {
+    /// Clic sur une colonne : même colonne = sens inverse, autre colonne = croissant.
+    fn toggle(self, col: SortCol) -> Self {
+        if self.col == col { Self { col, asc: !self.asc } } else { Self { col, asc: true } }
+    }
+}
+
+/// Date sous forme de nombre comparable (année inconnue = récente).
+fn time_key(t: FtpTime) -> i64 {
+    let y = i64::from(t.year.unwrap_or(9999));
+    ((((y * 100 + i64::from(t.month)) * 100 + i64::from(t.day)) * 100 + i64::from(t.hour)) * 100 + i64::from(t.minute)) * 100
+        + i64::from(t.second)
+}
+
+fn sort_rows(rows: &mut [FileRow], s: Sort) {
+    rows.sort_by(|a, b| {
+        b.is_dir.cmp(&a.is_dir).then_with(|| {
+            let o = match s.col {
+                SortCol::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                SortCol::Size => a.size.cmp(&b.size),
+                SortCol::Modified => a.mtime.cmp(&b.mtime),
+            };
+            if s.asc { o } else { o.reverse() }
+        })
+    });
 }
 
 fn fmt_time(t: FtpTime) -> String {
@@ -68,11 +123,19 @@ struct LocalView {
     rows: Vec<FileRow>,
     selected: BTreeSet<usize>,
     error: Option<String>,
+    sort: Sort,
 }
 
 impl LocalView {
     fn new(path: PathBuf) -> Self {
-        let mut v = Self { path_edit: path.to_string_lossy().into_owned(), path, rows: Vec::new(), selected: BTreeSet::new(), error: None };
+        let mut v = Self {
+            path_edit: path.to_string_lossy().into_owned(),
+            path,
+            rows: Vec::new(),
+            selected: BTreeSet::new(),
+            error: None,
+            sort: Sort::default(),
+        };
         v.reload();
         v
     }
@@ -86,16 +149,21 @@ impl LocalView {
                     .flatten()
                     .filter_map(|e| {
                         let meta = e.metadata().ok()?;
-                        let modified = meta
+                        let t = meta
                             .modified()
                             .ok()
                             .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| fmt_time(urftp_proto::sftp::unix_to_ftptime(d.as_secs() as i64)))
-                            .unwrap_or_default();
-                        Some(FileRow { name: e.file_name().to_string_lossy().into_owned(), is_dir: meta.is_dir(), size: meta.len(), modified })
+                            .map(|d| urftp_proto::sftp::unix_to_ftptime(d.as_secs() as i64));
+                        Some(FileRow {
+                            name: e.file_name().to_string_lossy().into_owned(),
+                            is_dir: meta.is_dir(),
+                            size: meta.len(),
+                            modified: t.map(fmt_time).unwrap_or_default(),
+                            mtime: t.map(time_key).unwrap_or(0),
+                        })
                     })
                     .collect();
-                rows.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+                sort_rows(&mut rows, self.sort);
                 self.rows = rows;
                 self.error = None;
             }
@@ -128,6 +196,7 @@ struct RemoteView {
     state: RemoteState,
     /// Fiche du gestionnaire de sites d'origine (pour y mémoriser une empreinte approuvée).
     site_id: Option<u64>,
+    sort: Sort,
 }
 
 enum Side {
@@ -178,6 +247,58 @@ impl Side {
             Side::Local(_) => None,
         }
     }
+
+    fn sort(&self) -> Sort {
+        match self {
+            Side::Local(l) => l.sort,
+            Side::Remote(r) => r.sort,
+        }
+    }
+
+    /// Change le tri et réordonne la liste (la sélection est vidée).
+    fn set_sort(&mut self, s: Sort) {
+        let (rows, sort, sel) = match self {
+            Side::Local(l) => (&mut l.rows, &mut l.sort, &mut l.selected),
+            Side::Remote(r) => (&mut r.rows, &mut r.sort, &mut r.selected),
+        };
+        *sort = s;
+        sort_rows(rows, s);
+        sel.clear();
+    }
+
+    /// Chemin complet d'un nom (affichage, presse-papiers, opérations).
+    fn full_path(&self, name: &str) -> String {
+        match self {
+            Side::Local(l) => l.path.join(name).to_string_lossy().into_owned(),
+            Side::Remote(r) => rpath::join(&r.dir, name),
+        }
+    }
+
+    /// Éléments sélectionnés : (nom, dossier ?).
+    fn picked(&self) -> Vec<(String, bool)> {
+        self.selected().iter().filter_map(|&i| self.rows().get(i)).map(|r| (r.name.clone(), r.is_dir)).collect()
+    }
+}
+
+/// Glisser-déposer : fichiers sélectionnés d'un panneau.
+#[derive(Debug, Clone, Copy)]
+struct DragFiles {
+    from: usize,
+}
+
+/// Dialogue en attente de saisie ou de confirmation.
+enum Prompt {
+    NewFolder { side: usize, name: String },
+    Rename { side: usize, from: String, to: String },
+    Delete { side: usize, items: Vec<(String, bool)> },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Move {
+    Up,
+    Down,
+    Top,
+    Bottom,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -212,6 +333,11 @@ struct Container {
     engine_running: Arc<AtomicBool>,
     log: Vec<LogEntry>,
     trust: Option<TrustPrompt>,
+    /// Moteur en cours (pour arrêter un élément).
+    engine: Option<Arc<Engine>>,
+    prompt: Option<Prompt>,
+    /// Panneau actif pour le clavier (0 = gauche, 1 = droit).
+    focus: usize,
 }
 
 fn default_dock() -> DockState<Pane> {
@@ -238,13 +364,17 @@ impl Container {
             engine_running: Arc::new(AtomicBool::new(false)),
             log: Vec::new(),
             trust: None,
+            engine: None,
+            prompt: None,
+            focus: 0,
         }
     }
 
-    fn title(&self) -> String {
+    /// Titre affiché ; `pos` = position de l'onglet (1, 2, 3…), qui se renumérote à la fermeture.
+    fn title(&self, pos: usize) -> String {
         match (&self.sides[0], &self.sides[1]) {
             (_, Side::Remote(r)) | (Side::Remote(r), _) => r.profile.host.clone(),
-            _ => format!("Onglet {}", self.id),
+            _ => format!("Onglet {pos}"),
         }
     }
 
@@ -288,6 +418,7 @@ impl Container {
         }
         if self.engine_events.is_some() && !self.engine_running.load(Ordering::SeqCst) {
             self.engine_events = None;
+            self.engine = None;
             self.push_log(0, LogKind::Status, "File d'attente terminée");
             self.refresh_both();
         }
@@ -299,6 +430,7 @@ impl Container {
                 if let Side::Remote(r) = &mut self.sides[side] {
                     r.dir = dir;
                     r.rows = entries.iter().map(FileRow::from_remote).collect();
+                    sort_rows(&mut r.rows, r.sort);
                     r.selected.clear();
                     r.state = RemoteState::Connected;
                 }
@@ -377,6 +509,7 @@ impl Container {
         }
         let (tx, rx) = unbounded_channel();
         let engine = Engine::new(self.queue.clone(), sites, EngineOptions::default(), Some(tx));
+        self.engine = Some(engine.clone());
         let running = self.engine_running.clone();
         running.store(true, Ordering::SeqCst);
         let ctx = ctx.clone();
@@ -387,6 +520,121 @@ impl Container {
         });
         self.engine_events = Some(rx);
         self.push_log(0, LogKind::Status, "File d'attente démarrée");
+    }
+
+    // ------------------------------------------------------------------ opérations sur les fichiers
+
+    fn ask_new_folder(&mut self, side: usize) {
+        self.prompt = Some(Prompt::NewFolder { side, name: "Nouveau dossier".into() });
+    }
+
+    fn ask_rename(&mut self, side: usize) {
+        if let Some((name, _)) = self.sides[side].picked().into_iter().next() {
+            self.prompt = Some(Prompt::Rename { side, to: name.clone(), from: name });
+        }
+    }
+
+    fn ask_delete(&mut self, side: usize) {
+        let items = self.sides[side].picked();
+        if !items.is_empty() {
+            self.prompt = Some(Prompt::Delete { side, items });
+        }
+    }
+
+    /// Exécute un dialogue validé (local : tout de suite ; distant : via la connexion du panneau).
+    fn run_prompt(&mut self, p: Prompt) {
+        match p {
+            Prompt::NewFolder { side, name } => {
+                let name = name.trim().to_string();
+                if name.is_empty() {
+                    return;
+                }
+                let full = self.sides[side].full_path(&name);
+                if let Side::Remote(r) = &self.sides[side] {
+                    r.handle.send(BrowserCmd::Mkdir(full));
+                } else {
+                    match std::fs::create_dir(&full) {
+                        Ok(()) => {
+                            if let Side::Local(l) = &mut self.sides[side] {
+                                l.reload();
+                            }
+                        }
+                        Err(e) => self.push_log(side, LogKind::Error, format!("Création de {full} : {e}")),
+                    }
+                }
+            }
+            Prompt::Rename { side, from, to } => {
+                let to = to.trim().to_string();
+                if to.is_empty() || to == from {
+                    return;
+                }
+                let full = self.sides[side].full_path(&from);
+                match &self.sides[side] {
+                    Side::Local(_) => {
+                        let dest = self.sides[side].full_path(&to);
+                        match std::fs::rename(&full, &dest) {
+                            Ok(()) => {
+                                if let Side::Local(l) = &mut self.sides[side] {
+                                    l.reload();
+                                }
+                            }
+                            Err(e) => self.push_log(side, LogKind::Error, format!("Renommage de {full} : {e}")),
+                        }
+                    }
+                    Side::Remote(r) => r.handle.send(BrowserCmd::Rename(full, to)),
+                }
+            }
+            Prompt::Delete { side, items } => {
+                let full: Vec<(String, bool)> = items.iter().map(|(n, d)| (self.sides[side].full_path(n), *d)).collect();
+                match &self.sides[side] {
+                    Side::Local(_) => {
+                        for (p, is_dir) in &full {
+                            let r = if *is_dir { std::fs::remove_dir_all(p) } else { std::fs::remove_file(p) };
+                            if let Err(e) = r {
+                                self.push_log(side, LogKind::Error, format!("Suppression de {p} : {e}"));
+                            }
+                        }
+                        if let Side::Local(l) = &mut self.sides[side] {
+                            l.reload();
+                        }
+                    }
+                    Side::Remote(r) => r.handle.send(BrowserCmd::Delete(full)),
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ file d'attente
+
+    fn move_item(&mut self, id: ItemId, m: Move) {
+        let mut q = self.queue.lock().unwrap();
+        match m {
+            Move::Up => q.move_up(id),
+            Move::Down => q.move_down(id),
+            Move::Top => q.move_to_top(id),
+            Move::Bottom => q.move_to_bottom(id),
+        }
+    }
+
+    fn stop_item(&mut self, id: ItemId) {
+        if let Some(e) = &self.engine {
+            e.stop(id);
+        }
+    }
+
+    fn stop_all(&mut self) {
+        if let Some(e) = &self.engine {
+            e.stop_all();
+        }
+    }
+
+    fn retry_item(&mut self, id: ItemId) {
+        if let Some(it) = self.queue.lock().unwrap().get_mut(id)
+            && matches!(it.state, ItemState::Failed(_) | ItemState::Stopped | ItemState::NeedsConfirmation)
+        {
+            it.state = ItemState::Waiting;
+            it.attempts = 0;
+        }
     }
 }
 
@@ -467,6 +715,18 @@ enum Action {
     Transfer(usize),
     StartQueue,
     ClearFinished,
+    Focus(usize),
+    Sort(usize, SortCol),
+    NewFolder(usize),
+    Rename(usize),
+    Delete(usize),
+    CopyPath(usize, String),
+    QueueStop(ItemId),
+    QueueStopAll,
+    QueueMove(ItemId, Move),
+    QueueRemove(ItemId),
+    QueueRetry(ItemId),
+    QueueRetryAll,
 }
 
 impl UltraRushApp {
@@ -485,7 +745,7 @@ impl UltraRushApp {
                 pass: String::new(),
                 proto: QuickProto::Ftp,
             }),
-            dark: true,
+            dark: theme::start_dark(),
             sites: SiteManager::load(),
         }
     }
@@ -549,6 +809,7 @@ impl UltraRushApp {
             selected: BTreeSet::new(),
             state: RemoteState::Connecting,
             site_id,
+            sort: Sort::default(),
         }));
     }
 
@@ -624,7 +885,7 @@ impl UltraRushApp {
         ui.horizontal(|ui| {
             for (i, tab) in self.tabs.iter().enumerate() {
                 let busy = tab.engine_events.is_some();
-                let text = format!("{}{}", if busy { "⟳ " } else { "" }, tab.title());
+                let text = format!("{}{}", if busy { "⟳ " } else { "" }, tab.title(i + 1));
                 if ui.selectable_label(i == self.active, text).clicked() {
                     self.active = i;
                 }
@@ -694,6 +955,138 @@ impl UltraRushApp {
                 Action::ClearFinished => {
                     tab.queue.lock().unwrap().remove_where(|i| i.state.is_finished());
                 }
+                Action::Focus(side) => tab.focus = side,
+                Action::Sort(side, col) => {
+                    let s = tab.sides[side].sort().toggle(col);
+                    tab.sides[side].set_sort(s);
+                }
+                Action::NewFolder(side) => tab.ask_new_folder(side),
+                Action::Rename(side) => tab.ask_rename(side),
+                Action::Delete(side) => tab.ask_delete(side),
+                Action::CopyPath(side, name) => ctx.copy_text(tab.sides[side].full_path(&name)),
+                Action::QueueStop(id) => tab.stop_item(id),
+                Action::QueueStopAll => tab.stop_all(),
+                Action::QueueMove(id, m) => tab.move_item(id, m),
+                Action::QueueRemove(id) => {
+                    tab.queue.lock().unwrap().remove_where(|i| i.id == id);
+                }
+                Action::QueueRetry(id) => {
+                    tab.retry_item(id);
+                    tab.start_queue(&rt, ctx);
+                }
+                Action::QueueRetryAll => {
+                    tab.queue.lock().unwrap().reset_failed();
+                    tab.start_queue(&rt, ctx);
+                }
+            }
+        }
+    }
+
+    /// Raccourcis clavier, appliqués au panneau actif quand aucun champ texte n'a le focus.
+    fn keyboard(&mut self, ctx: &egui::Context) -> Vec<Action> {
+        let tab = &self.tabs[self.active];
+        if ctx.egui_wants_keyboard_input() || tab.prompt.is_some() || tab.trust.is_some() || self.sites.open {
+            return Vec::new();
+        }
+        let side = tab.focus;
+        let mut out = Vec::new();
+        ctx.input(|i| {
+            use egui::Key;
+            let first_dir = tab.sides[side].picked().into_iter().find(|(_, d)| *d).map(|(n, _)| n);
+            if i.key_pressed(Key::Enter)
+                && let Some(n) = first_dir
+            {
+                out.push(Action::Open(side, n));
+            }
+            if i.key_pressed(Key::Backspace) {
+                out.push(Action::Up(side));
+            }
+            if i.key_pressed(Key::F5) {
+                out.push(Action::Refresh(side));
+            }
+            if i.key_pressed(Key::F2) {
+                out.push(Action::Rename(side));
+            }
+            if i.key_pressed(Key::F7) {
+                out.push(Action::NewFolder(side));
+            }
+            if i.key_pressed(Key::Delete) {
+                out.push(Action::Delete(side));
+            }
+            if i.key_pressed(Key::Space) || i.key_pressed(Key::Insert) {
+                out.push(Action::Transfer(side));
+            }
+            if i.key_pressed(Key::Tab) {
+                out.push(Action::Focus(1 - side));
+            }
+        });
+        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A)) {
+            let n = tab.sides[side].rows().len();
+            // Sélection directe : pas besoin de passer par une action.
+            let sel: BTreeSet<usize> = (0..n).collect();
+            out.push(Action::Focus(side));
+            self.tabs[self.active].sides[side].selected_mut().extend(sel);
+        }
+        out
+    }
+
+    /// Dialogues de saisie (nouveau dossier, renommer) et de confirmation (supprimer).
+    fn prompt_dialog(&mut self, ctx: &egui::Context) {
+        let tab = &mut self.tabs[self.active];
+        let Some(prompt) = &mut tab.prompt else { return };
+        let mut done: Option<bool> = None;
+        egui::Modal::new(egui::Id::new(("prompt", tab.id))).show(ctx, |ui| {
+            ui.set_min_width(380.0);
+            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+            match prompt {
+                Prompt::NewFolder { name, .. } => {
+                    ui.heading("📁 Nouveau dossier");
+                    let r = ui.add(egui::TextEdit::singleline(name).desired_width(f32::INFINITY));
+                    r.request_focus();
+                }
+                Prompt::Rename { from, to, .. } => {
+                    ui.heading("✏ Renommer");
+                    ui.label(RichText::new(from.as_str()).weak());
+                    let r = ui.add(egui::TextEdit::singleline(to).desired_width(f32::INFINITY));
+                    r.request_focus();
+                }
+                Prompt::Delete { items, .. } => {
+                    ui.heading("🗑 Supprimer ?");
+                    let dirs = items.iter().filter(|(_, d)| *d).count();
+                    ui.label(format!(
+                        "{} élément(s) seront supprimés définitivement{}.",
+                        items.len(),
+                        if dirs > 0 { format!(", dont {dirs} dossier(s) avec tout leur contenu") } else { String::new() }
+                    ));
+                    for (n, d) in items.iter().take(8) {
+                        ui.label(RichText::new(format!("{} {n}", if *d { "📁" } else { "📄" })).weak());
+                    }
+                    if items.len() > 8 {
+                        ui.label(RichText::new(format!("… et {} autre(s)", items.len() - 8)).weak());
+                    }
+                }
+            }
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let (label, color) = match prompt {
+                    Prompt::Delete { .. } => ("Supprimer", LOG_ERROR),
+                    _ => ("Valider", ACCENT),
+                };
+                if ui.add(egui::Button::new(RichText::new(label).color(Color32::WHITE)).fill(color)).clicked()
+                    || (enter && !matches!(prompt, Prompt::Delete { .. }))
+                {
+                    done = Some(true);
+                }
+                if ui.button("Annuler").clicked() || escape {
+                    done = Some(false);
+                }
+            });
+        });
+        if let Some(ok) = done {
+            let p = tab.prompt.take().unwrap();
+            if ok {
+                tab.run_prompt(p);
             }
         }
     }
@@ -768,11 +1161,12 @@ impl eframe::App for UltraRushApp {
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::top("tabs").show(ui, |ui| self.tab_strip(ui));
 
-        let mut actions = Vec::new();
+        let mut actions = self.keyboard(&ctx);
         egui::CentralPanel::default().show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
-            let Container { id, dock, sides, queue, progress, log, .. } = tab;
-            let mut viewer = PaneViewer { sides, queue, progress, log, actions: &mut actions };
+            let running = tab.engine.is_some();
+            let Container { id, dock, sides, queue, progress, log, focus, .. } = tab;
+            let mut viewer = PaneViewer { sides, queue, progress, log, actions: &mut actions, focus: *focus, running };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
                 .id(egui::Id::new(("dock", *id)))
@@ -782,6 +1176,7 @@ impl eframe::App for UltraRushApp {
                 .show_inside(ui, &mut viewer);
         });
         self.apply(actions, &ctx);
+        self.prompt_dialog(&ctx);
         self.trust_dialog(&ctx);
         self.sites.show(&ctx);
         if let Some(site) = self.sites.take_connect() {
@@ -798,15 +1193,20 @@ struct PaneViewer<'a> {
     progress: &'a HashMap<ItemId, (u64, Option<u64>)>,
     log: &'a [LogEntry],
     actions: &'a mut Vec<Action>,
+    /// Panneau actif pour le clavier.
+    focus: usize,
+    /// Un moteur tourne (pour activer « Arrêter »).
+    running: bool,
 }
 
 impl TabViewer for PaneViewer<'_> {
     type Tab = Pane;
 
     fn title(&mut self, tab: &mut Pane) -> egui::WidgetText {
+        let mark = |side: usize| if self.focus == side { "▸ " } else { "" };
         match tab {
-            Pane::Left => self.sides[0].title().into(),
-            Pane::Right => self.sides[1].title().into(),
+            Pane::Left => format!("{}{}", mark(0), self.sides[0].title()).into(),
+            Pane::Right => format!("{}{}", mark(1), self.sides[1].title()).into(),
             Pane::Queue => "☰ File d'attente".into(),
             Pane::Log => "📜 Journal".into(),
         }
@@ -833,8 +1233,11 @@ impl PaneViewer<'_> {
             if ui.button("⬆").on_hover_text("Dossier parent").clicked() {
                 self.actions.push(Action::Up(side));
             }
-            if ui.button("⟳").on_hover_text("Actualiser").clicked() {
+            if ui.button("⟳").on_hover_text("Actualiser (F5)").clicked() {
                 self.actions.push(Action::Refresh(side));
+            }
+            if ui.button("📁+").on_hover_text("Nouveau dossier (F7)").clicked() {
+                self.actions.push(Action::NewFolder(side));
             }
             match &mut self.sides[side] {
                 Side::Local(l) => {
@@ -886,55 +1289,117 @@ impl PaneViewer<'_> {
 
         let rows: Vec<FileRow> = self.sides[side].rows().to_vec();
         let selected = self.sides[side].selected().clone();
-        let mut clicked: Option<(usize, bool)> = None;
+        let sort = self.sides[side].sort();
+        let mut clicked: Option<(usize, bool, bool)> = None;
         let mut opened: Option<String> = None;
-        TableBuilder::new(ui)
-            .id_salt(("files", side))
-            .striped(true)
-            .sense(Sense::click())
-            .column(Column::remainder().at_least(160.0).clip(true))
-            .column(Column::initial(90.0).at_least(60.0))
-            .column(Column::initial(130.0).at_least(80.0))
-            .header(22.0, |mut h| {
-                h.col(|ui| {
-                    ui.strong("Nom");
-                });
-                h.col(|ui| {
-                    ui.strong("Taille");
-                });
-                h.col(|ui| {
-                    ui.strong("Modifié");
-                });
-            })
-            .body(|body| {
-                body.rows(22.0, rows.len(), |mut row| {
-                    let i = row.index();
-                    let f = &rows[i];
-                    row.set_selected(selected.contains(&i));
-                    row.col(|ui| {
-                        let icon = if f.is_dir { "📁" } else { "📄" };
-                        ui.label(format!("{icon} {}", f.name));
-                    });
-                    row.col(|ui| {
-                        ui.label(if f.is_dir { String::new() } else { human_size(f.size) });
-                    });
-                    row.col(|ui| {
-                        ui.label(RichText::new(&f.modified).weak());
-                    });
-                    let resp = row.response();
-                    if resp.double_clicked() && f.is_dir {
-                        opened = Some(f.name.clone());
-                    } else if resp.clicked() {
-                        clicked = Some((i, resp.ctx.input(|inp| inp.modifiers.command || inp.modifiers.shift)));
+        let mut sort_by: Option<SortCol> = None;
+        let mut menu: Vec<Action> = Vec::new();
+
+        // Toute la liste est une zone de dépôt : des fichiers glissés depuis l'autre panneau
+        // y sont transférés.
+        let (_, dropped) = ui.dnd_drop_zone::<DragFiles, ()>(egui::Frame::new(), |ui| {
+            TableBuilder::new(ui)
+                .id_salt(("files", side))
+                .striped(true)
+                .sense(Sense::click_and_drag())
+                .column(Column::remainder().at_least(160.0).clip(true))
+                .column(Column::initial(90.0).at_least(60.0))
+                .column(Column::initial(130.0).at_least(80.0))
+                .header(22.0, |mut h| {
+                    for (col, label) in [(SortCol::Name, "Nom"), (SortCol::Size, "Taille"), (SortCol::Modified, "Modifié")] {
+                        h.col(|ui| {
+                            let arrow = if sort.col == col { if sort.asc { " ⏶" } else { " ⏷" } } else { "" };
+                            let r = ui.add(egui::Label::new(RichText::new(format!("{label}{arrow}")).strong()).sense(Sense::click()));
+                            if r.on_hover_text("Trier").clicked() {
+                                sort_by = Some(col);
+                            }
+                        });
                     }
+                })
+                .body(|body| {
+                    body.rows(22.0, rows.len(), |mut row| {
+                        let i = row.index();
+                        let f = &rows[i];
+                        row.set_selected(selected.contains(&i));
+                        row.col(|ui| {
+                            let icon = if f.is_dir { "📁" } else { "📄" };
+                            ui.label(format!("{icon} {}", f.name));
+                        });
+                        row.col(|ui| {
+                            ui.label(if f.is_dir { String::new() } else { human_size(f.size) });
+                        });
+                        row.col(|ui| {
+                            ui.label(RichText::new(&f.modified).weak());
+                        });
+                        let resp = row.response();
+                        if resp.drag_started() && !selected.contains(&i) {
+                            clicked = Some((i, false, false));
+                        }
+                        resp.dnd_set_drag_payload(DragFiles { from: side });
+                        if resp.double_clicked() && f.is_dir {
+                            opened = Some(f.name.clone());
+                        } else if resp.clicked() {
+                            let m = resp.ctx.input(|inp| inp.modifiers);
+                            clicked = Some((i, m.command, m.shift));
+                        } else if resp.secondary_clicked() && !selected.contains(&i) {
+                            clicked = Some((i, false, false));
+                        }
+                        resp.context_menu(|ui| {
+                            if ui.button("⇄ Transférer vers l'autre panneau   Espace").clicked() {
+                                menu.push(Action::Transfer(side));
+                                ui.close();
+                            }
+                            if f.is_dir && ui.button("📂 Ouvrir   Entrée").clicked() {
+                                menu.push(Action::Open(side, f.name.clone()));
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui.button("✏ Renommer…   F2").clicked() {
+                                menu.push(Action::Rename(side));
+                                ui.close();
+                            }
+                            if ui.button("🗑 Supprimer…   Suppr").clicked() {
+                                menu.push(Action::Delete(side));
+                                ui.close();
+                            }
+                            if ui.button("📁 Nouveau dossier…   F7").clicked() {
+                                menu.push(Action::NewFolder(side));
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui.button("📋 Copier le chemin").clicked() {
+                                menu.push(Action::CopyPath(side, f.name.clone()));
+                                ui.close();
+                            }
+                            if ui.button("⟳ Actualiser   F5").clicked() {
+                                menu.push(Action::Refresh(side));
+                                ui.close();
+                            }
+                        });
+                    });
                 });
-            });
+        });
+
+        if let Some(drop) = dropped
+            && drop.from != side
+        {
+            self.actions.push(Action::Transfer(drop.from));
+        }
+        if let Some(col) = sort_by {
+            self.actions.push(Action::Sort(side, col));
+        }
         if let Some(name) = opened {
             self.actions.push(Action::Open(side, name));
         }
-        if let Some((i, add)) = clicked {
+        if let Some((i, toggle, range)) = clicked {
+            self.actions.push(Action::Focus(side));
             let sel = self.sides[side].selected_mut();
-            if add {
+            if range {
+                // Maj : de la dernière sélection jusqu'ici.
+                let anchor = sel.iter().next_back().copied().unwrap_or(i);
+                let (a, b) = if anchor <= i { (anchor, i) } else { (i, anchor) };
+                sel.extend(a..=b);
+            } else if toggle {
                 if !sel.remove(&i) {
                     sel.insert(i);
                 }
@@ -943,23 +1408,34 @@ impl PaneViewer<'_> {
                 sel.insert(i);
             }
         }
+        self.actions.extend(menu);
     }
 
     fn queue_pane(&mut self, ui: &mut egui::Ui) {
         let items = self.queue.lock().unwrap().items().to_vec();
+        let failed = items.iter().filter(|i| matches!(i.state, ItemState::Failed(_) | ItemState::Stopped)).count();
         ui.horizontal(|ui| {
             if ui.button("▶ Démarrer").clicked() {
                 self.actions.push(Action::StartQueue);
             }
+            if ui.add_enabled(self.running, egui::Button::new("⏹ Tout arrêter")).clicked() {
+                self.actions.push(Action::QueueStopAll);
+            }
+            if ui.add_enabled(failed > 0, egui::Button::new(format!("↻ Relancer les échecs ({failed})"))).clicked() {
+                self.actions.push(Action::QueueRetryAll);
+            }
             if ui.button("🗑 Retirer les terminés").clicked() {
                 self.actions.push(Action::ClearFinished);
             }
-            ui.label(RichText::new(format!("{} élément(s)", items.len())).weak());
+            ui.label(RichText::new(format!("{} élément(s) — clic droit pour plus d'options", items.len())).weak());
         });
         ui.separator();
+        let running = self.running;
+        let mut menu: Vec<Action> = Vec::new();
         TableBuilder::new(ui)
             .id_salt("queue")
             .striped(true)
+            .sense(Sense::click())
             .column(Column::initial(28.0))
             .column(Column::remainder().at_least(160.0).clip(true))
             .column(Column::initial(90.0))
@@ -1011,8 +1487,34 @@ impl PaneViewer<'_> {
                         };
                         ui.label(RichText::new(&text).color(color)).on_hover_text(text);
                     });
+                    let id = it.id;
+                    let is_running = it.state == ItemState::Running;
+                    let retryable = matches!(it.state, ItemState::Failed(_) | ItemState::Stopped | ItemState::NeedsConfirmation);
+                    row.response().context_menu(|ui| {
+                        if ui.add_enabled(running && is_running, egui::Button::new("⏹ Arrêter")).clicked() {
+                            menu.push(Action::QueueStop(id));
+                            ui.close();
+                        }
+                        if ui.add_enabled(retryable, egui::Button::new("↻ Relancer")).clicked() {
+                            menu.push(Action::QueueRetry(id));
+                            ui.close();
+                        }
+                        ui.separator();
+                        for (m, label) in [(Move::Top, "⏫ Tout en haut"), (Move::Up, "⏶ Monter"), (Move::Down, "⏷ Descendre"), (Move::Bottom, "⏬ Tout en bas")] {
+                            if ui.button(label).clicked() {
+                                menu.push(Action::QueueMove(id, m));
+                                ui.close();
+                            }
+                        }
+                        ui.separator();
+                        if ui.add_enabled(!is_running, egui::Button::new("🗑 Retirer de la file")).clicked() {
+                            menu.push(Action::QueueRemove(id));
+                            ui.close();
+                        }
+                    });
                 });
             });
+        self.actions.extend(menu);
     }
 
     fn log_pane(&mut self, ui: &mut egui::Ui) {

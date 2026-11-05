@@ -108,6 +108,65 @@ impl RemoteSession {
         }
     }
 
+    pub async fn mkdir(&mut self, p: &str) -> Result<()> {
+        match self {
+            RemoteSession::Ftp(c) => c.mkdir(p).await?,
+            RemoteSession::Sftp(c) => c.mkdir(p).await?,
+        }
+        Ok(())
+    }
+
+    pub async fn delete_file(&mut self, p: &str) -> Result<()> {
+        match self {
+            RemoteSession::Ftp(c) => c.delete(p).await?,
+            RemoteSession::Sftp(c) => c.delete(p).await?,
+        }
+        Ok(())
+    }
+
+    /// Supprime un dossier vide.
+    pub async fn rmdir(&mut self, p: &str) -> Result<()> {
+        match self {
+            RemoteSession::Ftp(c) => c.rmdir(p).await?,
+            RemoteSession::Sftp(c) => c.rmdir(p).await?,
+        }
+        Ok(())
+    }
+
+    /// Supprime un dossier et tout son contenu.
+    pub async fn remove_tree(&mut self, dir: &str) -> Result<usize> {
+        let mut removed = 0;
+        let mut stack = vec![(dir.to_string(), false)];
+        // Parcours en profondeur : un dossier n'est supprimé qu'après son contenu.
+        while let Some((d, listed)) = stack.pop() {
+            if listed {
+                self.rmdir(&d).await?;
+                removed += 1;
+                continue;
+            }
+            stack.push((d.clone(), true));
+            for e in self.list(&d).await? {
+                let child = path::join(&d, &e.name);
+                if e.is_dir() {
+                    stack.push((child, false));
+                } else {
+                    self.delete_file(&child).await?;
+                    removed += 1;
+                }
+            }
+        }
+        Ok(removed)
+    }
+
+    /// Renomme `from` en `to` (nom simple dans le même dossier, ou chemin).
+    pub async fn rename(&mut self, from: &str, to: &str) -> Result<()> {
+        match self {
+            RemoteSession::Ftp(c) => c.rename(from, to).await?,
+            RemoteSession::Sftp(c) => c.rename(from, to).await?,
+        }
+        Ok(())
+    }
+
     /// Change de répertoire (chemin absolu ou relatif, `..` accepté).
     pub async fn cwd(&mut self, dir: &str) -> Result<()> {
         match self {

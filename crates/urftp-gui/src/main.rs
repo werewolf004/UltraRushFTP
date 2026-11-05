@@ -29,7 +29,7 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             theme::install_fonts(&cc.egui_ctx);
-            theme::apply(&cc.egui_ctx, true);
+            theme::apply(&cc.egui_ctx, theme::start_dark());
             Ok(Box::new(app::UltraRushApp::new(handle)))
         }),
     )
