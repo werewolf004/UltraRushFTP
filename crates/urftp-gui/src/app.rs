@@ -12,7 +12,8 @@ use egui_dock::{DockArea, DockState, NodeIndex, Style as DockStyle, TabViewer};
 use egui_extras::{Column, TableBuilder};
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
-use urftp_core::queue::{Endpoint, ItemId, ItemState, Queue, SiteLimits};
+use urftp_core::TransferKind;
+use urftp_core::queue::{Endpoint, ItemId, ItemState, Queue, QueueItem, SiteLimits};
 use urftp_proto::engine::{Engine, EngineEvent, EngineOptions};
 use urftp_proto::ftp::{FtpConfig, FtpTime, LogLine, RemoteEntry, Security, TlsOptions, TlsVerify, path as rpath};
 use urftp_proto::session::{SiteProfile, SiteProtocol};
@@ -27,6 +28,8 @@ use urftp_proto::throttle::RateLimiter;
 use urftp_core::site::Site;
 use crate::theme::{self, ACCENT, LOG_COMMAND, LOG_ERROR, LOG_REPLY, LOG_STATUS, human_size};
 
+mod rushapp;
+
 // ====================================================================== modèle
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +38,7 @@ enum Pane {
     Right,
     Queue,
     Log,
+    Script,
 }
 
 #[derive(Clone)]
@@ -342,12 +346,18 @@ struct Container {
     prompt: Option<Prompt>,
     /// Panneau actif pour le clavier (0 = gauche, 1 = droit).
     focus: usize,
+    /// Console de script : texte du script, expression à évaluer, résultats (succès ?, texte).
+    script: String,
+    invoke: String,
+    script_out: Vec<(bool, String)>,
+    /// Réponses aux commandes brutes (`RushApp.FTP.RAW`) : (site, commande, lignes, succès).
+    raw_replies: Vec<(String, String, Vec<String>, bool)>,
 }
 
 fn default_dock() -> DockState<Pane> {
     let mut dock = DockState::new(vec![Pane::Left]);
     let surface = dock.main_surface_mut();
-    let [top, _] = surface.split_below(NodeIndex::root(), 0.66, vec![Pane::Queue, Pane::Log]);
+    let [top, _] = surface.split_below(NodeIndex::root(), 0.66, vec![Pane::Queue, Pane::Log, Pane::Script]);
     surface.split_right(top, 0.5, vec![Pane::Right]);
     dock
 }
@@ -371,6 +381,10 @@ impl Container {
             engine: None,
             prompt: None,
             focus: 0,
+            script: "RushApp.FTP.RAW('', 'NOOP', 0);".into(),
+            invoke: "RushApp.Version".into(),
+            script_out: Vec::new(),
+            raw_replies: Vec::new(),
         }
     }
 
@@ -389,8 +403,10 @@ impl Container {
         }
     }
 
-    /// Relève les événements des connexions de navigation et du moteur.
-    fn poll(&mut self) {
+    /// Relève les événements des connexions de navigation et du moteur. Renvoie les octets
+    /// transférés depuis le dernier appel, par sens (pour les statistiques et les débits).
+    fn poll(&mut self) -> Vec<(TransferKind, u64)> {
+        let mut traffic = Vec::new();
         for side in 0..2 {
             let mut events = Vec::new();
             if let Side::Remote(r) = &self.sides[side] {
@@ -411,7 +427,17 @@ impl Container {
         for e in finished {
             match e {
                 EngineEvent::Progress { id, bytes, total } => {
-                    self.progress.insert(id, (bytes, total));
+                    let before = self.progress.insert(id, (bytes, total)).map_or(0, |(b, _)| b);
+                    let kind = self.queue.lock().unwrap().get(id).map(QueueItem::kind);
+                    // Le FXP ne passe pas par cet ordinateur : il n'entre pas dans les débits.
+                    if let Some(k @ (TransferKind::Upload | TransferKind::Download)) = kind {
+                        traffic.push((k, bytes.saturating_sub(before)));
+                    }
+                }
+                EngineEvent::Done { id, bytes } => {
+                    if self.queue.lock().unwrap().get(id).map(QueueItem::kind) == Some(TransferKind::Fxp) {
+                        traffic.push((TransferKind::Fxp, bytes));
+                    }
                 }
                 EngineEvent::Failed { id, error } => self.push_log(0, LogKind::Error, format!("Élément {id} : {error}")),
                 EngineEvent::Retrying { id, attempt, error } => {
@@ -426,6 +452,7 @@ impl Container {
             self.push_log(0, LogKind::Status, "File d'attente terminée");
             self.refresh_both();
         }
+        traffic
     }
 
     fn on_browser_event(&mut self, side: usize, e: BrowserEvent) {
@@ -468,6 +495,13 @@ impl Container {
                     r.rows.clear();
                 }
             }
+            BrowserEvent::RawReply { command, lines, ok } => {
+                let site = self.sides[side].profile().map(|p| p.name.clone()).unwrap_or_default();
+                self.raw_replies.push((site, command, lines, ok));
+                if self.raw_replies.len() > 100 {
+                    self.raw_replies.remove(0);
+                }
+            }
         }
     }
 
@@ -501,12 +535,14 @@ impl Container {
         self.push_log(from, LogKind::Status, format!("{} élément(s) ajouté(s) à la file", picks.len()));
     }
 
-    fn start_queue(&mut self, rt: &Handle, ctx: &egui::Context, opts: EngineOptions) {
+    /// Lance le moteur. `extra` : profils des sites de la file absents des panneaux
+    /// (éléments ajoutés par un script, par exemple).
+    fn start_queue(&mut self, rt: &Handle, ctx: &egui::Context, opts: EngineOptions, extra: &[SiteProfile]) {
         if self.engine_events.is_some() {
             return;
         }
         let mut sites: Vec<SiteProfile> = Vec::new();
-        for p in self.sides.iter().filter_map(Side::profile) {
+        for p in self.sides.iter().filter_map(Side::profile).chain(extra) {
             if !sites.iter().any(|s| s.name == p.name) {
                 sites.push(p.clone());
             }
@@ -695,6 +731,11 @@ pub struct UltraRushApp {
     upload_limit: Arc<RateLimiter>,
     ident: Option<IdentServer>,
     ident_applied: Option<IdentSettings>,
+    /// Statistiques (totaux enregistrés, session, débits) pour `RushApp.*` et la barre d'état.
+    stats: rushapp::Stats,
+    /// Séparateur des listes de sites dans les scripts (`RushApp.FTP.Splitter`).
+    splitter: String,
+    startup_script_done: bool,
 }
 
 /// `ftp://user:pass@hôte:port`, `ftps://` (explicite), `ftpsi://` (implicite), `sftp://`.
@@ -737,6 +778,9 @@ enum Action {
     QueueRemove(ItemId),
     QueueRetry(ItemId),
     QueueRetryAll,
+    /// Console : exécuter le script de l'onglet / évaluer son expression.
+    RunScript,
+    Invoke,
 }
 
 impl UltraRushApp {
@@ -765,6 +809,9 @@ impl UltraRushApp {
             upload_limit: RateLimiter::new(ul),
             ident: None,
             ident_applied: None,
+            stats: rushapp::Stats::load(),
+            splitter: ";".into(),
+            startup_script_done: false,
         };
         // La variable URUSHFTP_THEME l'emporte sur l'option enregistrée.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -871,7 +918,21 @@ impl UltraRushApp {
     fn connect_profile(&mut self, profile: SiteProfile, site_id: Option<u64>, start_dir: Option<String>, ctx: &egui::Context) {
         if self.options.settings.new_tab_when_busy && matches!(self.tabs[self.active].sides[1], Side::Remote(_)) {
             self.new_tab();
-        } else if let Side::Remote(r) = &self.tabs[self.active].sides[1] {
+        }
+        self.open_remote(self.active, 1, profile, site_id, start_dir, ctx);
+    }
+
+    /// Connecte le panneau `side` de l'onglet `tab` (l'ancienne connexion est fermée).
+    fn open_remote(
+        &mut self,
+        tab: usize,
+        side: usize,
+        profile: SiteProfile,
+        site_id: Option<u64>,
+        start_dir: Option<String>,
+        ctx: &egui::Context,
+    ) {
+        if let Side::Remote(r) = &self.tabs[tab].sides[side] {
             r.handle.send(BrowserCmd::Disconnect);
         }
         let handle = browser::spawn(&self.rt, ctx.clone());
@@ -879,9 +940,9 @@ impl UltraRushApp {
         if let Some(dir) = start_dir.filter(|d| !d.trim().is_empty()) {
             handle.send(BrowserCmd::Cwd(dir));
         }
-        let tab = &mut self.tabs[self.active];
-        tab.push_log(1, LogKind::Status, format!("Connexion à {}…", profile.name));
-        tab.sides[1] = Side::Remote(Box::new(RemoteView {
+        let t = &mut self.tabs[tab];
+        t.push_log(side, LogKind::Status, format!("Connexion à {}…", profile.name));
+        t.sides[side] = Side::Remote(Box::new(RemoteView {
             profile,
             handle,
             dir: "/".into(),
@@ -1016,9 +1077,13 @@ impl UltraRushApp {
     fn apply(&mut self, actions: Vec<Action>, ctx: &egui::Context) {
         let rt = self.rt.clone();
         let opts = self.engine_options();
+        let extra = self.queue_site_profiles(self.active);
+        let mut scripts = Vec::new();
         let tab = &mut self.tabs[self.active];
         for a in actions {
             match a {
+                Action::RunScript => scripts.push(false),
+                Action::Invoke => scripts.push(true),
                 Action::Open(side, name) => match &mut tab.sides[side] {
                     Side::Local(l) => l.open(&name),
                     Side::Remote(r) => r.handle.send(BrowserCmd::Cwd(rpath::join(&r.dir, &name))),
@@ -1039,9 +1104,9 @@ impl UltraRushApp {
                 }
                 Action::Transfer(side) => {
                     tab.enqueue_selection(side);
-                    tab.start_queue(&rt, ctx, opts.clone());
+                    tab.start_queue(&rt, ctx, opts.clone(), &extra);
                 }
-                Action::StartQueue => tab.start_queue(&rt, ctx, opts.clone()),
+                Action::StartQueue => tab.start_queue(&rt, ctx, opts.clone(), &extra),
                 Action::ClearFinished => {
                     tab.queue.lock().unwrap().remove_where(|i| i.state.is_finished());
                 }
@@ -1062,14 +1127,54 @@ impl UltraRushApp {
                 }
                 Action::QueueRetry(id) => {
                     tab.retry_item(id);
-                    tab.start_queue(&rt, ctx, opts.clone());
+                    tab.start_queue(&rt, ctx, opts.clone(), &extra);
                 }
                 Action::QueueRetryAll => {
                     tab.queue.lock().unwrap().reset_failed();
-                    tab.start_queue(&rt, ctx, opts.clone());
+                    tab.start_queue(&rt, ctx, opts.clone(), &extra);
                 }
             }
         }
+        // Console de script : exécutée après les autres actions (elle agit sur toute l'appli).
+        for invoke in scripts {
+            let (src, tab) = {
+                let t = &self.tabs[self.active];
+                (if invoke { t.invoke.clone() } else { t.script.clone() }, self.active)
+            };
+            let out = if invoke {
+                self.invoke(&src, ctx).map(|v| format!("= {v}"))
+            } else {
+                self.run_script(&src, ctx).map(|()| "Script exécuté.".to_string())
+            };
+            let last = self.tabs.len() - 1;
+            let t = &mut self.tabs[tab.min(last)];
+            t.script_out.push(match out {
+                Ok(m) => (true, m),
+                Err(e) => (false, e),
+            });
+            if t.script_out.len() > 200 {
+                t.script_out.remove(0);
+            }
+        }
+    }
+
+    /// Profils (depuis le gestionnaire de sites) de tous les sites cités dans la file d'un onglet.
+    fn queue_site_profiles(&self, tab: usize) -> Vec<SiteProfile> {
+        let Some(t) = self.tabs.get(tab) else { return Vec::new() };
+        let names: BTreeSet<String> = t
+            .queue
+            .lock()
+            .unwrap()
+            .items()
+            .iter()
+            .flat_map(|i| [i.src.site.clone(), i.dst.site.clone()])
+            .flatten()
+            .collect();
+        names
+            .iter()
+            .filter_map(|n| self.sites.book.find_by_name(n))
+            .map(|s| sites::to_profile(s, &self.options.settings))
+            .collect()
     }
 
     /// Raccourcis clavier, appliqués au panneau actif quand aucun champ texte n'a le focus.
@@ -1244,9 +1349,20 @@ impl eframe::App for UltraRushApp {
         if std::mem::take(&mut self.autoconnect) {
             self.quick_connect(&ctx);
         }
-        for t in &mut self.tabs {
-            t.poll();
+        // `URUSHFTP_SCRIPT` : script exécuté au démarrage (développement, automatisation).
+        if !self.startup_script_done {
+            self.startup_script_done = true;
+            if let Ok(src) = std::env::var("URUSHFTP_SCRIPT") {
+                let r = self.run_script(&src, &ctx);
+                let t = self.active;
+                self.tabs[t].script_out.push(match r {
+                    Ok(()) => (true, "Script de démarrage exécuté.".into()),
+                    Err(e) => (false, format!("Script de démarrage : {e}")),
+                });
+            }
         }
+        let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(Container::poll).collect();
+        self.stats.record(&traffic);
         if self.tabs.iter().any(|t| t.engine_events.is_some()) {
             ctx.request_repaint_after(Duration::from_millis(150));
         }
@@ -1259,8 +1375,9 @@ impl eframe::App for UltraRushApp {
         egui::CentralPanel::default().show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
             let running = tab.engine.is_some();
-            let Container { id, dock, sides, queue, progress, log, focus, .. } = tab;
-            let mut viewer = PaneViewer { sides, queue, progress, log, actions: &mut actions, focus: *focus, running };
+            let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, .. } = tab;
+            let mut viewer =
+                PaneViewer { sides, queue, progress, log, actions: &mut actions, focus: *focus, running, script, invoke, script_out };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
                 .id(egui::Id::new(("dock", *id)))
@@ -1294,6 +1411,9 @@ struct PaneViewer<'a> {
     focus: usize,
     /// Un moteur tourne (pour activer « Arrêter »).
     running: bool,
+    script: &'a mut String,
+    invoke: &'a mut String,
+    script_out: &'a [(bool, String)],
 }
 
 impl TabViewer for PaneViewer<'_> {
@@ -1306,6 +1426,7 @@ impl TabViewer for PaneViewer<'_> {
             Pane::Right => format!("{}{}", mark(1), self.sides[1].title()).into(),
             Pane::Queue => "☰ File d'attente".into(),
             Pane::Log => "📜 Journal".into(),
+            Pane::Script => "⌨ Script".into(),
         }
     }
 
@@ -1319,6 +1440,7 @@ impl TabViewer for PaneViewer<'_> {
             Pane::Right => self.file_pane(ui, 1),
             Pane::Queue => self.queue_pane(ui),
             Pane::Log => self.log_pane(ui),
+            Pane::Script => self.script_pane(ui),
         }
     }
 }
@@ -1612,6 +1734,43 @@ impl PaneViewer<'_> {
                 });
             });
         self.actions.extend(menu);
+    }
+
+    /// Console de script : exécuter du Pascal Script FTPRush ou évaluer une expression,
+    /// comme le feraient `RushScript` et `Invoke` depuis mIRC.
+    fn script_pane(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Invoke :");
+            let r = ui.add(egui::TextEdit::singleline(self.invoke).hint_text("RushApp.TotalDownloadSize").desired_width(320.0));
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if ui.button("= Évaluer").clicked() || enter {
+                self.actions.push(Action::Invoke);
+            }
+            ui.separator();
+            if ui.add(egui::Button::new(RichText::new("▶ Exécuter le script").color(Color32::WHITE)).fill(ACCENT)).clicked() {
+                self.actions.push(Action::RunScript);
+            }
+        });
+        ui.add_space(4.0);
+        ui.columns(2, |cols| {
+            egui::ScrollArea::vertical().id_salt("script-src").show(&mut cols[0], |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(self.script)
+                        .code_editor()
+                        .desired_rows(8)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("RushApp.FTP.Login('MonSite', '/', 0);"),
+                );
+            });
+            egui::ScrollArea::vertical().id_salt("script-out").stick_to_bottom(true).show(&mut cols[1], |ui| {
+                if self.script_out.is_empty() {
+                    ui.label(RichText::new("Les résultats et erreurs s'affichent ici.").weak());
+                }
+                for (ok, line) in self.script_out {
+                    ui.label(RichText::new(line).monospace().color(if *ok { LOG_REPLY } else { LOG_ERROR }));
+                }
+            });
+        });
     }
 
     fn log_pane(&mut self, ui: &mut egui::Ui) {

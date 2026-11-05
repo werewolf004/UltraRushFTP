@@ -118,8 +118,13 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
 11. 🟡 Pascal Script (`urftp-script`) : interpréteur (variables, opérateurs, drapeaux `RS_*`
     en bits, `if/while/repeat/for/exit`, fonctions intégrées, `InputQuery`), exécution d'un
     script (`run`) et d'une expression (`evaluate`, pour `Invoke`), erreurs avec numéro de
-    ligne, garde contre les boucles infinies. Reste : brancher l'hôte `RushApp.*` dans
-    l'application (`Login/Logout/CWD/RAW/Delete/Transfer/RemoveQueue/EnableSite/…`, stats).
+    ligne, garde contre les boucles infinies. Hôte `RushApp.*` branché dans l'application
+    (`urftp-gui::app::rushapp`) : `FTP.Login` (signets, `RS_CHECKBM`, `RS_PAIR`, `RS_GHOST`),
+    `Logout`, `CWD`, `RAW` (`RS_LOGIN`, `RS_LOGOUT`, `RS_ONE`), `Delete`, `Transfer` (envoi,
+    téléchargement, FXP, chaînes de sites, signets, fenêtre), `RemoveQueue`, `EnableSite`,
+    `DisableSite`, `Splitter`, `DeleteEmptyTabs`, statistiques (`stats.json`) et débits ;
+    console « Script » (exécuter / `Invoke`), `URUSHFTP_SCRIPT` au démarrage. Reste :
+    filtres et répétitions de `Transfer`, `InputQuery` interactif, `RushApp.UI.*`, procédures.
 12. Serveur IPC + DLL `rushmirc` (x86 et x64), test contre les scripts mIRC existants.
 13. Ligne de commande (`-d`, `-w`, `-c`, `-f`, `-r[t][x]`) et `urftp`.
 14. Import des sites FTPRush v2 (`RushSite.xml`) et v3 (`site.json`).

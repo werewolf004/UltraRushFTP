@@ -5071,6 +5071,8 @@ dependencies = [
  "egui_dock",
  "egui_extras",
  "rfd",
+ "serde",
+ "serde_json",
  "tokio",
  "urftp-core",
  "urftp-ipc",

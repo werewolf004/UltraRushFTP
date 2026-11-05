@@ -25,6 +25,8 @@ pub enum BrowserCmd {
     Delete(Vec<(String, bool)>),
     /// Renomme (chemin absolu, nouveau nom), puis actualise.
     Rename(String, String),
+    /// Commande FTP brute (`RushApp.FTP.RAW`) ; la réponse arrive en `RawReply`.
+    Raw(String),
 }
 
 /// Type de confiance à accorder après un refus.
@@ -41,6 +43,8 @@ pub enum BrowserEvent {
     /// Certificat TLS ou clé SSH inconnus : l'utilisateur peut les approuver.
     Trust { kind: TrustKind, fingerprint: String, reason: String },
     Disconnected,
+    /// Réponse à une commande brute : (commande, lignes de la réponse).
+    RawReply { command: String, lines: Vec<String>, ok: bool },
 }
 
 pub struct BrowserHandle {
@@ -115,6 +119,13 @@ pub fn spawn(rt: &Handle, ctx: egui::Context) -> BrowserHandle {
                         listing(s, &send).await;
                     }
                 }
+                BrowserCmd::Raw(command) => match session.as_mut().and_then(RemoteSession::as_ftp) {
+                    Some(c) => match c.raw(&command).await {
+                        Ok(r) => send(BrowserEvent::RawReply { command, ok: r.code < 400, lines: r.lines }),
+                        Err(e) => send(BrowserEvent::RawReply { command, ok: false, lines: vec![e.to_string()] }),
+                    },
+                    None => send(BrowserEvent::Error(format!("« {command} » : commande brute impossible (non connecté ou SFTP)"))),
+                },
                 BrowserCmd::Rename(from, to) => {
                     if let Some(s) = session.as_mut() {
                         if let Err(e) = s.rename(&from, &to).await {
