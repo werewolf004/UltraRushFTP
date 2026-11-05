@@ -115,7 +115,11 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
     proxy global, serveur Ident. Reste : nom Ident par site, langues, actions de souris.
 
 ### Phase 3 — automatisation et compatibilité
-11. Pascal Script (`RushApp.FTP.Login/Logout/CWD/RAW/Delete/Transfer/RemoveQueue/…`).
+11. 🟡 Pascal Script (`urftp-script`) : interpréteur (variables, opérateurs, drapeaux `RS_*`
+    en bits, `if/while/repeat/for/exit`, fonctions intégrées, `InputQuery`), exécution d'un
+    script (`run`) et d'une expression (`evaluate`, pour `Invoke`), erreurs avec numéro de
+    ligne, garde contre les boucles infinies. Reste : brancher l'hôte `RushApp.*` dans
+    l'application (`Login/Logout/CWD/RAW/Delete/Transfer/RemoveQueue/EnableSite/…`, stats).
 12. Serveur IPC + DLL `rushmirc` (x86 et x64), test contre les scripts mIRC existants.
 13. Ligne de commande (`-d`, `-w`, `-c`, `-f`, `-r[t][x]`) et `urftp`.
 14. Import des sites FTPRush v2 (`RushSite.xml`) et v3 (`site.json`).
