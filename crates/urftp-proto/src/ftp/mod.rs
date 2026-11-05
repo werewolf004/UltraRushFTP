@@ -42,6 +42,8 @@ pub enum FtpError {
     InvalidArgument(String),
     #[error("erreur TLS : {0}")]
     Tls(String),
+    #[error("proxy : {0}")]
+    Proxy(#[from] crate::proxy::ProxyError),
     /// Certificat refusé ; `fingerprint` (SHA-256) permet de proposer de l'approuver.
     #[error("certificat du serveur refusé ({reason}) — empreinte SHA-256 : {fingerprint}")]
     Certificate { fingerprint: String, reason: String },

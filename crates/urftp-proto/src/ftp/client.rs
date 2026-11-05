@@ -4,7 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufStream};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream, lookup_host};
+
+use crate::proxy::{self, ProxyConfig};
 
 use super::listing::{self, RemoteEntry};
 use super::reply::read_reply;
@@ -39,11 +41,14 @@ pub struct FtpConfig {
     pub active_external_ip: Option<IpAddr>,
     /// Plage de ports locaux pour le mode actif (redirections de ports du routeur).
     pub active_port_range: Option<(u16, u16)>,
+    /// Proxy (SOCKS4/4A/5, HTTP Tunnel). Ignoré si ses règles de contournement s'appliquent.
+    pub proxy: Option<ProxyConfig>,
 }
 
 impl Default for FtpConfig {
     fn default() -> Self {
         Self {
+            proxy: None,
             security: Security::None,
             active_mode: false,
             active_external_ip: None,
@@ -88,8 +93,12 @@ pub enum TransferType {
 pub struct FtpClient {
     ctrl: BufStream<BoxStream>,
     host: String,
-    peer: SocketAddr,
+    /// IP du serveur FTP si connue (inconnue quand le proxy résout le nom lui-même).
+    server_ip: Option<IpAddr>,
     local: SocketAddr,
+    /// Proxy effectivement utilisé par cette connexion.
+    proxy: Option<ProxyConfig>,
+    proxy_active_warned: bool,
     tls: Option<TlsContext>,
     /// Canaux de données chiffrés (`PROT P` accepté).
     prot_p: bool,
@@ -111,20 +120,54 @@ impl FtpClient {
 
     /// Comme [`FtpClient::connect`], avec un journal actif dès l'accueil du serveur.
     pub async fn connect_with_log(host: &str, port: u16, config: FtpConfig, log: Option<LogSink>) -> Result<Self> {
-        let tcp = timeout(config.connect_timeout, TcpStream::connect((host, port))).await?;
+        let proxy = config.proxy.clone().filter(|p| !p.bypasses(host));
+        let ct = config.connect_timeout;
+        let (tcp, server_ip) = match &proxy {
+            Some(p) => {
+                if let Some(log) = &log {
+                    log(LogLine::Status(format!("Connexion via proxy {:?} {}:{}", p.kind, p.host, p.port)));
+                }
+                let tcp = timeout_ftp(ct, async { Ok(proxy::connect(p, host, port).await?) }).await?;
+                // Sans proxy sur les données, il faut l'IP réelle du serveur.
+                let ip = match host.parse::<IpAddr>() {
+                    Ok(ip) => Some(ip),
+                    Err(_) if !p.apply_to_data => lookup_host((host, port)).await.ok().and_then(|mut a| a.next()).map(|a| a.ip()),
+                    Err(_) => None,
+                };
+                (tcp, ip)
+            }
+            None => {
+                let tcp = timeout(ct, TcpStream::connect((host, port))).await?;
+                let ip = tcp.peer_addr()?.ip();
+                (tcp, Some(ip))
+            }
+        };
         tcp.set_nodelay(true)?;
-        let (peer, local) = (tcp.peer_addr()?, tcp.local_addr()?);
-        Self::connect_over(Box::new(tcp), host, peer, local, config, log).await
+        let local = tcp.local_addr()?;
+        Self::start(Box::new(tcp), host, server_ip, local, proxy, config, log).await
     }
 
-    /// Démarre sur un flux TCP déjà établi (par exemple à travers un proxy).
-    /// `host` sert à la vérification TLS ; `peer` est l'adresse du serveur FTP pour les
-    /// connexions de données, `local` l'adresse locale annoncée en mode actif.
+    /// Démarre sur un flux déjà établi par l'appelant (tunnel particulier…).
+    /// `host` sert à la vérification TLS et aux connexions de données, `server_ip` est l'IP
+    /// réelle du serveur si connue, `local` l'adresse annoncée en mode actif.
+    /// Le proxy éventuel de `config` n'est pas utilisé.
     pub async fn connect_over(
         stream: BoxStream,
         host: &str,
-        peer: SocketAddr,
+        server_ip: Option<IpAddr>,
         local: SocketAddr,
+        config: FtpConfig,
+        log: Option<LogSink>,
+    ) -> Result<Self> {
+        Self::start(stream, host, server_ip, local, None, config, log).await
+    }
+
+    async fn start(
+        stream: BoxStream,
+        host: &str,
+        server_ip: Option<IpAddr>,
+        local: SocketAddr,
+        proxy: Option<ProxyConfig>,
         config: FtpConfig,
         log: Option<LogSink>,
     ) -> Result<Self> {
@@ -139,8 +182,10 @@ impl FtpClient {
         let mut c = Self {
             ctrl: BufStream::new(stream),
             host: host.to_string(),
-            peer,
+            server_ip,
             local,
+            proxy,
+            proxy_active_warned: false,
             tls,
             prot_p: false,
             config,
@@ -212,8 +257,18 @@ impl FtpClient {
     pub fn features(&self) -> &Features {
         &self.features
     }
-    pub fn peer_addr(&self) -> SocketAddr {
-        self.peer
+    /// IP du serveur FTP, si connue.
+    pub fn server_ip(&self) -> Option<IpAddr> {
+        self.server_ip
+    }
+
+    /// La connexion passe-t-elle par un proxy ?
+    pub fn uses_proxy(&self) -> bool {
+        self.proxy.is_some()
+    }
+
+    fn data_via_proxy(&self) -> Option<&ProxyConfig> {
+        self.proxy.as_ref().filter(|p| p.apply_to_data)
     }
     /// Répertoire courant connu côté client (`None` si inconnu).
     pub fn current_dir(&self) -> Option<&str> {
@@ -447,7 +502,12 @@ impl FtpClient {
     /// Prépare le canal de données avant la commande de transfert : connexion passive,
     /// ou écoute locale annoncée par `PORT`/`EPRT` en mode actif.
     async fn prepare_data(&mut self, transfer_cmd: &str) -> Result<PendingData> {
-        if self.config.active_mode {
+        let active = self.config.active_mode && self.data_via_proxy().is_none();
+        if self.config.active_mode && !active && !self.proxy_active_warned {
+            self.proxy_active_warned = true;
+            self.status("Mode actif impossible à travers le proxy : utilisation du mode passif");
+        }
+        if active {
             self.open_active().await.map(PendingData::Listening)
         } else {
             self.open_passive(transfer_cmd).await.map(PendingData::Connected)
@@ -461,10 +521,11 @@ impl FtpClient {
             PendingData::Connected(s) => s,
             PendingData::Listening(listener) => {
                 let (tcp, from) = timeout(self.config.connect_timeout, listener.accept()).await?;
-                if from.ip() != self.peer.ip() {
+                if let Some(server) = self.server_ip
+                    && canonical(from.ip()) != canonical(server)
+                {
                     return Err(FtpError::Protocol(format!(
-                        "connexion de données refusée : elle vient de {from} et non du serveur {}",
-                        self.peer.ip()
+                        "connexion de données refusée : elle vient de {from} et non du serveur {server}"
                     )));
                 }
                 tcp.set_nodelay(true)?;
@@ -511,13 +572,14 @@ impl FtpClient {
         if self.features.has("PRET") {
             self.ok(&format!("PRET {transfer_cmd}")).await?;
         }
-        let mut addr = None;
+        let mut target = None;
         if self.config.prefer_epsv && !self.epsv_refused {
             let r = self.raw("EPSV").await?;
             if r.code == 229 {
                 let port = parse_epsv(r.text())
                     .ok_or_else(|| FtpError::Protocol(format!("réponse EPSV illisible : {r}")))?;
-                addr = Some(SocketAddr::new(self.peer.ip(), port));
+                // EPSV ne donne qu'un port : même hôte que le canal de contrôle.
+                target = Some(self.server_target(port));
             } else if r.is_permanent_negative() {
                 self.epsv_refused = true;
                 self.status("EPSV refusé : repli sur PASV");
@@ -525,24 +587,49 @@ impl FtpClient {
                 return Err(FtpError::Unexpected { command: "EPSV".into(), reply: r });
             }
         }
-        let addr = match addr {
-            Some(a) => a,
+        let target = match target {
+            Some(t) => t,
             None => {
                 let r = self.expect("PASV", |r| r.code == 227).await?;
                 let (ip, port) = parse_pasv(r.text())
                     .ok_or_else(|| FtpError::Protocol(format!("réponse PASV illisible : {r}")))?;
                 let ip = IpAddr::V4(ip);
-                if self.config.pasv_fix_private_ip && needs_fix(ip, self.peer.ip()) {
-                    self.status(format!("PASV renvoie {ip} : utilisation de {}", self.peer.ip()));
-                    SocketAddr::new(self.peer.ip(), port)
+                if self.config.pasv_fix_private_ip && needs_fix(ip, self.server_ip) {
+                    let t = self.server_target(port);
+                    self.status(format!("PASV renvoie {ip} : utilisation de {}", t.host(&self.host)));
+                    t
                 } else {
-                    SocketAddr::new(ip, port)
+                    DataTarget::Addr(SocketAddr::new(ip, port))
                 }
             }
         };
-        let tcp = timeout(self.config.connect_timeout, TcpStream::connect(addr)).await?;
+        let tcp = self.connect_data(target).await?;
         tcp.set_nodelay(true)?;
         Ok(Box::new(tcp))
+    }
+
+    /// Cible « le serveur lui-même » sur `port` : son IP si connue hors proxy, sinon son nom.
+    fn server_target(&self, port: u16) -> DataTarget {
+        match (self.server_ip, self.data_via_proxy()) {
+            (Some(ip), None) => DataTarget::Addr(SocketAddr::new(ip, port)),
+            _ => DataTarget::Host(port),
+        }
+    }
+
+    /// Connexion TCP de données, directe ou à travers le proxy.
+    async fn connect_data(&self, target: DataTarget) -> Result<TcpStream> {
+        let ct = self.config.connect_timeout;
+        if let Some(p) = self.data_via_proxy() {
+            let (host, port) = match &target {
+                DataTarget::Addr(a) => (a.ip().to_string(), a.port()),
+                DataTarget::Host(port) => (self.host.clone(), *port),
+            };
+            return timeout_ftp(ct, async { Ok(proxy::connect(p, &host, port).await?) }).await;
+        }
+        match target {
+            DataTarget::Addr(a) => timeout(ct, TcpStream::connect(a)).await,
+            DataTarget::Host(port) => timeout(ct, TcpStream::connect((self.host.as_str(), port))).await,
+        }
     }
 
     /// Envoie la commande de transfert et attend la réponse 1xx. `Ok(false)` si le serveur
@@ -691,6 +778,22 @@ impl FtpClient {
 
 // -------------------------------------------------------------------- utilitaires
 
+/// Destination d'une connexion de données passive.
+enum DataTarget {
+    Addr(SocketAddr),
+    /// Le nom d'hôte du canal de contrôle, sur ce port.
+    Host(u16),
+}
+
+impl DataTarget {
+    fn host(&self, control_host: &str) -> String {
+        match self {
+            DataTarget::Addr(a) => a.ip().to_string(),
+            DataTarget::Host(_) => control_host.to_string(),
+        }
+    }
+}
+
 /// Canal de données en cours d'ouverture.
 enum PendingData {
     /// Mode passif : déjà connecté au serveur.
@@ -778,9 +881,17 @@ fn is_private(ip: IpAddr) -> bool {
     }
 }
 
-/// L'adresse PASV est inutilisable (non routable alors que le serveur est public, ou 0.0.0.0).
-fn needs_fix(pasv: IpAddr, peer: IpAddr) -> bool {
-    pasv.is_unspecified() || (is_private(pasv) && !is_private(peer))
+/// L'adresse PASV est inutilisable : 0.0.0.0, ou non routable alors que le serveur est public
+/// (ou d'adresse inconnue, derrière un proxy).
+fn needs_fix(pasv: IpAddr, server: Option<IpAddr>) -> bool {
+    pasv.is_unspecified() || (is_private(pasv) && server.is_none_or(|s| !is_private(s)))
+}
+
+fn canonical(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(ip, IpAddr::V4),
+        v4 => v4,
+    }
 }
 
 #[cfg(test)]
@@ -802,11 +913,13 @@ mod tests {
 
     #[test]
     fn pasv_ip_fix() {
-        let public: IpAddr = "203.0.113.5".parse().unwrap();
+        let public: Option<IpAddr> = "203.0.113.5".parse().ok();
         assert!(needs_fix("192.168.0.10".parse().unwrap(), public));
-        assert!(!needs_fix("192.168.0.10".parse().unwrap(), "192.168.0.1".parse().unwrap()));
-        assert!(needs_fix("0.0.0.0".parse().unwrap(), "127.0.0.1".parse().unwrap()));
+        assert!(!needs_fix("192.168.0.10".parse().unwrap(), "192.168.0.1".parse().ok()));
+        assert!(needs_fix("0.0.0.0".parse().unwrap(), "127.0.0.1".parse().ok()));
         assert!(!needs_fix("198.51.100.7".parse().unwrap(), public));
+        // Serveur d'IP inconnue (nom résolu par le proxy) : une IP privée est remplacée.
+        assert!(needs_fix("10.1.2.3".parse().unwrap(), None));
     }
 
     #[test]

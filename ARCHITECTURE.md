@@ -73,7 +73,9 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
 2. ✅ FTPS explicite (`AUTH TLS`, `PBSZ`, `PROT`) et implicite ; TLS sur le canal de données
    avec reprise de session ; certificats : magasin Windows, empreinte approuvée, ou sans
    vérification ; mode actif `PORT`/`EPRT` (IP externe, plage de ports).
-3. Proxy (SOCKS4/4A/5, HTTP Tunnel) et serveur Ident.
+3. ✅ Proxy (SOCKS4/4A/5 avec authentification, HTTP Tunnel avec Basic) sur le contrôle et
+   les données, contournement local et par masques, passage auto en passif ; serveur Ident
+   (RFC 1413) avec nom par site, nom global `URUSHFTP` par défaut.
 4. FXP : `PASV`/`PORT` croisés, `PRET`, FXP sécurisé `SSCN` / `CPSV`, inversion automatique.
 5. SFTP : mot de passe et clé publique.
 6. File d'attente : upload / download / FXP, pool de connexions et multi-transfert par site,

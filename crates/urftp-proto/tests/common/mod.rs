@@ -1,6 +1,8 @@
 //! Serveur FTP/FTPS minimal en mémoire pour les tests d'intégration (localhost uniquement).
 #![allow(dead_code)]
 
+pub mod proxy;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -40,6 +42,8 @@ pub struct MockConfig {
     pub require_session_reuse: bool,
     /// Refuse les transferts tant que `PROT P` n'a pas été envoyé.
     pub require_prot_p: bool,
+    /// Interroge le serveur Ident du client sur ce port à chaque connexion (comme glftpd).
+    pub ident_port: Option<u16>,
 }
 
 impl Default for MockConfig {
@@ -53,6 +57,7 @@ impl Default for MockConfig {
             tls: MockTls::None,
             require_session_reuse: false,
             require_prot_p: false,
+            ident_port: None,
         }
     }
 }
@@ -119,6 +124,8 @@ pub struct Stats {
     pub data_channels: Vec<(bool, bool)>,
     /// Connexions de données en mode actif.
     pub active_connections: usize,
+    /// Réponses Ident obtenues à la connexion.
+    pub ident_answers: Vec<String>,
 }
 
 pub struct MockServer {
@@ -244,7 +251,20 @@ fn parse_eprt(arg: &str) -> Option<SocketAddr> {
     Some(SocketAddr::new(ip, p.get(3)?.parse().ok()?))
 }
 
+/// Requête Ident vers le client : `<port du client> , <port du serveur>`.
+async fn ident_lookup(tcp: &TcpStream, ident_port: u16) -> std::io::Result<String> {
+    let (client, server) = (tcp.peer_addr()?, tcp.local_addr()?);
+    let mut q = TcpStream::connect((client.ip(), ident_port)).await?;
+    q.write_all(format!("{} , {}\r\n", client.port(), server.port()).as_bytes()).await?;
+    let mut lines = BufReader::new(q).lines();
+    Ok(lines.next_line().await?.unwrap_or_default())
+}
+
 async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
+    if let Some(port) = sh.cfg.ident_port {
+        let answer = ident_lookup(&tcp, port).await.unwrap_or_else(|e| format!("échec : {e}"));
+        sh.stats.lock().unwrap().ident_answers.push(answer);
+    }
     let stream: BoxStream = if sh.cfg.tls == MockTls::Implicit {
         Box::new(sh.tls.clone().unwrap().accept(tcp).await?)
     } else {
