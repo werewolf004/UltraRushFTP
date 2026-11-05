@@ -56,6 +56,38 @@ Les sites sont désignés par leur nom dans le gestionnaire de sites. Les répon
 s'affichent dans mIRC (`/echo -a (site) …`) ; `/dll rushmirc.dll DisableCallback` les coupe.
 Fermez FTPRush s'il est ouvert : la DLL parlerait à la première des deux applications trouvée.
 
+## Ligne de commande
+
+Options de démarrage de l'interface (syntaxe de FTPRush v2) :
+
+| Option | Effet |
+|---|---|
+| `-w<n>` | ouvrir n onglets |
+| `-c<url>` | se connecter : `ftp://user:pass@hôte:port`, `ftps://`, `ftpsi://`, `sftp://`, nom d'un site ou hôte seul |
+| `-f"dossier"` | réglages et sites dans ce dossier ; `-f` seul : dossier du programme (portable) |
+| `-r[t][x]` | lancer les files au démarrage ; `t` : fenêtre réduite ; `x` : quitter quand tout est transféré |
+| `-s"fichier"` | exécuter un script (Pascal Script FTPRush) au démarrage |
+| `-d` | mode débogage |
+
+Exemple : `UltraRushFTP.exe -s"C:\jobs\nuit.pas" -rtx` exécute le script, transfère
+fenêtre réduite, puis se ferme.
+
+Outil `urftp` (sans fenêtre, mêmes sites et options que l'interface) :
+
+```text
+urftp sites
+urftp ls   MonSite:/pub
+urftp get  MonSite:/pub/Release C:\Téléchargements
+urftp put  C:\envoi\dossier MonSite:/incoming
+urftp fxp  Site1:/pub/Release Site2:/incoming
+urftp raw  MonSite "SITE WHO" STAT
+urftp ls   ftp://user:pass@hôte:21/pub
+```
+
+Options : `-v` (journal du protocole), `-n <transferts>`, `--exists overwrite|resume|skip|rename`,
+`--insecure`, `--fingerprint <empreinte>`, `--data <dossier>`. Code de sortie : 0 si tout
+est transféré, 1 en cas d'échec, 2 pour une erreur d'arguments.
+
 ## Développement
 
 ```text

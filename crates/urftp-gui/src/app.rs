@@ -20,6 +20,7 @@ use urftp_proto::session::{SiteProfile, SiteProtocol};
 use urftp_proto::sftp::{HostKeyPolicy, SftpConfig};
 
 use crate::browser::{self, BrowserCmd, BrowserEvent, BrowserHandle, TrustKind};
+use crate::cmdline::StartupOptions;
 use crate::options::{self, OptionsWindow};
 use crate::sites::{self, SiteManager};
 use urftp_core::settings::IdentSettings;
@@ -743,6 +744,10 @@ pub struct UltraRushApp {
     ipc_callback: Option<isize>,
     /// (site, commande, fenêtre de rappel) des `RAW` dont la réponse doit revenir à mIRC.
     raw_callbacks: Vec<(String, String, isize)>,
+    /// Options de la ligne de commande, appliquées au premier affichage.
+    startup: Option<StartupOptions>,
+    /// `-rx` : quitter quand plus rien n'est à transférer.
+    exit_when_done: bool,
 }
 
 /// `ftp://user:pass@hôte:port`, `ftps://` (explicite), `ftpsi://` (implicite), `sftp://`.
@@ -791,7 +796,7 @@ enum Action {
 }
 
 impl UltraRushApp {
-    pub fn new(rt: Handle) -> Self {
+    pub fn new(rt: Handle, startup: StartupOptions) -> Self {
         let from_env = std::env::var("URUSHFTP_CONNECT").ok().and_then(|u| parse_connect_url(&u));
         let options = OptionsWindow::load();
         let dl = options.settings.transfer.download_limit_kib * 1024;
@@ -823,6 +828,8 @@ impl UltraRushApp {
             ipc_rx: None,
             ipc_callback: None,
             raw_callbacks: Vec::new(),
+            exit_when_done: false,
+            startup: Some(startup),
         };
         // La variable URUSHFTP_THEME l'emporte sur l'option enregistrée.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -976,6 +983,67 @@ impl UltraRushApp {
             l.path = PathBuf::from(site.local_dir.trim());
             l.reload();
         }
+    }
+
+    /// Options de la ligne de commande (`-w`, `-c`, `-s`, `-r[t][x]`, `-d`).
+    fn apply_startup(&mut self, o: StartupOptions, ctx: &egui::Context) {
+        let mut notes: Vec<(bool, String)> = Vec::new();
+        if o.debug {
+            notes.push((true, "Mode débogage (-d).".into()));
+        }
+        for a in &o.unknown {
+            notes.push((false, format!("Option inconnue ignorée : {a}")));
+        }
+        if let Some(n) = o.windows {
+            while self.tabs.len() < n {
+                self.new_tab();
+            }
+            self.active = 0;
+        }
+        if let Some(target) = &o.connect {
+            // URL, nom d'un site du gestionnaire, ou hôte seul (FTP anonyme).
+            if let Some(q) = parse_connect_url(target) {
+                self.quick = q;
+                self.quick_connect(ctx);
+            } else if let Some(site) = self.sites.book.find_by_name(target).cloned() {
+                self.connect_site(site, ctx);
+            } else if let Some(q) = parse_connect_url(&format!("ftp://{target}")) {
+                self.quick = q;
+                self.quick_connect(ctx);
+            }
+        }
+        if let Some(path) = &o.script_file {
+            match std::fs::read(path) {
+                Ok(bytes) => {
+                    let src = String::from_utf8(bytes).unwrap_or_else(|e| e.into_bytes().iter().map(|&b| b as char).collect());
+                    notes.push(match self.run_script(&src, ctx) {
+                        Ok(()) => (true, format!("Script {} exécuté.", path.display())),
+                        Err(e) => (false, format!("Script {} : {e}", path.display())),
+                    });
+                }
+                Err(e) => notes.push((false, format!("Script {} illisible : {e}", path.display()))),
+            }
+        }
+        if o.run_queues {
+            let rt = self.rt.clone();
+            let opts = self.engine_options();
+            for t in 0..self.tabs.len() {
+                if self.tabs[t].queue.lock().unwrap().has_pending() {
+                    let extra = self.queue_site_profiles(t);
+                    self.tabs[t].start_queue(&rt, ctx, opts.clone(), &extra);
+                }
+            }
+        }
+        if o.minimize {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+        }
+        self.exit_when_done = o.exit_when_done;
+        // Visible quand le programme est lancé depuis une console (versions de débogage).
+        for (_, n) in &notes {
+            eprintln!("{n}");
+        }
+        let t = self.active;
+        self.tabs[t].script_out.extend(notes);
     }
 
     fn top_bar(&mut self, ui: &mut egui::Ui) {
@@ -1358,6 +1426,16 @@ impl eframe::App for UltraRushApp {
         self.stats.record(&traffic);
         self.forward_raw_replies();
         self.serve_ipc(ctx);
+        // `-rx` : fermer quand aucune file ne tourne et qu'il ne reste rien à transférer.
+        if self.exit_when_done
+            && self.startup.is_none()
+            && self.tabs.iter().all(|t| t.engine_events.is_none() && !t.queue.lock().unwrap().has_pending())
+        {
+            self.stats.save();
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else if self.exit_when_done {
+            ctx.request_repaint_after(Duration::from_millis(500));
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -1368,6 +1446,9 @@ impl eframe::App for UltraRushApp {
         }
         if std::mem::take(&mut self.autoconnect) {
             self.quick_connect(&ctx);
+        }
+        if let Some(o) = self.startup.take() {
+            self.apply_startup(o, &ctx);
         }
         // `URUSHFTP_SCRIPT` : script exécuté au démarrage (développement, automatisation).
         if !self.startup_script_done {

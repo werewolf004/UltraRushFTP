@@ -105,7 +105,7 @@ impl Stats {
         }
     }
 
-    fn save(&mut self) {
+    pub(super) fn save(&mut self) {
         let path = stats_path();
         if let Some(d) = path.parent() {
             let _ = std::fs::create_dir_all(d);

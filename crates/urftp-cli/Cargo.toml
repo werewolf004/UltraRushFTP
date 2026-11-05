@@ -14,3 +14,4 @@ path = "src/main.rs"
 [dependencies]
 urftp-core.workspace = true
 urftp-proto.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "fs", "time"] }

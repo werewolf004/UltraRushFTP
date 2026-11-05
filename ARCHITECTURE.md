@@ -131,7 +131,12 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
     protocole identique à l'original (la DLL d'origine fonctionne aussi), réponses `RAW`
     renvoyées dans mIRC. Testé de bout en bout (DLL → application → serveur FTP → mIRC).
     `URUSHFTP_IPC_CLASS` change le nom de la fenêtre (tests à côté d'un FTPRush ouvert).
-13. Ligne de commande (`-d`, `-w`, `-c`, `-f`, `-r[t][x]`) et `urftp`.
+13. ✅ Ligne de commande. Interface (`urftp-gui::cmdline`) avec la syntaxe de la v2 : `-d`,
+    `-w<n>`, `-c<url|site>`, `-f"dossier"` (ou `-f` seul : portable), `-r[t][x]` (lancer
+    les files, réduire, quitter à la fin), plus `-s"script"` (script au démarrage).
+    Outil `urftp` sans fenêtre : `sites`, `ls`, `get`, `put`, `fxp`, `raw`, sur les sites du
+    gestionnaire ou des URL, avec le même moteur de file et les mêmes options que
+    l'interface (conversion partagée dans `urftp-proto::profile`).
 14. Import des sites FTPRush v2 (`RushSite.xml`) et v3 (`site.json`).
 
 ### Plus tard

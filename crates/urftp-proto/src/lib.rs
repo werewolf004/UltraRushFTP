@@ -18,6 +18,7 @@
 pub mod engine;
 pub mod ftp;
 pub mod ident;
+pub mod profile;
 pub mod proxy;
 pub mod session;
 pub mod sftp;

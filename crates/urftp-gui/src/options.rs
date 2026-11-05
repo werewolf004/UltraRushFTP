@@ -1,57 +1,17 @@
 //! Fenêtre « Options » : réglages globaux, enregistrés automatiquement dans `settings.json`.
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use eframe::egui::{self, RichText};
 use urftp_core::exists::{ExistsAction, ExistsRules};
 use urftp_core::settings::{GlobalProxy, MaskSetting, Settings, SkipRuleSetting};
-use urftp_core::site::{ProxyType, SiteProxy};
+use urftp_core::site::ProxyType;
 use urftp_core::skiplist::{RuleAction, RuleTarget};
-use urftp_proto::engine::EngineOptions;
-use urftp_proto::proxy::{ProxyConfig, ProxyKind, parse_exceptions};
-use urftp_proto::throttle::RateLimiter;
+
+/// Conversions partagées avec l'outil `urftp`.
+pub use urftp_proto::profile::{engine_options, global_proxy};
 
 use crate::theme::{ACCENT, LOG_ERROR, LOG_REPLY};
-
-/// Proxy (de site ou global) au format du moteur.
-pub fn proxy_config(p: &SiteProxy, bypass_local: bool, exceptions: &str) -> ProxyConfig {
-    ProxyConfig {
-        kind: match p.kind {
-            ProxyType::Socks4 => ProxyKind::Socks4,
-            ProxyType::Socks4a => ProxyKind::Socks4a,
-            ProxyType::Socks5 => ProxyKind::Socks5,
-            ProxyType::HttpTunnel => ProxyKind::HttpTunnel,
-        },
-        host: p.host.trim().to_string(),
-        port: p.port,
-        username: (!p.user.is_empty()).then(|| p.user.clone()),
-        password: (!p.user.is_empty()).then(|| p.password.clone()),
-        apply_to_data: p.data_channel,
-        bypass_local,
-        exceptions: parse_exceptions(exceptions),
-    }
-}
-
-/// Proxy global s'il est activé et renseigné.
-pub fn global_proxy(g: &GlobalProxy) -> Option<ProxyConfig> {
-    (g.enabled && !g.proxy.host.trim().is_empty()).then(|| proxy_config(&g.proxy, g.bypass_local, &g.exceptions))
-}
-
-/// Réglages du moteur de file à partir des options.
-pub fn engine_options(s: &Settings, download: &Arc<RateLimiter>, upload: &Arc<RateLimiter>) -> EngineOptions {
-    EngineOptions {
-        retries: s.transfer.retries,
-        retry_delay: Duration::from_secs(u64::from(s.transfer.retry_delay_secs)),
-        max_total: (s.transfer.max_total > 0).then_some(s.transfer.max_total),
-        skiplist: s.skiplist.to_skiplist(),
-        priorities: s.priority_list(),
-        exists: s.exists,
-        download_limit: download.clone(),
-        upload_limit: upload.clone(),
-        ..EngineOptions::default()
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
