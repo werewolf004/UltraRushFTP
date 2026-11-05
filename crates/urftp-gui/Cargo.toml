@@ -20,3 +20,4 @@ eframe = "0.36"
 egui_dock = "0.21.1"
 egui_extras = "0.36"
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "fs", "time"] }
+rfd = "0.17.2"

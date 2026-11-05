@@ -97,7 +97,13 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
    approbation des certificats TLS et clés SSH ; transfert de la sélection vers l'autre
    panneau et file branchée sur le moteur. Reste : menus contextuels, glisser-déposer,
    sélection au clavier, tri des colonnes, contrôle des éléments de la file.
-8. Gestionnaire de sites (groupes, signets, proxy, ident, keep-alive, ghost/`!user`).
+8. 🟡 Gestionnaire de sites (`urftp-core::site` / `sitestore`, fenêtre `urftp-gui::sites`) :
+   dossiers imbriqués, fiche complète (protocole, TLS/empreinte, clé SSH et clés d'hôte,
+   mode passif/actif, limites de connexions, proxy, Ident, signets, notes, activé),
+   enregistrement `%APPDATA%\UltraRushFTP\sites.json` (ou `URUSHFTP_DATA`) avec mots de
+   passe chiffrés DPAPI, empreintes approuvées mémorisées. Import (`urftp-core::import`,
+   détection auto) : FileZilla ✅, FTPRush v3 ✅, FTPRush v1/v2 ✅ et FlashFXP ✅ (pour ces
+   deux derniers, mots de passe non importés : à ressaisir). Reste : keep-alive, ghost/`!user`, liste d'IP, skiplist par site.
 9. Journaux (FTP, transferts, système), barre d'état, statistiques.
 10. Thèmes clair/sombre, raccourcis, actions de souris, langues.
 

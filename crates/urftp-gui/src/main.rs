@@ -3,6 +3,7 @@
 
 mod app;
 mod browser;
+mod sites;
 mod theme;
 
 use eframe::egui;

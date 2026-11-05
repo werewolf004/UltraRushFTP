@@ -19,6 +19,8 @@ use urftp_proto::session::{SiteProfile, SiteProtocol};
 use urftp_proto::sftp::{HostKeyPolicy, SftpConfig};
 
 use crate::browser::{self, BrowserCmd, BrowserEvent, BrowserHandle, TrustKind};
+use crate::sites::{self, SiteManager};
+use urftp_core::site::Site;
 use crate::theme::{self, ACCENT, LOG_COMMAND, LOG_ERROR, LOG_REPLY, LOG_STATUS, human_size};
 
 // ====================================================================== modèle
@@ -124,6 +126,8 @@ struct RemoteView {
     rows: Vec<FileRow>,
     selected: BTreeSet<usize>,
     state: RemoteState,
+    /// Fiche du gestionnaire de sites d'origine (pour y mémoriser une empreinte approuvée).
+    site_id: Option<u64>,
 }
 
 enum Side {
@@ -432,6 +436,7 @@ pub struct UltraRushApp {
     dark: bool,
     /// Connexion automatique au premier affichage (variable `URUSHFTP_CONNECT`).
     autoconnect: bool,
+    sites: SiteManager,
 }
 
 /// `ftp://user:pass@hôte:port`, `ftps://` (explicite), `ftpsi://` (implicite), `sftp://`.
@@ -481,6 +486,7 @@ impl UltraRushApp {
                 proto: QuickProto::Ftp,
             }),
             dark: true,
+            sites: SiteManager::load(),
         }
     }
 
@@ -519,8 +525,20 @@ impl UltraRushApp {
     /// Connecte le panneau droit de l'onglet actif (comme la barre de connexion rapide de la v2).
     fn quick_connect(&mut self, ctx: &egui::Context) {
         let Some(profile) = self.quick_profile() else { return };
+        self.connect_profile(profile, None, None, ctx);
+    }
+
+    /// Ouvre une connexion dans le panneau droit de l'onglet actif (un nouvel onglet si ce
+    /// panneau est déjà connecté), puis se place dans `start_dir`.
+    fn connect_profile(&mut self, profile: SiteProfile, site_id: Option<u64>, start_dir: Option<String>, ctx: &egui::Context) {
+        if matches!(self.tabs[self.active].sides[1], Side::Remote(_)) {
+            self.new_tab();
+        }
         let handle = browser::spawn(&self.rt, ctx.clone());
         handle.send(BrowserCmd::Connect(Box::new(profile.clone())));
+        if let Some(dir) = start_dir.filter(|d| !d.trim().is_empty()) {
+            handle.send(BrowserCmd::Cwd(dir));
+        }
         let tab = &mut self.tabs[self.active];
         tab.push_log(1, LogKind::Status, format!("Connexion à {}…", profile.name));
         tab.sides[1] = Side::Remote(Box::new(RemoteView {
@@ -530,12 +548,30 @@ impl UltraRushApp {
             rows: Vec::new(),
             selected: BTreeSet::new(),
             state: RemoteState::Connecting,
+            site_id,
         }));
+    }
+
+    /// Connexion depuis une fiche du gestionnaire de sites.
+    fn connect_site(&mut self, site: Site, ctx: &egui::Context) {
+        let profile = sites::to_profile(&site);
+        let remote = (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone());
+        self.connect_profile(profile, Some(site.id), remote, ctx);
+        if !site.local_dir.trim().is_empty()
+            && let Side::Local(l) = &mut self.tabs[self.active].sides[0]
+        {
+            l.path = PathBuf::from(site.local_dir.trim());
+            l.reload();
+        }
     }
 
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("Fichier", |ui| {
+                if ui.button("☰ Gestionnaire de sites").clicked() {
+                    self.sites.open = true;
+                    ui.close();
+                }
                 if ui.button("Nouvel onglet").clicked() {
                     self.new_tab();
                     ui.close();
@@ -557,6 +593,10 @@ impl UltraRushApp {
         });
         ui.add_space(4.0);
         ui.horizontal(|ui| {
+            if ui.button("☰ Sites").on_hover_text("Gestionnaire de sites").clicked() {
+                self.sites.open = !self.sites.open;
+            }
+            ui.separator();
             ui.label("⚡");
             let before = self.quick.proto;
             egui::ComboBox::from_id_salt("proto").selected_text(self.quick.proto.label()).width(120.0).show_ui(ui, |ui| {
@@ -703,6 +743,10 @@ impl UltraRushApp {
             }
             r.state = RemoteState::Connecting;
             r.handle.send(BrowserCmd::Connect(Box::new(r.profile.clone())));
+            // Site du gestionnaire : l'empreinte approuvée est enregistrée dans sa fiche.
+            if let Some(id) = r.site_id {
+                self.sites.remember_trust(id, prompt.kind, &prompt.fingerprint);
+            }
         }
     }
 }
@@ -739,6 +783,10 @@ impl eframe::App for UltraRushApp {
         });
         self.apply(actions, &ctx);
         self.trust_dialog(&ctx);
+        self.sites.show(&ctx);
+        if let Some(site) = self.sites.take_connect() {
+            self.connect_site(site, &ctx);
+        }
     }
 }
 

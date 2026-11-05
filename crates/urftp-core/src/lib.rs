@@ -13,10 +13,14 @@
 //! - `stats` : compteurs totaux et de session exposés à `RushApp.*`
 
 pub mod exists;
+pub mod import;
 pub mod localpath;
 pub mod pattern;
 pub mod priority;
 pub mod queue;
+pub mod secret;
+pub mod site;
+pub mod sitestore;
 pub mod skiplist;
 
 /// Nom Ident (RFC 1413) répondu par défaut aux serveurs FTP.

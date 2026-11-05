@@ -3,14 +3,16 @@
 **/*.rs.bk
 *.pdb
 
-# Binaires tiers : ne pas redistribuer (archives et DLL compilées)
-/thirdparty_source/**/*.zip
-/thirdparty_source/**/*.dll
-/thirdparty_source/**/*.exe
+# Références locales : logiciels tiers non redistribuables ET exports réels de sites
+# (adresses, identifiants, mots de passe). Rien de ce dossier ne doit jamais être versionné.
+/thirdparty_source/
 
-# Applications FTPRush d'origine (référence locale uniquement, non redistribuables)
-/thirdparty_source/ftprushv2/
-/thirdparty_source/FTPRushv3/
+# Carnets de sites et exports d'autres clients, où qu'ils soient
+sites.json
+sites.json.bak
+sitemanager.xml
+RushSite.xml
+*.ftp
 
 # Éditeurs / OS
 .vscode/

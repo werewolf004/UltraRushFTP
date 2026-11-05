@@ -8,4 +8,12 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64 = "0.23.1"
 regex = "1.13.1"
+roxmltree = "0.21.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror.workspace = true
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Security_Cryptography", "Win32_Foundation"] }
