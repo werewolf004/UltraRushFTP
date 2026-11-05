@@ -1,0 +1,76 @@
+# Release: pushing a tag vX.Y.Z builds the Windows binaries and publishes a GitHub
+# release whose notes are the matching CHANGELOG.md section.
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: windows-latest
+    permissions:
+      contents: write # create the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check tag, version and changelog
+        id: meta
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $version = $tag.TrimStart('v')
+          $manifest = Get-Content Cargo.toml -Raw
+          if ($manifest -notmatch '(?m)^version = "([^"]+)"') { throw 'No workspace version in Cargo.toml' }
+          if ($Matches[1] -ne $version) { throw "Tag $tag does not match workspace version $($Matches[1])" }
+          ./scripts/changelog-section.ps1 -Version $version | Set-Content -Encoding utf8 release-notes.md
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - run: rustup show active-toolchain
+      - name: Tests
+        run: cargo test --workspace --all-features --locked
+      - name: Build (64-bit)
+        run: cargo build --release --locked -p urftp-gui -p urftp-cli -p rushmirc
+      - name: Build rushmirc.dll (32-bit)
+        run: cargo build --release --locked -p rushmirc --target i686-pc-windows-msvc
+      - name: Check DLL exports
+        shell: pwsh
+        run: |
+          ./scripts/check-dll-exports.ps1 -Path target/release/rushmirc.dll -Bits 64
+          ./scripts/check-dll-exports.ps1 -Path target/i686-pc-windows-msvc/release/rushmirc.dll -Bits 32
+
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          $name = "UltraRushFTP-${{ steps.meta.outputs.version }}-windows-x64"
+          $dir = "dist/$name"
+          New-Item -ItemType Directory -Force "$dir/mirc/x64", "$dir/mirc/x86" | Out-Null
+          Copy-Item target/release/UltraRushFTP.exe, target/release/urftp.exe $dir
+          Copy-Item target/release/rushmirc.dll "$dir/mirc/x64/"
+          Copy-Item target/i686-pc-windows-msvc/release/rushmirc.dll "$dir/mirc/x86/"
+          Get-ChildItem -File -Include 'LICENSE*', 'README*.md', 'CHANGELOG*.md' -Path * | Copy-Item -Destination $dir
+          Compress-Archive -Path "$dir/*" -DestinationPath "dist/$name.zip"
+          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Set-Content -Encoding ascii "dist/$name.zip.sha256"
+          "zip=dist/$name.zip" >> $env:GITHUB_OUTPUT
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $pre = if ($tag -match '-') { '--prerelease' } else { $null }
+          gh release create $tag --verify-tag --title "UltraRushFTP $tag" --notes-file release-notes.md $pre `
+            '${{ steps.package.outputs.zip }}' '${{ steps.package.outputs.zip }}.sha256'

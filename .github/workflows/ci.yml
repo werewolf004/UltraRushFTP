@@ -1,0 +1,80 @@
+# Continuous integration: every push to main and every pull request.
+# Actions are pinned to commit SHAs (Dependabot keeps them up to date).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  fmt:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup component add rustfmt
+      - run: cargo fmt --all -- --check
+
+  deny:
+    name: Dependencies (licenses, advisories, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+
+  windows:
+    name: Clippy, tests, DLL 32/64-bit
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # rust-toolchain.toml selects the version, components and the 32-bit target.
+      - run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Tests
+        run: cargo test --workspace --all-features --locked
+      - name: Documentation
+        run: cargo doc --workspace --no-deps --all-features --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - name: Release build (64-bit)
+        run: cargo build --release --locked -p urftp-gui -p urftp-cli -p rushmirc
+      - name: rushmirc.dll (32-bit)
+        run: cargo build --release --locked -p rushmirc --target i686-pc-windows-msvc
+      - name: Check DLL exports
+        shell: pwsh
+        run: |
+          ./scripts/check-dll-exports.ps1 -Path target/release/rushmirc.dll -Bits 64
+          ./scripts/check-dll-exports.ps1 -Path target/i686-pc-windows-msvc/release/rushmirc.dll -Bits 32
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ultrarushftp-${{ github.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            target/release/UltraRushFTP.exe
+            target/release/urftp.exe
+            target/release/rushmirc.dll
+            target/i686-pc-windows-msvc/release/rushmirc.dll

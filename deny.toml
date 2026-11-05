@@ -1,0 +1,62 @@
+# cargo-deny: checked by CI on every push (`cargo deny check`; all features via [graph]).
+# https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+targets = ["x86_64-pc-windows-msvc", "i686-pc-windows-msvc"]
+all-features = true
+
+[advisories]
+# RustSec database: known vulnerabilities fail the build; unmaintained crates are reported
+# for the whole graph, yanked versions are errors.
+version = 2
+yanked = "deny"
+unmaintained = "all"
+ignore = [
+    # `paste` (compile-time macro, pulled by egui_dock): unmaintained, no runtime code.
+    # Revisit when egui_dock drops it.
+    { id = "RUSTSEC-2024-0436", reason = "build-time proc-macro of egui_dock, no runtime exposure" },
+    # `rsa` (via russh, feature "rsa"): Marvin timing side channel, no patched version.
+    # Only used to sign with a local RSA SSH key; ed25519/ECDSA keys are not affected.
+    # Decision (2026-11-05): keep RSA key support, many users still have RSA keys.
+    # Recommend ed25519 keys in the documentation; drop the exception once rsa is fixed.
+    { id = "RUSTSEC-2023-0071", reason = "no fix upstream; RSA SSH client keys only; kept by decision of 2026-11-05" },
+]
+
+[licenses]
+version = 2
+# Permissive licenses compatible with distributing a proprietary binary.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "BSL-1.0",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+
+# Our own crates are not published and carry the project license.
+# Fonts embedded by egui (epaint_default_fonts): font licenses that allow bundling in
+# proprietary software; their texts must ship with the binaries.
+[[licenses.exceptions]]
+crate = "epaint_default_fonts"
+allow = ["OFL-1.1", "Ubuntu-font-1.0"]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# Only crates.io; no git or alternative registries.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

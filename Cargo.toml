@@ -16,6 +16,8 @@ edition = "2024"
 license = "MIT"
 authors = ["werewolf004"]
 repository = "https://github.com/werewolf004/UltraRushFTP"
+publish = false
+rust-version = "1.99"
 
 [workspace.dependencies]
 urftp-core = { path = "crates/urftp-core" }
