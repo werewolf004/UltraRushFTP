@@ -291,29 +291,7 @@ fn is_local_host(host: &str) -> bool {
     }
 }
 
-/// Correspondance joker insensible à la casse : `*` (0..n caractères) et `?` (1 caractère).
-pub(crate) fn wildcard_match(pattern: &str, text: &str) -> bool {
-    let p: Vec<char> = pattern.to_lowercase().chars().collect();
-    let t: Vec<char> = text.to_lowercase().chars().collect();
-    let (mut pi, mut ti) = (0, 0);
-    let mut star: Option<(usize, usize)> = None;
-    while ti < t.len() {
-        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
-            pi += 1;
-            ti += 1;
-        } else if pi < p.len() && p[pi] == '*' {
-            star = Some((pi, ti));
-            pi += 1;
-        } else if let Some((sp, st)) = star {
-            pi = sp + 1;
-            ti = st + 1;
-            star = Some((sp, st + 1));
-        } else {
-            return false;
-        }
-    }
-    p[pi..].iter().all(|&c| c == '*')
-}
+use urftp_core::pattern::wildcard_match;
 
 #[cfg(test)]
 mod tests {
@@ -326,16 +304,6 @@ mod tests {
         assert_eq!(base64(b"fo"), "Zm8=");
         assert_eq!(base64(b"foo"), "Zm9v");
         assert_eq!(base64(b"user:p@ss"), "dXNlcjpwQHNz");
-    }
-
-    #[test]
-    fn wildcards() {
-        assert!(wildcard_match("220.67.*", "220.67.1.2"));
-        assert!(!wildcard_match("220.67.*", "220.68.1.2"));
-        assert!(wildcard_match("*.example.COM", "ftp.Example.com"));
-        assert!(wildcard_match("ftp?.site", "ftp1.site"));
-        assert!(!wildcard_match("ftp?.site", "ftp12.site"));
-        assert!(wildcard_match("*", "anything"));
     }
 
     #[test]

@@ -72,11 +72,15 @@ pub struct SftpConfig {
     pub keepalive: Option<Duration>,
     pub host_key: HostKeyPolicy,
     pub proxy: Option<ProxyConfig>,
+    /// Requêtes de lecture/écriture envoyées sans attendre la réponse (pipelining), pour
+    /// garder un bon débit sur les liens à forte latence.
+    pub max_in_flight: usize,
 }
 
 impl Default for SftpConfig {
     fn default() -> Self {
         Self {
+            max_in_flight: 16,
             connect_timeout: Duration::from_secs(30),
             io_timeout: Duration::from_secs(120),
             keepalive: Some(Duration::from_secs(30)),
@@ -238,7 +242,13 @@ impl SftpClient {
 
         let channel = ssh.channel_open_session().await.map_err(ssh_err)?;
         channel.request_subsystem(true, "sftp").await.map_err(ssh_err)?;
-        let sftp = SftpSession::new(channel.into_stream())
+        let sftp_config = russh_sftp::client::Config {
+            max_concurrent_reads: config.max_in_flight.max(1),
+            max_concurrent_writes: config.max_in_flight.max(1),
+            request_timeout_secs: config.io_timeout.as_secs().max(1),
+            ..russh_sftp::client::Config::default()
+        };
+        let sftp = SftpSession::new_with_config(channel.into_stream(), sftp_config)
             .await
             .map_err(|e| SftpError::Sftp(format!("ouverture du sous-système SFTP : {e}")))?;
         sftp.set_timeout(config.io_timeout.as_secs().max(1));

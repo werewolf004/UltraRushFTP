@@ -80,11 +80,15 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
    FXP chiffré `SSCN` / `CPSV` (repli en clair optionnel), inversion automatique si `PORT`
    est refusé, `ABOR` de l'autre côté en cas d'échec, restauration de `PROT`/`SSCN`.
 5. ✅ SFTP (russh, fournisseur ring) : mot de passe ou clé (OpenSSH, PEM, PuTTY `.ppk`,
-   chiffrée ou non), clé d'hôte vérifiée par empreinte `SHA256:…`, reprise, proxy.
-   À optimiser avec la file d'attente : requêtes en parallèle (pipelining) pour les liens
-   à forte latence.
-6. File d'attente : upload / download / FXP, pool de connexions et multi-transfert par site,
-   reprise, priorités, skiplist, règles « fichier existant », limitation de bande passante.
+   chiffrée ou non), clé d'hôte vérifiée par empreinte `SHA256:…`, reprise, proxy,
+   16 requêtes en vol par défaut (pipelining, réglable).
+6. ✅ File d'attente (`urftp-core::queue` + `urftp-proto::engine`) : upload / download / FXP,
+   réservoir de connexions et multi-transfert par site (limites transferts / téléchargements
+   / envois, 0 = connexion unique), dossiers développés à leur tour, skiplist ordonnée
+   (joker, regex, `%W%`, sens, 0 octet, dossiers vides), priorités, règles « fichier
+   existant » (reprendre / ignorer / renommer / écraser / demander), repli si `REST` refusé,
+   nouvelles tentatives, arrêt d'un élément, limitation de débit, événements pour l'interface.
+   Restent pour la phase 3 : `RS_NOCIRCLE`, répétitions / `CompleteFlag`, XDupe.
 
 ### Phase 2 — application
 7. Interface à onglets : chaque onglet = deux panneaux (local ou distant) + sa file.

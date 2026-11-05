@@ -1,13 +1,23 @@
 //! Modèle de données d'UltraRushFTP, indépendant de l'interface et du réseau.
 //!
+//! - [`queue`] : éléments de file (upload / download / FXP), ordre, états, limites par site
+//! - [`skiplist`] : règles allow/skip (joker, regex, `%W%` chemin complet), par sens de transfert
+//! - [`priority`] : liste de priorités
+//! - [`exists`] : règles « fichier existant »
+//! - [`pattern`] : masques joker / regex
+//! - [`localpath`] : chemins locaux longs
+//!
 //! Prévu :
-//! - `site` : gestionnaire de sites (groupes, protocole, TLS, proxy, signets, limites de logins)
+//! - `site` : gestionnaire de sites (groupes, protocole, TLS, proxy, signets)
 //! - `container` : onglets (« containers » dans FTPRush), chacun avec deux panneaux et sa file
-//! - `queue` : éléments de file (upload / download / FXP), priorités, états, reprise
-//! - `skiplist` : règles allow/skip (joker, regex, `%W%` chemin complet), par sens de transfert
 //! - `stats` : compteurs totaux et de session exposés à `RushApp.*`
 
+pub mod exists;
 pub mod localpath;
+pub mod pattern;
+pub mod priority;
+pub mod queue;
+pub mod skiplist;
 
 /// Nom Ident (RFC 1413) répondu par défaut aux serveurs FTP.
 pub const DEFAULT_IDENT_NAME: &str = "URUSHFTP";

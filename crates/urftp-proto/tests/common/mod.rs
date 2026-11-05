@@ -6,6 +6,7 @@ pub mod sftp;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use rustls::ServerConfig;
@@ -53,6 +54,10 @@ pub struct MockConfig {
     pub pret: bool,
     /// Refuse toute commande `PORT`/`EPRT` (FXP interdit en mode actif).
     pub refuse_port: bool,
+    /// Attente avant chaque transfert de données (pour observer le parallélisme).
+    pub transfer_delay: Option<std::time::Duration>,
+    /// Les N premiers `RETR` (toutes sessions confondues) échouent en 451.
+    pub fail_first_retr: usize,
 }
 
 impl Default for MockConfig {
@@ -71,6 +76,8 @@ impl Default for MockConfig {
             cpsv: false,
             pret: false,
             refuse_port: false,
+            transfer_delay: None,
+            fail_first_retr: 0,
         }
     }
 }
@@ -141,6 +148,36 @@ pub struct Stats {
     pub ident_answers: Vec<String>,
     /// Canaux de données où ce serveur a joué le rôle de client TLS (SSCN / CPSV).
     pub tls_client_channels: usize,
+    /// Sessions authentifiées : en cours, maximum simultané, total.
+    pub current_sessions: usize,
+    pub max_sessions: usize,
+    pub logins: usize,
+}
+
+/// Décompte une session authentifiée à sa fin, quelle que soit la sortie.
+struct LoginGuard {
+    stats: Arc<Mutex<Stats>>,
+    active: bool,
+}
+
+impl LoginGuard {
+    fn login(&mut self) {
+        if !self.active {
+            self.active = true;
+            let mut s = self.stats.lock().unwrap();
+            s.current_sessions += 1;
+            s.logins += 1;
+            s.max_sessions = s.max_sessions.max(s.current_sessions);
+        }
+    }
+}
+
+impl Drop for LoginGuard {
+    fn drop(&mut self) {
+        if self.active {
+            self.stats.lock().unwrap().current_sessions -= 1;
+        }
+    }
 }
 
 pub struct MockServer {
@@ -158,6 +195,7 @@ struct Shared {
     tls: Option<TlsAcceptor>,
     /// Rôle client TLS (FXP chiffré) : accepte le certificat de l'autre serveur de test.
     tls_client: TlsConnector,
+    fail_counter: AtomicUsize,
 }
 
 #[derive(Debug)]
@@ -234,7 +272,14 @@ impl MockServer {
             }
         };
         let shared =
-            Arc::new(Shared { cfg, fs: fs.clone(), stats: stats.clone(), tls, tls_client: make_tls_client() });
+            Arc::new(Shared {
+                cfg,
+                fs: fs.clone(),
+                stats: stats.clone(),
+                tls,
+                tls_client: make_tls_client(),
+                fail_counter: AtomicUsize::new(0),
+            });
         tokio::spawn(async move {
             while let Ok((s, _)) = listener.accept().await {
                 let shared = shared.clone();
@@ -353,6 +398,7 @@ async fn ident_lookup(tcp: &TcpStream, ident_port: u16) -> std::io::Result<Strin
 }
 
 async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
+    let mut guard = LoginGuard { stats: sh.stats.clone(), active: false };
     if let Some(port) = sh.cfg.ident_port {
         let answer = ident_lookup(&tcp, port).await.unwrap_or_else(|e| format!("échec : {e}"));
         sh.stats.lock().unwrap().ident_answers.push(answer);
@@ -433,6 +479,7 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
             "PASS" => {
                 if st.user_ok && arg == sh.cfg.pass {
                     st.logged = true;
+                    guard.login();
                     reply(&mut c, "230 Logged in").await?;
                 } else {
                     reply(&mut c, "530 Login incorrect").await?;
@@ -556,9 +603,17 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                     reply(&mut c, "550 No such file").await?;
                     continue;
                 };
+                if sh.fail_counter.fetch_add(1, Ordering::SeqCst) < sh.cfg.fail_first_retr {
+                    st.pending = None;
+                    reply(&mut c, "451 Temporary failure, try again").await?;
+                    continue;
+                }
                 reply(&mut c, "150 Opening data connection").await?;
                 match open_data(&mut st, &sh).await {
                     Ok(mut d) => {
+                        if let Some(delay) = sh.cfg.transfer_delay {
+                            tokio::time::sleep(delay).await;
+                        }
                         d.write_all(&content[rest.min(content.len())..]).await?;
                         finish_send(&mut d).await?;
                         reply(&mut c, "226 Transfer complete").await?;
@@ -580,6 +635,9 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                         continue;
                     }
                 };
+                if let Some(delay) = sh.cfg.transfer_delay {
+                    tokio::time::sleep(delay).await;
+                }
                 let mut buf = Vec::new();
                 match d.read_to_end(&mut buf).await {
                     Ok(_) => {}

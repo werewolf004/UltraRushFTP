@@ -661,18 +661,24 @@ impl FtpClient {
     }
 
     /// Connexion TCP de données, directe ou à travers le proxy.
-    async fn connect_data(&self, target: DataTarget) -> Result<TcpStream> {
+    // Ne garde pas `&self` à travers les `await` : `FtpClient` n'est pas `Sync`, et le
+    // futur doit rester `Send` pour tourner dans les tâches du moteur.
+    fn connect_data(&self, target: DataTarget) -> impl Future<Output = Result<TcpStream>> + Send + 'static {
         let ct = self.config.connect_timeout;
-        if let Some(p) = self.data_via_proxy() {
-            let (host, port) = match &target {
-                DataTarget::Addr(a) => (a.ip().to_string(), a.port()),
-                DataTarget::Host(port) => (self.host.clone(), *port),
-            };
-            return timeout_ftp(ct, async { Ok(proxy::connect(p, &host, port).await?) }).await;
-        }
-        match target {
-            DataTarget::Addr(a) => timeout(ct, TcpStream::connect(a)).await,
-            DataTarget::Host(port) => timeout(ct, TcpStream::connect((self.host.as_str(), port))).await,
+        let proxy = self.data_via_proxy().cloned();
+        let host = self.host.clone();
+        async move {
+            if let Some(p) = proxy {
+                let (h, port) = match target {
+                    DataTarget::Addr(a) => (a.ip().to_string(), a.port()),
+                    DataTarget::Host(port) => (host, port),
+                };
+                return timeout_ftp(ct, async { Ok(proxy::connect(&p, &h, port).await?) }).await;
+            }
+            match target {
+                DataTarget::Addr(a) => timeout(ct, TcpStream::connect(a)).await,
+                DataTarget::Host(port) => timeout(ct, TcpStream::connect((host.as_str(), port))).await,
+            }
         }
     }
 

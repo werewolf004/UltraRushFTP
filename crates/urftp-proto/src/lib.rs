@@ -10,7 +10,15 @@
 //! - [`sftp`] : client SFTP (SSH) par mot de passe ou clé (OpenSSH, PEM, PuTTY), clé d'hôte
 //!   vérifiée par empreinte, proxy.
 
+//! - [`session`] : session commune FTP/SFTP et profil de site.
+//! - [`engine`] : moteur de file d'attente (multi-transfert, limites par site, dossiers,
+//!   skiplist, priorités, règles « fichier existant », reprises, arrêt).
+//! - [`throttle`] : limitation de débit.
+
+pub mod engine;
 pub mod ftp;
 pub mod ident;
 pub mod proxy;
+pub mod session;
 pub mod sftp;
+pub mod throttle;
