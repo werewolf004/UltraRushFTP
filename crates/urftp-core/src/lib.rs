@@ -19,6 +19,7 @@ pub mod pattern;
 pub mod priority;
 pub mod queue;
 pub mod secret;
+pub mod settings;
 pub mod site;
 pub mod sitestore;
 pub mod skiplist;

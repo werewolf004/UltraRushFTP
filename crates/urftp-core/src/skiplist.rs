@@ -7,14 +7,14 @@ use crate::TransferKind;
 use crate::pattern::Pattern;
 
 /// Effet d'une règle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuleAction {
     Skip,
     Allow,
 }
 
 /// Éléments concernés par une règle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuleTarget {
     Files,
     Dirs,
@@ -22,7 +22,7 @@ pub enum RuleTarget {
 }
 
 /// Sens de transfert concernés par une règle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Directions {
     pub upload: bool,
     pub download: bool,

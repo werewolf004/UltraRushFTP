@@ -2,7 +2,7 @@
 //! plus petite, de même taille ou plus grande que la source.
 
 /// Action configurée pour un cas.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ExistsAction {
     Resume,
     Skip,
@@ -22,7 +22,8 @@ pub enum ExistsDecision {
     Ask,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct ExistsRules {
     pub smaller: ExistsAction,
     pub same: ExistsAction,

@@ -108,7 +108,11 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
    détection auto) : FileZilla ✅, FTPRush v3 ✅, FTPRush v1/v2 ✅ et FlashFXP ✅ (pour ces
    deux derniers, mots de passe non importés : à ressaisir). Reste : keep-alive, ghost/`!user`, liste d'IP, skiplist par site.
 9. Journaux (FTP, transferts, système), barre d'état, statistiques.
-10. Thèmes clair/sombre, raccourcis, actions de souris, langues.
+10. 🟡 Fenêtre Options (`urftp-core::settings`, `urftp-gui::options`, `settings.json`) :
+    thème, nouvel onglet à la connexion, tentatives et délais, transferts simultanés,
+    débits (appliqués en direct), règles « fichier existant », skiplist globale (ordre,
+    joker/regex, cible, sens, chemin complet `%W%`), priorités (`*.sfv`, `*.nfo` par défaut),
+    proxy global, serveur Ident. Reste : nom Ident par site, langues, actions de souris.
 
 ### Phase 3 — automatisation et compatibilité
 11. Pascal Script (`RushApp.FTP.Login/Logout/CWD/RAW/Delete/Transfer/RemoveQueue/…`).

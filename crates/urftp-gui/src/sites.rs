@@ -1,41 +1,34 @@
 //! Gestionnaire de sites : arbre de dossiers et de sites, fiche de réglages, import.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use eframe::egui::{self, Color32, RichText};
 use urftp_core::import::{self, ImportResult};
+use urftp_core::settings::Settings;
 use urftp_core::site::{
     Bookmark, CertPolicy, IdentChoice, ProxyChoice, ProxyType, Site, SiteBook, SiteGroup, SiteProtocol, SiteProxy, TransferMode,
 };
 use urftp_core::sitestore;
 use urftp_proto::ftp::{FtpConfig, Security, TlsOptions, TlsVerify};
-use urftp_proto::proxy::{ProxyConfig, ProxyKind};
 use urftp_proto::session::{SiteProfile, SiteProtocol as ProfileProtocol};
+
+use crate::options;
 use urftp_proto::sftp::{HostKeyPolicy, SftpAuth, SftpConfig};
 
 use crate::browser::TrustKind;
 use crate::theme::{ACCENT, LOG_ERROR, LOG_REPLY};
 
-/// Profil de connexion à partir d'une fiche de site.
-pub fn to_profile(site: &Site) -> SiteProfile {
+/// Profil de connexion à partir d'une fiche de site et des options globales (proxy global,
+/// délais).
+pub fn to_profile(site: &Site, settings: &Settings) -> SiteProfile {
     let proxy = match &site.proxy {
-        ProxyChoice::Custom(p) => Some(ProxyConfig {
-            kind: match p.kind {
-                ProxyType::Socks4 => ProxyKind::Socks4,
-                ProxyType::Socks4a => ProxyKind::Socks4a,
-                ProxyType::Socks5 => ProxyKind::Socks5,
-                ProxyType::HttpTunnel => ProxyKind::HttpTunnel,
-            },
-            host: p.host.clone(),
-            port: p.port,
-            username: (!p.user.is_empty()).then(|| p.user.clone()),
-            password: (!p.user.is_empty()).then(|| p.password.clone()),
-            apply_to_data: p.data_channel,
-            bypass_local: false,
-            exceptions: Vec::new(),
-        }),
-        _ => None,
+        ProxyChoice::Custom(p) => Some(options::proxy_config(p, false, "")),
+        ProxyChoice::Global => options::global_proxy(&settings.proxy),
+        ProxyChoice::Direct => None,
     };
+    let connect_timeout = Duration::from_secs(u64::from(settings.transfer.connect_timeout_secs));
+    let io_timeout = Duration::from_secs(u64::from(settings.transfer.io_timeout_secs));
     let tls = TlsOptions {
         verify: match &site.cert {
             CertPolicy::System => TlsVerify::System,
@@ -50,6 +43,8 @@ pub fn to_profile(site: &Site) -> SiteProfile {
             security,
             active_mode: site.transfer_mode == TransferMode::Active,
             proxy: proxy.clone(),
+            connect_timeout,
+            io_timeout,
             ..FtpConfig::default()
         })
     };
@@ -58,7 +53,13 @@ pub fn to_profile(site: &Site) -> SiteProfile {
         SiteProtocol::FtpsExplicit => ftp(Security::Explicit(tls)),
         SiteProtocol::FtpsImplicit => ftp(Security::Implicit(tls)),
         SiteProtocol::Sftp => ProfileProtocol::Sftp {
-            config: SftpConfig { host_key: HostKeyPolicy::Known(site.ssh_host_keys.clone()), proxy, ..SftpConfig::default() },
+            config: SftpConfig {
+                host_key: HostKeyPolicy::Known(site.ssh_host_keys.clone()),
+                proxy,
+                connect_timeout,
+                io_timeout,
+                ..SftpConfig::default()
+            },
             key: site.ssh_key_file.as_ref().map(|p| SftpAuth::KeyFile {
                 path: PathBuf::from(p),
                 passphrase: (!site.password.is_empty()).then(|| site.password.clone()),
@@ -705,15 +706,15 @@ mod tests {
             proxy: ProxyChoice::Custom(SiteProxy { kind: ProxyType::Socks5, host: "p".into(), port: 1080, ..SiteProxy::default() }),
             ..Site::default()
         };
-        let p = to_profile(&s);
+        let p = to_profile(&s, &Settings::default());
         assert_eq!((p.host.as_str(), p.port, p.user.as_str(), p.limits.max_transfers), ("ftp.example.com", 2121, "bob", 4));
         let ProfileProtocol::Ftp(cfg) = &p.protocol else { panic!("FTP attendu") };
         assert!(cfg.active_mode && cfg.proxy.is_some());
         assert!(matches!(&cfg.security, Security::Explicit(o) if o.verify == TlsVerify::Fingerprint("AA:BB".into())));
 
-        let anon = to_profile(&Site { anonymous: true, user: "x".into(), ..Site::default() });
+        let anon = to_profile(&Site { anonymous: true, user: "x".into(), ..Site::default() }, &Settings::default());
         assert_eq!(anon.user, "anonymous");
-        let sftp = to_profile(&Site { protocol: SiteProtocol::Sftp, ssh_key_file: Some("k.ppk".into()), password: "phrase".into(), ..Site::default() });
+        let sftp = to_profile(&Site { protocol: SiteProtocol::Sftp, ssh_key_file: Some("k.ppk".into()), password: "phrase".into(), ..Site::default() }, &Settings::default());
         let ProfileProtocol::Sftp { key: Some(SftpAuth::KeyFile { passphrase, .. }), .. } = &sftp.protocol else { panic!() };
         assert_eq!(passphrase.as_deref(), Some("phrase"));
     }

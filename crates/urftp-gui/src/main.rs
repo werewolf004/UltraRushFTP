@@ -3,6 +3,7 @@
 
 mod app;
 mod browser;
+mod options;
 mod sites;
 mod theme;
 
@@ -29,8 +30,9 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             theme::install_fonts(&cc.egui_ctx);
-            theme::apply(&cc.egui_ctx, theme::start_dark());
-            Ok(Box::new(app::UltraRushApp::new(handle)))
+            let app = app::UltraRushApp::new(handle);
+            theme::apply(&cc.egui_ctx, app.is_dark());
+            Ok(Box::new(app))
         }),
     )
 }

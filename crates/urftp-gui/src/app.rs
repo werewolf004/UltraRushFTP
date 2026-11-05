@@ -19,7 +19,11 @@ use urftp_proto::session::{SiteProfile, SiteProtocol};
 use urftp_proto::sftp::{HostKeyPolicy, SftpConfig};
 
 use crate::browser::{self, BrowserCmd, BrowserEvent, BrowserHandle, TrustKind};
+use crate::options::{self, OptionsWindow};
 use crate::sites::{self, SiteManager};
+use urftp_core::settings::IdentSettings;
+use urftp_proto::ident::{IdentConfig, IdentServer};
+use urftp_proto::throttle::RateLimiter;
 use urftp_core::site::Site;
 use crate::theme::{self, ACCENT, LOG_COMMAND, LOG_ERROR, LOG_REPLY, LOG_STATUS, human_size};
 
@@ -497,7 +501,7 @@ impl Container {
         self.push_log(from, LogKind::Status, format!("{} élément(s) ajouté(s) à la file", picks.len()));
     }
 
-    fn start_queue(&mut self, rt: &Handle, ctx: &egui::Context) {
+    fn start_queue(&mut self, rt: &Handle, ctx: &egui::Context, opts: EngineOptions) {
         if self.engine_events.is_some() {
             return;
         }
@@ -508,7 +512,7 @@ impl Container {
             }
         }
         let (tx, rx) = unbounded_channel();
-        let engine = Engine::new(self.queue.clone(), sites, EngineOptions::default(), Some(tx));
+        let engine = Engine::new(self.queue.clone(), sites, opts, Some(tx));
         self.engine = Some(engine.clone());
         let running = self.engine_running.clone();
         running.store(true, Ordering::SeqCst);
@@ -685,6 +689,12 @@ pub struct UltraRushApp {
     /// Connexion automatique au premier affichage (variable `URUSHFTP_CONNECT`).
     autoconnect: bool,
     sites: SiteManager,
+    options: OptionsWindow,
+    /// Limiteurs de débit partagés par tous les onglets (réglés depuis les options).
+    download_limit: Arc<RateLimiter>,
+    upload_limit: Arc<RateLimiter>,
+    ident: Option<IdentServer>,
+    ident_applied: Option<IdentSettings>,
 }
 
 /// `ftp://user:pass@hôte:port`, `ftps://` (explicite), `ftpsi://` (implicite), `sftp://`.
@@ -732,7 +742,10 @@ enum Action {
 impl UltraRushApp {
     pub fn new(rt: Handle) -> Self {
         let from_env = std::env::var("URUSHFTP_CONNECT").ok().and_then(|u| parse_connect_url(&u));
-        Self {
+        let options = OptionsWindow::load();
+        let dl = options.settings.transfer.download_limit_kib * 1024;
+        let ul = options.settings.transfer.upload_limit_kib * 1024;
+        let mut app = Self {
             rt,
             tabs: vec![Container::new(1)],
             active: 0,
@@ -745,8 +758,65 @@ impl UltraRushApp {
                 pass: String::new(),
                 proto: QuickProto::Ftp,
             }),
-            dark: theme::start_dark(),
+            dark: true,
             sites: SiteManager::load(),
+            options,
+            download_limit: RateLimiter::new(dl),
+            upload_limit: RateLimiter::new(ul),
+            ident: None,
+            ident_applied: None,
+        };
+        // La variable URUSHFTP_THEME l'emporte sur l'option enregistrée.
+        app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
+        app
+    }
+
+    /// Thème à appliquer au démarrage.
+    pub fn is_dark(&self) -> bool {
+        self.dark
+    }
+
+    /// Options du moteur de file, d'après les réglages courants.
+    fn engine_options(&self) -> EngineOptions {
+        options::engine_options(&self.options.settings, &self.download_limit, &self.upload_limit)
+    }
+
+    /// Applique les options modifiées : thème, débits (même en cours de transfert), Ident.
+    fn apply_settings(&mut self, ctx: &egui::Context) {
+        let s = &self.options.settings;
+        if s.dark_theme != self.dark {
+            self.dark = s.dark_theme;
+            theme::apply(ctx, self.dark);
+        }
+        self.download_limit.set_rate(s.transfer.download_limit_kib * 1024);
+        self.upload_limit.set_rate(s.transfer.upload_limit_kib * 1024);
+        self.sync_ident();
+    }
+
+    /// (Re)démarre ou arrête le serveur Ident si ses réglages ont changé.
+    fn sync_ident(&mut self) {
+        let wanted = self.options.settings.ident.clone();
+        if self.ident_applied.as_ref() == Some(&wanted) {
+            return;
+        }
+        self.ident = None;
+        self.ident_applied = Some(wanted.clone());
+        if !wanted.enabled {
+            self.options.ident_status = Some(("Serveur Ident arrêté.".into(), true));
+            return;
+        }
+        let cfg = IdentConfig {
+            name: if wanted.name.trim().is_empty() { urftp_core::DEFAULT_IDENT_NAME.into() } else { wanted.name.trim().into() },
+            system: if wanted.system.trim().is_empty() { "UNIX".into() } else { wanted.system.trim().into() },
+            bind: std::net::SocketAddr::from(([0, 0, 0, 0], wanted.port)),
+        };
+        // L'interface ne tourne pas dans le runtime : on peut y attendre le démarrage.
+        match self.rt.block_on(IdentServer::start(cfg)) {
+            Ok(srv) => {
+                self.options.ident_status = Some((format!("Serveur Ident actif sur le port {}.", srv.local_addr().port()), true));
+                self.ident = Some(srv);
+            }
+            Err(e) => self.options.ident_status = Some((format!("Impossible d'écouter sur le port {} : {e}", wanted.port), false)),
         }
     }
 
@@ -765,11 +835,19 @@ impl UltraRushApp {
         let port = q.port.trim().parse().unwrap_or(q.proto.default_port());
         let user = if q.user.trim().is_empty() { "anonymous".to_string() } else { q.user.trim().to_string() };
         let tls = TlsOptions { verify: TlsVerify::System, ..TlsOptions::default() };
+        let s = &self.options.settings;
+        let proxy = options::global_proxy(&s.proxy);
+        let connect_timeout = Duration::from_secs(u64::from(s.transfer.connect_timeout_secs));
+        let io_timeout = Duration::from_secs(u64::from(s.transfer.io_timeout_secs));
+        let ftp = |security| SiteProtocol::Ftp(FtpConfig { security, proxy: proxy.clone(), connect_timeout, io_timeout, ..FtpConfig::default() });
         let protocol = match q.proto {
-            QuickProto::Ftp => SiteProtocol::Ftp(FtpConfig::default()),
-            QuickProto::FtpsExplicit => SiteProtocol::Ftp(FtpConfig { security: Security::Explicit(tls), ..FtpConfig::default() }),
-            QuickProto::FtpsImplicit => SiteProtocol::Ftp(FtpConfig { security: Security::Implicit(tls), ..FtpConfig::default() }),
-            QuickProto::Sftp => SiteProtocol::Sftp { config: SftpConfig::default(), key: None },
+            QuickProto::Ftp => ftp(Security::None),
+            QuickProto::FtpsExplicit => ftp(Security::Explicit(tls)),
+            QuickProto::FtpsImplicit => ftp(Security::Implicit(tls)),
+            QuickProto::Sftp => SiteProtocol::Sftp {
+                config: SftpConfig { proxy: proxy.clone(), connect_timeout, io_timeout, ..SftpConfig::default() },
+                key: None,
+            },
         };
         Some(SiteProfile {
             name: format!("{user}@{host}:{port}"),
@@ -778,7 +856,7 @@ impl UltraRushApp {
             user,
             password: q.pass.clone(),
             protocol,
-            limits: SiteLimits::default(),
+            limits: SiteLimits { max_transfers: s.transfer.quick_connect_transfers, ..SiteLimits::default() },
         })
     }
 
@@ -791,8 +869,10 @@ impl UltraRushApp {
     /// Ouvre une connexion dans le panneau droit de l'onglet actif (un nouvel onglet si ce
     /// panneau est déjà connecté), puis se place dans `start_dir`.
     fn connect_profile(&mut self, profile: SiteProfile, site_id: Option<u64>, start_dir: Option<String>, ctx: &egui::Context) {
-        if matches!(self.tabs[self.active].sides[1], Side::Remote(_)) {
+        if self.options.settings.new_tab_when_busy && matches!(self.tabs[self.active].sides[1], Side::Remote(_)) {
             self.new_tab();
+        } else if let Side::Remote(r) = &self.tabs[self.active].sides[1] {
+            r.handle.send(BrowserCmd::Disconnect);
         }
         let handle = browser::spawn(&self.rt, ctx.clone());
         handle.send(BrowserCmd::Connect(Box::new(profile.clone())));
@@ -815,7 +895,7 @@ impl UltraRushApp {
 
     /// Connexion depuis une fiche du gestionnaire de sites.
     fn connect_site(&mut self, site: Site, ctx: &egui::Context) {
-        let profile = sites::to_profile(&site);
+        let profile = sites::to_profile(&site, &self.options.settings);
         let remote = (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone());
         self.connect_profile(profile, Some(site.id), remote, ctx);
         if !site.local_dir.trim().is_empty()
@@ -837,6 +917,10 @@ impl UltraRushApp {
                     self.new_tab();
                     ui.close();
                 }
+                if ui.button("⚙ Options…").clicked() {
+                    self.options.open = true;
+                    ui.close();
+                }
                 if ui.button("Quitter").clicked() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
@@ -845,6 +929,8 @@ impl UltraRushApp {
                 if ui.button(if self.dark { "☀ Thème clair" } else { "🌙 Thème sombre" }).clicked() {
                     self.dark = !self.dark;
                     theme::apply(ui.ctx(), self.dark);
+                    self.options.settings.dark_theme = self.dark;
+                    self.options.touch(ui.ctx());
                     ui.close();
                 }
             });
@@ -856,6 +942,9 @@ impl UltraRushApp {
         ui.horizontal(|ui| {
             if ui.button("☰ Sites").on_hover_text("Gestionnaire de sites").clicked() {
                 self.sites.open = !self.sites.open;
+            }
+            if ui.button("⚙").on_hover_text("Options").clicked() {
+                self.options.open = !self.options.open;
             }
             ui.separator();
             ui.label("⚡");
@@ -926,6 +1015,7 @@ impl UltraRushApp {
 
     fn apply(&mut self, actions: Vec<Action>, ctx: &egui::Context) {
         let rt = self.rt.clone();
+        let opts = self.engine_options();
         let tab = &mut self.tabs[self.active];
         for a in actions {
             match a {
@@ -949,9 +1039,9 @@ impl UltraRushApp {
                 }
                 Action::Transfer(side) => {
                     tab.enqueue_selection(side);
-                    tab.start_queue(&rt, ctx);
+                    tab.start_queue(&rt, ctx, opts.clone());
                 }
-                Action::StartQueue => tab.start_queue(&rt, ctx),
+                Action::StartQueue => tab.start_queue(&rt, ctx, opts.clone()),
                 Action::ClearFinished => {
                     tab.queue.lock().unwrap().remove_where(|i| i.state.is_finished());
                 }
@@ -972,11 +1062,11 @@ impl UltraRushApp {
                 }
                 Action::QueueRetry(id) => {
                     tab.retry_item(id);
-                    tab.start_queue(&rt, ctx);
+                    tab.start_queue(&rt, ctx, opts.clone());
                 }
                 Action::QueueRetryAll => {
                     tab.queue.lock().unwrap().reset_failed();
-                    tab.start_queue(&rt, ctx);
+                    tab.start_queue(&rt, ctx, opts.clone());
                 }
             }
         }
@@ -985,7 +1075,7 @@ impl UltraRushApp {
     /// Raccourcis clavier, appliqués au panneau actif quand aucun champ texte n'a le focus.
     fn keyboard(&mut self, ctx: &egui::Context) -> Vec<Action> {
         let tab = &self.tabs[self.active];
-        if ctx.egui_wants_keyboard_input() || tab.prompt.is_some() || tab.trust.is_some() || self.sites.open {
+        if ctx.egui_wants_keyboard_input() || tab.prompt.is_some() || tab.trust.is_some() || self.sites.open || self.options.open {
             return Vec::new();
         }
         let side = tab.focus;
@@ -1147,6 +1237,10 @@ impl UltraRushApp {
 impl eframe::App for UltraRushApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // Démarre l'Ident au premier affichage, puis à chaque changement de ses réglages.
+        if self.ident_applied.is_none() {
+            self.sync_ident();
+        }
         if std::mem::take(&mut self.autoconnect) {
             self.quick_connect(&ctx);
         }
@@ -1179,6 +1273,9 @@ impl eframe::App for UltraRushApp {
         self.prompt_dialog(&ctx);
         self.trust_dialog(&ctx);
         self.sites.show(&ctx);
+        if self.options.show(&ctx) {
+            self.apply_settings(&ctx);
+        }
         if let Some(site) = self.sites.take_connect() {
             self.connect_site(site, &ctx);
         }
