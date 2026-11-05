@@ -7,6 +7,11 @@
 //! - `skiplist` : règles allow/skip (joker, regex, `%W%` chemin complet), par sens de transfert
 //! - `stats` : compteurs totaux et de session exposés à `RushApp.*`
 
+/// Nom Ident (RFC 1413) répondu par défaut aux serveurs FTP.
+pub const DEFAULT_IDENT_NAME: &str = "URUSHFTP";
+/// Port TCP par défaut du serveur Ident.
+pub const DEFAULT_IDENT_PORT: u16 = 113;
+
 /// Sens d'un transfert, comme dans FTPRush (`RS_UP`, `RS_DOWN`, FXP par défaut).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TransferKind {
