@@ -1,10 +1,21 @@
-//! DLL mIRC compatible avec `rushmirc.dll` de FTPRush.
+//! DLL mIRC compatible avec `rushmirc.dll` de FTPRush, pour piloter UltraRushFTP depuis mIRC.
 //!
-//! Exports prévus (signature mIRC standard, convention `stdcall`) :
-//! `LoadDll`, `UnloadDll`, `Invoke`, `RushScript`, `RushCommand`,
-//! `EnableCallback`, `DisableCallback` (ces deux dernières manquaient aux exports d'origine).
+//! Exports (signature mIRC standard, convention `stdcall`) : `LoadDll`, `UnloadDll`,
+//! `Invoke`, `RushScript`, `RushCommand`, `EnableCallback`, `DisableCallback` (ces deux
+//! dernières manquaient aux exports de l'originale).
 //!
-//! L'implémentation viendra avec la crate `windows-sys` ; les constantes du protocole
-//! sont partagées avec l'application via `urftp-ipc`.
+//! ```text
+//! //echo -a $dll(rushmirc.dll, Invoke, RushApp.Version)
+//! //dll rushmirc.dll RushScript RushApp.FTP.RAW('MonSite', 'SITE WHO', RS_LOGIN);
+//! ```
+//!
+//! Les réponses des commandes `RAW` lancées par `RushScript` reviennent dans mIRC sous la
+//! forme `/echo -a (site) commande` puis une ligne par ligne de réponse.
 
 pub use urftp_ipc as ipc;
+
+#[cfg(windows)]
+mod dll;
+
+#[cfg(windows)]
+pub use dll::*;

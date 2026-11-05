@@ -147,6 +147,77 @@ impl UltraRushApp {
     }
 }
 
+// ====================================================================== liaison mIRC
+
+impl UltraRushApp {
+    /// Démarre la fenêtre `TfmRush` (une fois) puis traite les demandes de `rushmirc.dll`.
+    pub(super) fn serve_ipc(&mut self, ctx: &egui::Context) {
+        if self.ipc_rx.is_none() {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let wake = ctx.clone();
+            match urftp_ipc::server::Server::start(move |req| {
+                let _ = tx.send(req);
+                wake.request_repaint();
+            }) {
+                Ok(srv) => {
+                    self.ipc = Some(srv);
+                    self.tabs[self.active].push_log(0, LogKind::Status, "Liaison mIRC prête (rushmirc.dll)");
+                }
+                Err(e) => self.tabs[self.active].push_log(0, LogKind::Error, format!("Liaison mIRC indisponible : {e}")),
+            }
+            self.ipc_rx = Some(rx);
+        }
+        let requests: Vec<_> = self.ipc_rx.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
+        for req in requests {
+            use urftp_ipc::server::Request;
+            match req {
+                Request::Invoke { expression, reply } => {
+                    let answer = self.invoke(&expression, ctx).unwrap_or_else(|e| format!("Erreur : {e}"));
+                    let _ = reply.send(answer);
+                }
+                Request::Script { source, callback } => {
+                    self.ipc_callback = callback;
+                    let r = self.run_script(&source, ctx);
+                    self.ipc_callback = None;
+                    self.note_ipc("RushScript", r);
+                }
+                Request::Command { source } => {
+                    let r = self.run_script(&source, ctx);
+                    self.note_ipc("RushCommand", r);
+                }
+            }
+        }
+    }
+
+    fn note_ipc(&mut self, what: &str, r: Result<(), String>) {
+        let t = self.active;
+        self.tabs[t].script_out.push(match r {
+            Ok(()) => (true, format!("[mIRC] {what} exécuté")),
+            Err(e) => (false, format!("[mIRC] {what} : {e}")),
+        });
+    }
+
+    /// Renvoie à mIRC les réponses des `RAW` qu'il a demandés ; les autres sont oubliées.
+    pub(super) fn forward_raw_replies(&mut self) {
+        for t in 0..self.tabs.len() {
+            for (site, cmd, lines, ok) in std::mem::take(&mut self.tabs[t].raw_replies) {
+                let pos = self
+                    .raw_callbacks
+                    .iter()
+                    .position(|(s, c, _)| s.eq_ignore_ascii_case(&site) && c == &cmd);
+                if let Some(i) = pos {
+                    let (_, _, cb) = self.raw_callbacks.remove(i);
+                    urftp_ipc::server::send_raw_callback(cb, ok, &site, &cmd, &lines);
+                }
+            }
+        }
+        // Rappels orphelins (connexion jamais établie…) : on ne les garde pas indéfiniment.
+        if self.raw_callbacks.len() > 200 {
+            self.raw_callbacks.drain(..100);
+        }
+    }
+}
+
 struct AppHost<'a> {
     app: &'a mut UltraRushApp,
     ctx: &'a egui::Context,
@@ -371,6 +442,10 @@ impl AppHost<'_> {
             self.log(LogKind::Status, format!("RAW « {cmd} » : aucune connexion visée"));
         }
         for p in targets {
+            // Script venu de mIRC : la réponse lui sera renvoyée.
+            if let (Some(cb), Side::Remote(r)) = (self.app.ipc_callback, &self.app.tabs[p.0].sides[p.1]) {
+                self.app.raw_callbacks.push((r.profile.name.clone(), cmd.clone(), cb));
+            }
             self.send(p, BrowserCmd::Raw(cmd.clone()));
             if has_flag(flags, "RS_LOGOUT") {
                 self.send(p, BrowserCmd::Disconnect);

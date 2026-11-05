@@ -3933,6 +3933,7 @@ name = "rushmirc"
 version = "0.1.0"
 dependencies = [
  "urftp-ipc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5083,6 +5084,9 @@ dependencies = [
 [[package]]
 name = "urftp-ipc"
 version = "0.1.0"
+dependencies = [
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "urftp-proto"

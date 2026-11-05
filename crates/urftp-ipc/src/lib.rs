@@ -1,4 +1,4 @@
-//! Constantes et (à venir) serveur du protocole d'échange avec `rushmirc.dll`.
+//! Constantes et serveur du protocole d'échange avec `rushmirc.dll`.
 //!
 //! L'application crée une fenêtre de premier niveau cachée de classe [`WINDOW_CLASS`]
 //! (la DLL la trouve via `FindWindow`), puis traite :
@@ -31,3 +31,14 @@ pub const CALLBACK_RAWCOMMAND: usize = 888;
 /// `dwData` du rappel : succès / échec.
 pub const CALLBACK_SUCCESS: usize = 1;
 pub const CALLBACK_FAILED: usize = 0;
+
+/// Classe de fenêtre effectivement utilisée : [`WINDOW_CLASS`], ou la valeur de la variable
+/// `URUSHFTP_IPC_CLASS` (tests : évite de dialoguer avec un vrai FTPRush ouvert).
+pub fn window_class() -> String {
+    std::env::var("URUSHFTP_IPC_CLASS").ok().filter(|c| !c.is_empty()).unwrap_or_else(|| WINDOW_CLASS.to_string())
+}
+
+#[cfg(windows)]
+pub mod server;
+#[cfg(windows)]
+pub mod win;

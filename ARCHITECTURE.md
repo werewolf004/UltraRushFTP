@@ -125,7 +125,12 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
     `DisableSite`, `Splitter`, `DeleteEmptyTabs`, statistiques (`stats.json`) et débits ;
     console « Script » (exécuter / `Invoke`), `URUSHFTP_SCRIPT` au démarrage. Reste :
     filtres et répétitions de `Transfer`, `InputQuery` interactif, `RushApp.UI.*`, procédures.
-12. Serveur IPC + DLL `rushmirc` (x86 et x64), test contre les scripts mIRC existants.
+12. ✅ Liaison mIRC : fenêtre cachée `TfmRush` dans l'application (`urftp-ipc::server`,
+    traitée même fenêtre réduite) et DLL `rushmirc.dll` 32 et 64 bits (`LoadDll`,
+    `UnloadDll`, `Invoke`, `RushScript`, `RushCommand`, `EnableCallback`, `DisableCallback`),
+    protocole identique à l'original (la DLL d'origine fonctionne aussi), réponses `RAW`
+    renvoyées dans mIRC. Testé de bout en bout (DLL → application → serveur FTP → mIRC).
+    `URUSHFTP_IPC_CLASS` change le nom de la fenêtre (tests à côté d'un FTPRush ouvert).
 13. Ligne de commande (`-d`, `-w`, `-c`, `-f`, `-r[t][x]`) et `urftp`.
 14. Import des sites FTPRush v2 (`RushSite.xml`) et v3 (`site.json`).
 

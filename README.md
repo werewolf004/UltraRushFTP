@@ -35,6 +35,27 @@ Notes de protocole extraites de la source Delphi d'origine (non redistribuée da
 Note : dans l'original, `EnableCallback` / `DisableCallback` sont définies mais absentes
 des exports ; UltraRushFTP les exportera.
 
+## Piloter UltraRushFTP depuis mIRC
+
+Compiler la DLL (32 bits pour mIRC 32 bits, le cas le plus courant) :
+
+```text
+cargo build --release -p rushmirc --target i686-pc-windows-msvc   # target\i686-pc-windows-msvc\release\rushmirc.dll
+cargo build --release -p rushmirc                                  # 64 bits : target\release\rushmirc.dll
+```
+
+Copier `rushmirc.dll` à côté de vos scripts mIRC (à la place de celle de FTPRush) et lancer
+UltraRushFTP. Les scripts existants fonctionnent tels quels :
+
+```text
+//echo -a $dll(rushmirc.dll, Invoke, RushApp.TotalDownloadSize)
+//dll rushmirc.dll RushScript RushApp.FTP.RAW('MonSite', 'SITE WHO', RS_LOGIN);
+```
+
+Les sites sont désignés par leur nom dans le gestionnaire de sites. Les réponses des `RAW`
+s'affichent dans mIRC (`/echo -a (site) …`) ; `/dll rushmirc.dll DisableCallback` les coupe.
+Fermez FTPRush s'il est ouvert : la DLL parlerait à la première des deux applications trouvée.
+
 ## Développement
 
 ```text

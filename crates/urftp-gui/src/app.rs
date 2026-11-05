@@ -736,6 +736,13 @@ pub struct UltraRushApp {
     /// Séparateur des listes de sites dans les scripts (`RushApp.FTP.Splitter`).
     splitter: String,
     startup_script_done: bool,
+    /// Liaison mIRC : fenêtre `TfmRush`, demandes reçues, rappels `RAW` en attente.
+    ipc: Option<urftp_ipc::server::Server>,
+    ipc_rx: Option<std::sync::mpsc::Receiver<urftp_ipc::server::Request>>,
+    /// Fenêtre de rappel de la DLL pendant l'exécution d'un script venu de mIRC.
+    ipc_callback: Option<isize>,
+    /// (site, commande, fenêtre de rappel) des `RAW` dont la réponse doit revenir à mIRC.
+    raw_callbacks: Vec<(String, String, isize)>,
 }
 
 /// `ftp://user:pass@hôte:port`, `ftps://` (explicite), `ftpsi://` (implicite), `sftp://`.
@@ -812,6 +819,10 @@ impl UltraRushApp {
             stats: rushapp::Stats::load(),
             splitter: ";".into(),
             startup_script_done: false,
+            ipc: None,
+            ipc_rx: None,
+            ipc_callback: None,
+            raw_callbacks: Vec::new(),
         };
         // La variable URUSHFTP_THEME l'emporte sur l'option enregistrée.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -1340,6 +1351,15 @@ impl UltraRushApp {
 }
 
 impl eframe::App for UltraRushApp {
+    // Appelée à chaque image, et aussi quand la fenêtre est réduite : transferts, statistiques
+    // et demandes de mIRC continuent d'être traités.
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(Container::poll).collect();
+        self.stats.record(&traffic);
+        self.forward_raw_replies();
+        self.serve_ipc(ctx);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         // Démarre l'Ident au premier affichage, puis à chaque changement de ses réglages.
@@ -1361,8 +1381,6 @@ impl eframe::App for UltraRushApp {
                 });
             }
         }
-        let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(Container::poll).collect();
-        self.stats.record(&traffic);
         if self.tabs.iter().any(|t| t.engine_events.is_some()) {
             ctx.request_repaint_after(Duration::from_millis(150));
         }
