@@ -67,7 +67,8 @@ jobs:
           Copy-Item -Recurse docs "$dir/docs"
           Compress-Archive -Path "$dir/*" -DestinationPath "dist/$name.zip"
           $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  $name.zip" | Set-Content -Encoding ascii "dist/$name.zip.sha256"
+          # LF line ending, so that `sha256sum -c` accepts it too.
+          [IO.File]::WriteAllText("$PWD/dist/$name.zip.sha256", "$hash  $name.zip`n")
           "zip=dist/$name.zip" >> $env:GITHUB_OUTPUT
 
       - name: Publish GitHub release
