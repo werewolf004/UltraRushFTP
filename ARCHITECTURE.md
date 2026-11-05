@@ -76,7 +76,9 @@ Dépendances : `gui` → `core`, `proto`, `script`, `ipc` ; `cli` → `core`, `p
 3. ✅ Proxy (SOCKS4/4A/5 avec authentification, HTTP Tunnel avec Basic) sur le contrôle et
    les données, contournement local et par masques, passage auto en passif ; serveur Ident
    (RFC 1413) avec nom par site, nom global `URUSHFTP` par défaut.
-4. FXP : `PASV`/`PORT` croisés, `PRET`, FXP sécurisé `SSCN` / `CPSV`, inversion automatique.
+4. ✅ FXP : `PASV`/`PORT` croisés (source ou destination passive), `PRET`, reprise `REST`,
+   FXP chiffré `SSCN` / `CPSV` (repli en clair optionnel), inversion automatique si `PORT`
+   est refusé, `ABOR` de l'autre côté en cas d'échec, restauration de `PROT`/`SSCN`.
 5. SFTP : mot de passe et clé publique.
 6. File d'attente : upload / download / FXP, pool de connexions et multi-transfert par site,
    reprise, priorités, skiplist, règles « fichier existant », limitation de bande passante.

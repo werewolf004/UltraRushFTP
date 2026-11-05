@@ -5,6 +5,7 @@
 
 mod client;
 mod features;
+mod fxp;
 pub mod listing;
 pub mod path;
 mod reply;
@@ -15,6 +16,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 pub use client::{FtpClient, FtpConfig, LogLine, LogSink, TransferType};
 pub use tls::{fingerprint_sha256, Security, TlsOptions, TlsVerify};
 pub use features::Features;
+pub use fxp::{FxpMode, FxpOptions, FxpOutcome, FxpSecurity, fxp};
 pub use listing::{EntryKind, FtpTime, RemoteEntry};
 pub use reply::Reply;
 

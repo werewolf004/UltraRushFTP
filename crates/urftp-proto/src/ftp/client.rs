@@ -283,21 +283,65 @@ impl FtpClient {
         }
     }
 
-    fn status(&self, msg: impl Into<String>) {
+    pub(super) fn status(&self, msg: impl Into<String>) {
         self.emit(LogLine::Status(msg.into()));
     }
 
-    async fn read_reply(&mut self) -> Result<Reply> {
+    pub(super) async fn read_reply(&mut self) -> Result<Reply> {
+        self.read_reply_within(Some(self.config.io_timeout)).await
+    }
+
+    /// Lit une réponse avec un délai donné (`None` : sans limite, pour la fin d'un FXP).
+    pub(super) async fn read_reply_within(&mut self, limit: Option<Duration>) -> Result<Reply> {
         let max = self.config.max_line_len;
-        let reply = match tokio::time::timeout(self.config.io_timeout, read_reply(&mut self.ctrl, max)).await {
-            Ok(r) => r?,
-            Err(_) => return Err(FtpError::Timeout),
+        let reply = match limit {
+            Some(d) => match tokio::time::timeout(d, read_reply(&mut self.ctrl, max)).await {
+                Ok(r) => r?,
+                Err(_) => return Err(FtpError::Timeout),
+            },
+            None => read_reply(&mut self.ctrl, max).await?,
         };
         self.emit(LogLine::Reply(reply.clone()));
         Ok(reply)
     }
 
-    async fn send(&mut self, cmd: &str) -> Result<()> {
+    /// Interrompt le transfert en cours (`ABOR`) et consomme les réponses associées
+    /// (`426` du transfert puis `226`/`225` de l'ABOR, selon les serveurs).
+    pub async fn abort(&mut self) -> Result<()> {
+        self.send("ABOR").await?;
+        for _ in 0..3 {
+            let r = self.read_reply().await?;
+            if r.is_completion() {
+                // Un serveur qui venait de finir répond 226 (transfert) puis 226 (ABOR) :
+                // on absorbe la seconde réponse si elle arrive vite.
+                if let Ok(Ok(extra)) =
+                    tokio::time::timeout(Duration::from_millis(500), read_reply(&mut self.ctrl, self.config.max_line_len)).await
+                {
+                    self.emit(LogLine::Reply(extra));
+                }
+                return Ok(());
+            }
+            if r.is_permanent_negative() && r.code != 426 {
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+
+    /// Change la protection des canaux de données (`PROT P` / `PROT C`).
+    pub async fn set_data_protection(&mut self, protect: bool) -> Result<()> {
+        if self.prot_p == protect {
+            return Ok(());
+        }
+        if protect && self.tls.is_none() {
+            return Err(FtpError::InvalidArgument("PROT P impossible sans TLS sur le contrôle".into()));
+        }
+        self.ok(if protect { "PROT P" } else { "PROT C" }).await?;
+        self.prot_p = protect;
+        Ok(())
+    }
+
+    pub(super) async fn send(&mut self, cmd: &str) -> Result<()> {
         if cmd.contains(['\r', '\n']) {
             return Err(FtpError::InvalidArgument(
                 "retour à la ligne interdit dans une commande FTP".into(),
@@ -320,11 +364,11 @@ impl FtpClient {
     }
 
     /// Envoie une commande et exige une réponse 2xx.
-    async fn ok(&mut self, cmd: &str) -> Result<Reply> {
+    pub(super) async fn ok(&mut self, cmd: &str) -> Result<Reply> {
         self.expect(cmd, |r| r.is_completion()).await
     }
 
-    async fn expect(&mut self, cmd: &str, accept: impl Fn(&Reply) -> bool) -> Result<Reply> {
+    pub(super) async fn expect(&mut self, cmd: &str, accept: impl Fn(&Reply) -> bool) -> Result<Reply> {
         let reply = self.raw(cmd).await?;
         if accept(&reply) {
             Ok(reply)
@@ -433,7 +477,7 @@ impl FtpClient {
     }
 
     /// Se place dans le répertoire parent de `p` et renvoie le nom seul.
-    async fn enter_parent<'p>(&mut self, p: &'p str) -> Result<&'p str> {
+    pub(super) async fn enter_parent<'p>(&mut self, p: &'p str) -> Result<&'p str> {
         let (dir, name) = path::split(p);
         if name.is_empty() {
             return Err(FtpError::InvalidArgument(format!("chemin sans nom : {p:?}")));
@@ -823,7 +867,7 @@ async fn timeout_ftp<T>(d: Duration, f: impl Future<Output = Result<T>>) -> Resu
 }
 
 /// Masque les secrets dans le journal.
-fn mask(cmd: &str) -> String {
+pub(super) fn mask(cmd: &str) -> String {
     let upper = cmd.get(..5).map(str::to_ascii_uppercase);
     match upper.as_deref() {
         Some("PASS ") | Some("ACCT ") => format!("{}****", &cmd[..5]),
@@ -852,7 +896,7 @@ fn parse_pwd(text: &str) -> Option<String> {
 }
 
 /// `Entering Passive Mode (h1,h2,h3,h4,p1,p2)` (parenthèses facultatives).
-fn parse_pasv(text: &str) -> Option<(Ipv4Addr, u16)> {
+pub(super) fn parse_pasv(text: &str) -> Option<(Ipv4Addr, u16)> {
     let start = text.find(|c: char| c.is_ascii_digit())?;
     let rest = &text[start..];
     let end = rest.find(|c: char| !(c.is_ascii_digit() || c == ',')).unwrap_or(rest.len());
@@ -883,7 +927,7 @@ fn is_private(ip: IpAddr) -> bool {
 
 /// L'adresse PASV est inutilisable : 0.0.0.0, ou non routable alors que le serveur est public
 /// (ou d'adresse inconnue, derrière un proxy).
-fn needs_fix(pasv: IpAddr, server: Option<IpAddr>) -> bool {
+pub(super) fn needs_fix(pasv: IpAddr, server: Option<IpAddr>) -> bool {
     pasv.is_unspecified() || (is_private(pasv) && server.is_none_or(|s| !is_private(s)))
 }
 

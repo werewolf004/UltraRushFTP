@@ -11,7 +11,7 @@ use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::TlsAcceptor;
+use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> Stream for T {}
@@ -44,6 +44,14 @@ pub struct MockConfig {
     pub require_prot_p: bool,
     /// Interroge le serveur Ident du client sur ce port à chaque connexion (comme glftpd).
     pub ident_port: Option<u16>,
+    /// Accepte `SSCN ON/OFF` (et l'annonce dans `FEAT`).
+    pub sscn: bool,
+    /// Accepte `CPSV`.
+    pub cpsv: bool,
+    /// Annonce `PRET` dans `FEAT`.
+    pub pret: bool,
+    /// Refuse toute commande `PORT`/`EPRT` (FXP interdit en mode actif).
+    pub refuse_port: bool,
 }
 
 impl Default for MockConfig {
@@ -58,6 +66,10 @@ impl Default for MockConfig {
             require_session_reuse: false,
             require_prot_p: false,
             ident_port: None,
+            sscn: false,
+            cpsv: false,
+            pret: false,
+            refuse_port: false,
         }
     }
 }
@@ -126,6 +138,8 @@ pub struct Stats {
     pub active_connections: usize,
     /// Réponses Ident obtenues à la connexion.
     pub ident_answers: Vec<String>,
+    /// Canaux de données où ce serveur a joué le rôle de client TLS (SSCN / CPSV).
+    pub tls_client_channels: usize,
 }
 
 pub struct MockServer {
@@ -141,6 +155,54 @@ struct Shared {
     fs: Arc<Mutex<Fs>>,
     stats: Arc<Mutex<Stats>>,
     tls: Option<TlsAcceptor>,
+    /// Rôle client TLS (FXP chiffré) : accepte le certificat de l'autre serveur de test.
+    tls_client: TlsConnector,
+}
+
+#[derive(Debug)]
+struct AcceptAll(Arc<rustls::crypto::CryptoProvider>);
+
+impl rustls::client::danger::ServerCertVerifier for AcceptAll {
+    fn verify_server_cert(
+        &self,
+        _: &CertificateDer<'_>,
+        _: &[CertificateDer<'_>],
+        _: &rustls::pki_types::ServerName<'_>,
+        _: &[u8],
+        _: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+    fn verify_tls12_signature(
+        &self,
+        m: &[u8],
+        c: &CertificateDer<'_>,
+        d: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(m, c, d, &self.0.signature_verification_algorithms)
+    }
+    fn verify_tls13_signature(
+        &self,
+        m: &[u8],
+        c: &CertificateDer<'_>,
+        d: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(m, c, d, &self.0.signature_verification_algorithms)
+    }
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.0.signature_verification_algorithms.supported_schemes()
+    }
+}
+
+fn make_tls_client() -> TlsConnector {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let config = rustls::ClientConfig::builder_with_provider(provider.clone())
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(AcceptAll(provider)))
+        .with_no_client_auth();
+    TlsConnector::from(Arc::new(config))
 }
 
 fn make_tls() -> (TlsAcceptor, String) {
@@ -170,7 +232,8 @@ impl MockServer {
                 (Some(a), Some(fp))
             }
         };
-        let shared = Arc::new(Shared { cfg, fs: fs.clone(), stats: stats.clone(), tls });
+        let shared =
+            Arc::new(Shared { cfg, fs: fs.clone(), stats: stats.clone(), tls, tls_client: make_tls_client() });
         tokio::spawn(async move {
             while let Ok((s, _)) = listener.accept().await {
                 let shared = shared.clone();
@@ -204,6 +267,10 @@ struct State {
     pending: Option<Pending>,
     rnfr: Option<String>,
     prot_p: bool,
+    /// `SSCN ON` : rôle client TLS sur les canaux de données.
+    sscn: bool,
+    /// `CPSV` : rôle client TLS pour le prochain canal seulement.
+    cpsv_once: bool,
 }
 
 async fn reply(c: &mut Conn, s: &str) -> std::io::Result<()> {
@@ -226,6 +293,14 @@ async fn open_data(st: &mut State, sh: &Shared) -> Result<BoxStream, &'static st
         sh.stats.lock().unwrap().data_channels.push((false, false));
         return Ok(Box::new(tcp));
     }
+    if st.sscn || std::mem::take(&mut st.cpsv_once) {
+        let name = rustls::pki_types::ServerName::try_from("127.0.0.1").unwrap();
+        let tls = sh.tls_client.connect(name, tcp).await.map_err(|_| "522 TLS handshake (client) failed")?;
+        let mut g = sh.stats.lock().unwrap();
+        g.data_channels.push((true, false));
+        g.tls_client_channels += 1;
+        return Ok(Box::new(tls));
+    }
     let acceptor = sh.tls.clone().ok_or("534 TLS not available")?;
     let tls = acceptor.accept(tcp).await.map_err(|_| "522 TLS handshake failed")?;
     let resumed = tls.get_ref().1.handshake_kind() == Some(rustls::HandshakeKind::Resumed);
@@ -234,6 +309,22 @@ async fn open_data(st: &mut State, sh: &Shared) -> Result<BoxStream, &'static st
         return Err("522 SSL connection failed: session reuse required");
     }
     Ok(Box::new(tls))
+}
+
+/// Fin d'envoi : close_notify / FIN, puis attente de la fermeture par le pair pour ne pas
+/// provoquer de RST (tickets TLS 1.3 arrivant sur une socket fermée).
+async fn finish_send(d: &mut BoxStream) -> std::io::Result<()> {
+    d.shutdown().await?;
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        let mut sink = [0u8; 4096];
+        while let Ok(n) = d.read(&mut sink).await {
+            if n == 0 {
+                break;
+            }
+        }
+    })
+    .await;
+    Ok(())
 }
 
 fn parse_port(arg: &str) -> Option<SocketAddr> {
@@ -280,6 +371,8 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
         pending: None,
         rnfr: None,
         prot_p: false,
+        sscn: false,
+        cpsv_once: false,
     };
     let fs = sh.fs.clone();
 
@@ -355,6 +448,12 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 if sh.tls.is_some() {
                     s.push_str(" AUTH TLS\r\n PBSZ\r\n PROT\r\n");
                 }
+                if sh.cfg.sscn {
+                    s.push_str(" SSCN\r\n");
+                }
+                if sh.cfg.pret {
+                    s.push_str(" PRET\r\n");
+                }
                 s.push_str("211 End");
                 reply(&mut c, &s).await?;
             }
@@ -382,6 +481,29 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 st.pending = Some(Pending::Pasv(l));
                 reply(&mut c, &format!("227 Entering Passive Mode (127,0,0,1,{},{})", port >> 8, port & 0xff)).await?;
             }
+            "SSCN" if sh.cfg.sscn => match arg.to_ascii_uppercase().as_str() {
+                "ON" => {
+                    st.sscn = true;
+                    reply(&mut c, "200 SSCN:CLIENT METHOD").await?;
+                }
+                "OFF" => {
+                    st.sscn = false;
+                    reply(&mut c, "200 SSCN:SERVER METHOD").await?;
+                }
+                _ => reply(&mut c, &format!("200 SSCN:{} METHOD", if st.sscn { "CLIENT" } else { "SERVER" })).await?,
+            },
+            "CPSV" if sh.cfg.cpsv => {
+                let l = TcpListener::bind("127.0.0.1:0").await?;
+                let port = l.local_addr()?.port();
+                st.pending = Some(Pending::Pasv(l));
+                st.cpsv_once = true;
+                reply(&mut c, &format!("227 Entering Passive Mode (127,0,0,1,{},{})", port >> 8, port & 0xff)).await?;
+            }
+            "ABOR" => {
+                st.pending = None;
+                reply(&mut c, "226 ABOR command successful").await?;
+            }
+            "PORT" | "EPRT" if sh.cfg.refuse_port => reply(&mut c, "500 Illegal PORT command").await?,
             "PORT" | "EPRT" => {
                 let addr = if verb == "PORT" { parse_port(&arg) } else { parse_eprt(&arg) };
                 match addr {
@@ -414,7 +536,7 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 match open_data(&mut st, &sh).await {
                     Ok(mut d) => {
                         d.write_all(out.as_bytes()).await?;
-                        d.shutdown().await?;
+                        finish_send(&mut d).await?;
                         reply(&mut c, "226 Transfer complete").await?;
                     }
                     Err(e) => reply(&mut c, e).await?,
@@ -428,6 +550,8 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 let content = fs.lock().unwrap().files.get(&target).cloned();
                 let rest = std::mem::take(&mut st.rest) as usize;
                 let Some(content) = content else {
+                    // Ferme l'écoute passive : un pair FXP déjà connecté voit la connexion tomber.
+                    st.pending = None;
                     reply(&mut c, "550 No such file").await?;
                     continue;
                 };
@@ -435,7 +559,7 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 match open_data(&mut st, &sh).await {
                     Ok(mut d) => {
                         d.write_all(&content[rest.min(content.len())..]).await?;
-                        d.shutdown().await?;
+                        finish_send(&mut d).await?;
                         reply(&mut c, "226 Transfer complete").await?;
                     }
                     Err(e) => reply(&mut c, e).await?,
@@ -459,7 +583,10 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 match d.read_to_end(&mut buf).await {
                     Ok(_) => {}
                     Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {}
-                    Err(e) => return Err(e),
+                    Err(_) => {
+                        reply(&mut c, "426 Connection closed; transfer aborted").await?;
+                        continue;
+                    }
                 }
                 {
                     let mut g = fs.lock().unwrap();
