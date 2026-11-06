@@ -46,7 +46,10 @@ Declared once in `[workspace.lints]` (root `Cargo.toml`) and inherited by every 
 
 - The interface (egui) runs on the main thread and never blocks on the network. Each remote
   panel owns an *actor*: a tokio task holding the browsing connection, driven by
-  `BrowserCmd` messages and answering with `BrowserEvent`s (`urftp-gui::browser`).
+  `BrowseCmd` messages and answering with `BrowseEvent`s (`urftp-proto::browse`, bridged to
+  the interface thread by `urftp-gui::browser`). While idle it sends the anti-idle commands
+  of `urftp-proto::keepalive`; when the connection is lost it reconnects and goes back to
+  its folder.
 - Transfers are run by the queue engine (`urftp-proto::engine`) on a separate multi-thread
   tokio runtime. Each tab has its own `Queue`; the engine keeps a connection pool per site
   and publishes `EngineEvent`s (started, progress, done, skipped, failed…).

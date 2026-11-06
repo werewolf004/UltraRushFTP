@@ -596,6 +596,24 @@ impl Container {
                     r.rows.clear();
                 }
             }
+            BrowserEvent::NotConnected => self.push_log(side, LogKind::Error, t!("browser.not_connected")),
+            BrowserEvent::RawImpossible(command) => self.push_log(side, LogKind::Error, t!("browser.raw_impossible", command = command)),
+            BrowserEvent::Reconnecting { attempt, of, reason } => {
+                if let Side::Remote(r) = &mut self.sides[side] {
+                    r.state = RemoteState::Connecting;
+                }
+                self.push_log(side, LogKind::Status, t!("log.reconnecting", attempt = attempt, of = of, reason = reason));
+            }
+            BrowserEvent::Reconnected => self.push_log(side, LogKind::Status, t!("log.reconnected")),
+            BrowserEvent::ReconnectFailed(error) => {
+                if let Side::Remote(r) = &mut self.sides[side] {
+                    r.state = RemoteState::Failed(t!("log.reconnect_failed", error = &error));
+                }
+                self.push_log(side, LogKind::Error, t!("log.reconnect_failed", error = error));
+            }
+            BrowserEvent::KeepAliveStopped { logged_out } => {
+                self.push_log(side, LogKind::Status, if logged_out { t!("log.keepalive_logout") } else { t!("log.keepalive_stopped") })
+            }
             BrowserEvent::RawReply { command, lines, ok } => {
                 let site = self.sides[side].profile().map(|p| p.name.clone()).unwrap_or_default();
                 self.raw_replies.push((site, command, lines, ok));
@@ -1069,6 +1087,7 @@ impl UltraRushApp {
             password: q.pass.clone(),
             protocol,
             limits: SiteLimits { max_transfers: s.transfer.quick_connect_transfers, ..SiteLimits::default() },
+            session: urftp_proto::profile::session_policy(s),
         })
     }
 

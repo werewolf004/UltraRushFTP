@@ -10,6 +10,7 @@ use urftp_core::site::{CertPolicy, ProxyChoice, ProxyType, Site, SiteProtocol, S
 
 use crate::engine::EngineOptions;
 use crate::ftp::{FtpConfig, Security, TlsOptions, TlsVerify};
+use crate::keepalive::{KeepAlive, Reconnect, SessionPolicy, split_list};
 use crate::proxy::{ProxyConfig, ProxyKind, parse_exceptions};
 use crate::session::{SiteProfile, SiteProtocol as ProfileProtocol};
 use crate::sftp::{HostKeyPolicy, SftpAuth, SftpConfig};
@@ -37,6 +38,27 @@ pub fn proxy_config(p: &SiteProxy, bypass_local: bool, exceptions: &str) -> Prox
 /// Global proxy when enabled and filled in.
 pub fn global_proxy(g: &GlobalProxy) -> Option<ProxyConfig> {
     (g.enabled && !g.proxy.host.trim().is_empty()).then(|| proxy_config(&g.proxy, g.bypass_local, &g.exceptions))
+}
+
+/// Keep alive and reconnection from the options (retries and delay of the transfers are
+/// reused for the reconnection attempts).
+pub fn session_policy(s: &Settings) -> SessionPolicy {
+    let k = &s.keep_alive;
+    SessionPolicy {
+        keep_alive: k.enabled.then(|| KeepAlive {
+            interval: Duration::from_secs(u64::from(k.interval_secs.max(5))),
+            commands: split_list(&k.commands),
+            random: k.random,
+            stop_after: (k.stop_after_mins > 0).then(|| Duration::from_secs(u64::from(k.stop_after_mins) * 60)),
+            logout_after_stop: k.logout_after_stop,
+        }),
+        reconnect: Reconnect {
+            when_kicked: k.reconnect_when_kicked,
+            on_replies: split_list(&k.reconnect_replies),
+            attempts: s.transfer.retries.max(1),
+            delay: Duration::from_secs(u64::from(s.transfer.retry_delay_secs)),
+        },
+    }
 }
 
 /// Connection profile of a site record, with the global proxy and the option timeouts.
@@ -93,6 +115,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
         password: if site.anonymous { "anonymous@".into() } else { site.password.clone() },
         protocol,
         limits: site.limits(),
+        session: session_policy(settings),
     }
 }
 
@@ -152,5 +175,32 @@ mod tests {
         let p = site_profile(&Site { host: "h".into(), ..Site::default() }, &settings);
         let ProfileProtocol::Ftp(cfg) = &p.protocol else { panic!() };
         assert_eq!(cfg.proxy.as_ref().map(|x| x.host.as_str()), Some("proxy.lan"));
+    }
+
+    #[test]
+    fn keep_alive_from_the_options() {
+        let mut s = Settings::default();
+        let p = session_policy(&s);
+        let k = p.keep_alive.expect("on by default");
+        assert_eq!((k.interval, k.commands.as_slice(), k.stop_after), (Duration::from_secs(60), ["NOOP".to_string()].as_slice(), None));
+        assert!(p.reconnect.when_kicked && p.reconnect.on_replies.is_empty());
+        assert_eq!((p.reconnect.attempts, p.reconnect.delay), (3, Duration::from_secs(3)));
+
+        s.keep_alive.commands = "NOOP; PWD ;".into();
+        s.keep_alive.interval_secs = 1;
+        s.keep_alive.stop_after_mins = 15;
+        s.keep_alive.reconnect_replies = "421*;530*too many*".into();
+        s.transfer.retries = 0;
+        let p = session_policy(&s);
+        let k = p.keep_alive.expect("still on");
+        assert_eq!(k.commands, ["NOOP", "PWD"]);
+        assert_eq!(k.interval, Duration::from_secs(5), "never more often than every 5 s");
+        assert_eq!(k.stop_after, Some(Duration::from_secs(900)));
+        assert_eq!(p.reconnect.on_replies, ["421*", "530*too many*"]);
+        assert_eq!(p.reconnect.attempts, 1, "at least one attempt");
+
+        s.keep_alive.enabled = false;
+        assert!(session_policy(&s).keep_alive.is_none());
+        assert_eq!(site_profile(&Site::default(), &s).session, session_policy(&s));
     }
 }

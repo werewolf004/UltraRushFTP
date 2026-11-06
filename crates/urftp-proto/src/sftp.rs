@@ -105,7 +105,7 @@ pub enum SftpError {
     Io(#[from] std::io::Error),
     #[error("timed out")]
     Timeout,
-    #[error("proxy : {0}")]
+    #[error("proxy: {0}")]
     Proxy(#[from] ProxyError),
     #[error("server key not trusted ({reason}) — fingerprint: {fingerprint}")]
     HostKey { fingerprint: String, reason: String },
@@ -113,12 +113,12 @@ pub enum SftpError {
     AuthFailed,
     #[error("private key unreadable: {0}")]
     Key(String),
-    #[error("erreur SSH : {0}")]
+    #[error("SSH error: {0}")]
     Ssh(String),
     /// Error returned by the SFTP server (`SSH_FX_*` code).
-    #[error("{operation} : {message} (code {code})")]
+    #[error("{operation}: {message} (code {code})")]
     Status { operation: String, code: u32, message: String },
-    #[error("erreur SFTP : {0}")]
+    #[error("SFTP error: {0}")]
     Sftp(String),
     #[error("invalid argument: {0}")]
     InvalidArgument(String),

@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 69 · 🟡 51 · ⬜ 147 · ➖ 17.
+Summary (284 topics): ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
 
 ## Main window and menus
 
@@ -244,14 +244,14 @@ Summary (284 topics): ✅ 69 · 🟡 51 · ⬜ 147 · ➖ 17.
 | Connect timeout, reply timeout | ✅ | |
 | Max retries, retry delay | ✅ | |
 | Cycle the server IP list on login failure | ⬜ | |
-| Auto reconnect on matching server replies | ⬜ | |
+| Auto reconnect on matching server replies | ✅ | Wildcard masks, Keep alive page |
 | Smart handling of servers behind NAT | ✅ | |
 | Bind sockets to an external address (active mode) | 🟡 | Supported by the protocol layer; no setting |
 | Bind to a local IP address | ⬜ | |
 | Limit local port range | 🟡 | Supported by the protocol layer; no setting |
 | Ident: enable, name, system, port | ✅ | |
 | Ident: only while connecting | ⬜ | |
-| Keep alive: command, interval, stop after, log out, reconnect when kicked, random command | ⬜ | |
+| Keep alive: command, interval, stop after, log out, reconnect when kicked, random command | ✅ | Global; per site in block G3 |
 | Proxy: list of named proxies | 🟡 | One global proxy and one custom proxy per site |
 | Proxy: `NOOP` during transfers, passive with proxy | ⬜ | |
 | Proxy: bypass for local addresses, exceptions | ✅ | |

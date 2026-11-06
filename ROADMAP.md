@@ -50,12 +50,12 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 69 · 🟡 51 · ⬜ 147 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
-- ⬜ Keep alive (command list, interval, random command, stop after, log out) and
-  reconnection when kicked or on matching server replies.
+- ✅ Keep alive (command list, interval, random command, stop after, log out) and
+  reconnection when kicked or on matching server replies (G1).
 - ⬜ Several hosts per site with rotation on login failure; test availability of sites.
 - ⬜ Ghost login (`!user`, `Shift`+connect) and `-password` (`Ctrl`+connect) from the
   interface (scripts already support `RS_GHOST` / `RS_INVERT`).

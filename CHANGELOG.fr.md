@@ -10,6 +10,22 @@ la traduction.
 
 ## [Non publié]
 
+### Ajouté
+
+- **Maintien de connexion** (Options → Maintien de connexion) : commandes anti-inactivité
+  envoyées quand une connexion ne sert pas (liste, intervalle, choix au hasard, arrêt
+  après un temps d'inactivité, déconnexion).
+- **Reconnexion automatique** quand le serveur ferme la connexion (expulsion, inactivité,
+  `421`) ou envoie une réponse qui correspond à un masque ; le panneau revient dans son
+  dossier. Le moteur de file vérifie une connexion restée inactive avant de la réutiliser.
+
+### Modifié
+
+- La connexion de navigation des panneaux passe de l'interface à `urftp-proto::browse`,
+  pour être testée contre le serveur de test.
+- Les messages d'erreur de la couche protocole sont désormais tous en anglais (certains
+  étaient en français).
+
 ## [0.2.0] - 2026-11-06
 
 Normes de l'interface : navigation au clavier, noms accessibles, contraste WCAG 2.2 AA et

@@ -5,7 +5,7 @@ use urftp_i18n::{Lang, t};
 
 use eframe::egui::{self, RichText};
 use urftp_core::exists::{ExistsAction, ExistsRules};
-use urftp_core::settings::{GlobalProxy, LanguageSetting, MaskSetting, Settings, SkipRuleSetting};
+use urftp_core::settings::{GlobalProxy, KeepAliveSettings, LanguageSetting, MaskSetting, Settings, SkipRuleSetting};
 use urftp_core::site::ProxyType;
 use urftp_core::skiplist::{RuleAction, RuleTarget};
 
@@ -24,11 +24,21 @@ pub(crate) enum Page {
     Priorities,
     Proxy,
     Ident,
+    KeepAlive,
 }
 
 impl Page {
-    pub(crate) const ALL: [Page; 8] =
-        [Page::General, Page::Transfers, Page::Speed, Page::Exists, Page::Skiplist, Page::Priorities, Page::Proxy, Page::Ident];
+    pub(crate) const ALL: [Page; 9] = [
+        Page::General,
+        Page::Transfers,
+        Page::Speed,
+        Page::Exists,
+        Page::Skiplist,
+        Page::Priorities,
+        Page::Proxy,
+        Page::Ident,
+        Page::KeepAlive,
+    ];
 
     pub(crate) fn label(self) -> String {
         match self {
@@ -40,6 +50,7 @@ impl Page {
             Page::Priorities => t!("options.page_priorities"),
             Page::Proxy => t!("options.page_proxy"),
             Page::Ident => t!("options.page_ident"),
+            Page::KeepAlive => t!("options.page_keepalive"),
         }
     }
 }
@@ -61,7 +72,7 @@ impl OptionsWindow {
             Ok(s) => (s, None),
             Err(e) => (Settings::default(), Some(t!("options.unreadable", error = e))),
         };
-        // Development: `URUSHFTP_OPEN_OPTIONS=<page>` (0 to 7) opens the window on that page.
+        // Development: `URUSHFTP_OPEN_OPTIONS=<page>` (0 to 8) opens the window on that page.
         let open_on = std::env::var("URUSHFTP_OPEN_OPTIONS").ok().and_then(|v| v.parse::<usize>().ok());
         let page = open_on.and_then(|i| Page::ALL.get(i).copied()).unwrap_or(Page::General);
         Self { open: open_on.is_some(), settings, page, dirty: false, last_change: 0.0, ident_status: None, error }
@@ -195,6 +206,7 @@ impl OptionsWindow {
             Page::Skiplist => skiplist_ui(ui, s),
             Page::Priorities => priorities_ui(ui, &mut s.priorities),
             Page::Proxy => proxy_ui(ui, &mut s.proxy),
+            Page::KeepAlive => keep_alive_ui(ui, &mut s.keep_alive),
             Page::Ident => {
                 let id = &mut s.ident;
                 ui.checkbox(&mut id.enabled, t!("options.ident_enable"));
@@ -380,6 +392,32 @@ fn priorities_ui(ui: &mut egui::Ui, list: &mut Vec<MaskSetting>) {
     if ui.button(t!("options.prio_add")).clicked() {
         list.push(MaskSetting::default());
     }
+}
+
+/// Keep alive and automatic reconnection.
+fn keep_alive_ui(ui: &mut egui::Ui, k: &mut KeepAliveSettings) {
+    ui.checkbox(&mut k.enabled, t!("options.ka_enable"));
+    ui.add_enabled_ui(k.enabled, |ui| {
+        egui::Grid::new("opt-keepalive").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+            theme::grid_row(ui, t!("options.ka_commands"), theme::single_line(&mut k.commands).hint_text("NOOP;PWD").desired_width(260.0));
+            theme::grid_row(ui, t!("options.ka_interval"), egui::DragValue::new(&mut k.interval_secs).range(5..=3600).suffix(" s"));
+            theme::grid_row(ui, t!("options.ka_stop_after"), egui::DragValue::new(&mut k.stop_after_mins).range(0..=1440).suffix(" min"));
+        });
+        ui.checkbox(&mut k.random, t!("options.ka_random"));
+        ui.add_enabled(k.stop_after_mins > 0, egui::Checkbox::new(&mut k.logout_after_stop, t!("options.ka_logout")));
+    });
+    ui.add_space(10.0);
+    ui.label(RichText::new(t!("options.ka_reconnect_title")).strong());
+    ui.checkbox(&mut k.reconnect_when_kicked, t!("options.ka_reconnect_kicked"));
+    egui::Grid::new("opt-reconnect").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        theme::grid_row(
+            ui,
+            t!("options.ka_reconnect_replies"),
+            theme::single_line(&mut k.reconnect_replies).hint_text("421*;530*too many*").desired_width(260.0),
+        );
+    });
+    ui.add_space(6.0);
+    ui.label(RichText::new(t!("options.ka_note")).weak());
 }
 
 fn proxy_ui(ui: &mut egui::Ui, g: &mut GlobalProxy) {

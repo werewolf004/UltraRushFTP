@@ -11,13 +11,17 @@
 //!   verified by fingerprint, proxy.
 
 //! - [`session`]: common FTP/SFTP session and site profile.
+//! - [`keepalive`]: anti-idle commands and automatic reconnection.
+//! - [`browse`]: browsing connection of a remote panel (keep alive, reconnection).
 //! - [`engine`]: queue engine (multi-transfer, per-site limits, folders, skip list,
 //!   priorities, "existing file" rules, retries, stop).
 //! - [`throttle`]: speed limiting.
 
+pub mod browse;
 pub mod engine;
 pub mod ftp;
 pub mod ident;
+pub mod keepalive;
 pub mod profile;
 pub mod proxy;
 pub mod session;

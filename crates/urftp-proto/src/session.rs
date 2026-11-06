@@ -2,7 +2,8 @@
 
 use urftp_core::queue::SiteLimits;
 
-use crate::ftp::{FtpClient, FtpConfig, FtpError, LogSink, RemoteEntry, path};
+use crate::ftp::{FtpClient, FtpConfig, FtpError, LogSink, RemoteEntry, Reply, path};
+use crate::keepalive::SessionPolicy;
 use crate::sftp::{SftpAuth, SftpClient, SftpConfig, SftpError};
 
 /// Protocol and settings of a site.
@@ -24,6 +25,8 @@ pub struct SiteProfile {
     pub password: String,
     pub protocol: SiteProtocol,
     pub limits: SiteLimits,
+    /// Keep alive and reconnection.
+    pub session: SessionPolicy,
 }
 
 /// Error of a session or transfer operation.
@@ -90,6 +93,25 @@ impl RemoteSession {
                 RemoteSession::Sftp(Box::new(c))
             }
         })
+    }
+
+    /// Anti-idle command: an FTP command (`NOOP`...), or a check of the current folder
+    /// in SFTP (SSH has its own keep alive). A `421` reply means the server is closing
+    /// the connection; any other reply proves it is alive.
+    pub async fn keep_alive(&mut self, command: &str) -> Result<()> {
+        match self {
+            RemoteSession::Ftp(c) => {
+                let reply: Reply = c.raw(command).await?;
+                if reply.code == 421 {
+                    return Err(FtpError::Unexpected { command: command.to_string(), reply }.into());
+                }
+            }
+            RemoteSession::Sftp(c) => {
+                let dir = c.current_dir().to_string();
+                c.stat(&dir).await?;
+            }
+        }
+        Ok(())
     }
 
     pub fn as_ftp(&mut self) -> Option<&mut FtpClient> {

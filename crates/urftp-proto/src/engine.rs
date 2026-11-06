@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::mpsc::UnboundedSender;
@@ -107,25 +107,43 @@ pub enum EngineEvent {
     },
 }
 
+/// Idle time after which a pooled connection is checked before being reused.
+const IDLE_CHECK: Duration = Duration::from_secs(30);
+
 /// Connections of a site.
 struct SitePool {
     profile: SiteProfile,
-    idle: Mutex<Vec<RemoteSession>>,
+    /// Idle connections and when they were released.
+    idle: Mutex<Vec<(RemoteSession, Instant)>>,
 }
 
 impl SitePool {
+    /// An idle connection, checked with the site's anti-idle command when it waited long
+    /// enough to have been kicked; otherwise a new one.
     async fn acquire(&self) -> Result<RemoteSession, SessionError> {
-        let idle = self.idle.lock().pop();
-        match idle {
-            Some(s) => Ok(s),
-            None => RemoteSession::open(&self.profile, None).await,
+        loop {
+            let idle = self.idle.lock().pop();
+            let Some((mut s, since)) = idle else { break };
+            if since.elapsed() < self.check_after() {
+                return Ok(s);
+            }
+            let cmd = self.profile.session.keep_alive.as_ref().and_then(|k| k.commands.first().cloned());
+            if s.keep_alive(cmd.as_deref().unwrap_or("NOOP")).await.is_ok() {
+                return Ok(s);
+            }
+            // Gone (idle kick...): try the next one, or open a new connection.
         }
+        RemoteSession::open(&self.profile, None).await
+    }
+
+    fn check_after(&self) -> Duration {
+        self.profile.session.keep_alive.as_ref().map_or(IDLE_CHECK, |k| k.interval.min(IDLE_CHECK))
     }
 
     /// Gives the connection back to the pool when it is still healthy.
     fn release<T>(&self, session: RemoteSession, result: &Result<T, SessionError>) {
         if result.as_ref().err().is_none_or(SessionError::keeps_session) {
-            self.idle.lock().push(session);
+            self.idle.lock().push((session, Instant::now()));
         }
     }
 }

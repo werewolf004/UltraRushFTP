@@ -152,6 +152,25 @@ Used by the sites set to *Global setting*.
 | System | `UNIX` | System returned |
 | TCP port | 113 | Forward it from your router to this computer when behind NAT |
 
+### Keep alive
+
+![Keep alive](images/options-keep-alive.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Send anti-idle commands | on | Keeps idle connections from being kicked by the server |
+| Commands | `NOOP` | Sent in turn, separated by `;` (for example `NOOP;PWD`) |
+| Every | 60 s | Idle time before a command, then between two commands (5 s minimum) |
+| Stop after | 0 (never) | Minutes without any action of the user after which the commands stop |
+| Pick the command at random | off | Some servers spot the same command sent again and again |
+| Disconnect when the commands stop | off | Logs out once the limit above is reached |
+| Reconnect when the server closes the connection | on | Kick, idle timeout, `421`: connects again and goes back to the folder of the panel |
+| Also on these replies | — | Wildcard masks on the server reply, separated by `;` (for example `530*too many*`) |
+
+Reconnection makes as many attempts as *Retries* of the Transfers page, waiting *Delay
+between retries* before each one. The queue engine also checks a connection that stayed
+idle before reusing it, and opens a new one when the server has dropped it.
+
 ## Site record
 
 ![Site manager](images/site-manager.en.png)
@@ -271,7 +290,7 @@ Use `mirc/x86/rushmirc.dll` for 32-bit mIRC and `mirc/x64/rushmirc.dll` for 64-b
 | `URUSHFTP_SCRIPT` | Script source run at startup |
 | `URUSHFTP_IPC_CLASS` | Window class used for the mIRC link instead of `TfmRush` (tests next to a running FTPRush) |
 | `URUSHFTP_OPEN_SITES` | Development: opens the site manager on this site id |
-| `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 7) |
+| `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 8) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Development: opens the keyboard shortcuts window |
 
 ## Files

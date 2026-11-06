@@ -154,6 +154,26 @@ Utilisé par les sites réglés sur *Réglage global*.
 | Système | `UNIX` | Système renvoyé |
 | Port TCP | 113 | À rediriger depuis le routeur vers cet ordinateur derrière un NAT |
 
+### Maintien de connexion
+
+![Maintien de connexion](images/options-keep-alive.fr.png)
+
+| Option | Défaut | Effet |
+|---|---|---|
+| Envoyer des commandes anti-inactivité | oui | Évite que le serveur expulse les connexions inactives |
+| Commandes | `NOOP` | Envoyées à tour de rôle, séparées par `;` (par exemple `NOOP;PWD`) |
+| Toutes les | 60 s | Inactivité avant une commande, puis entre deux commandes (5 s minimum) |
+| Arrêter après | 0 (jamais) | Minutes sans action de l'utilisateur après lesquelles les commandes s'arrêtent |
+| Choisir la commande au hasard | non | Certains serveurs repèrent une commande envoyée encore et encore |
+| Se déconnecter à l'arrêt des commandes | non | Se déconnecte quand la limite ci-dessus est atteinte |
+| Se reconnecter quand le serveur ferme la connexion | oui | Expulsion, inactivité, `421` : se reconnecte et revient dans le dossier du panneau |
+| Aussi sur ces réponses | — | Masques à jokers sur la réponse du serveur, séparés par `;` (par exemple `530*too many*`) |
+
+La reconnexion fait autant d'essais que *Nombre d'essais* de la page Transferts, en
+attendant *Délai entre deux essais* avant chacun. Le moteur de file vérifie aussi une
+connexion restée inactive avant de la réutiliser, et en ouvre une nouvelle quand le
+serveur l'a coupée.
+
 ## Fiche de site
 
 ![Gestionnaire de sites](images/site-manager.fr.png)
@@ -276,7 +296,7 @@ bits.
 | `URUSHFTP_SCRIPT` | Source d'un script exécuté au démarrage |
 | `URUSHFTP_IPC_CLASS` | Classe de fenêtre de la liaison mIRC à la place de `TfmRush` (tests à côté d'un FTPRush ouvert) |
 | `URUSHFTP_OPEN_SITES` | Développement : ouvre le gestionnaire de sites sur ce numéro de site |
-| `URUSHFTP_OPEN_OPTIONS` | Développement : ouvre la fenêtre Options sur cette page (0 à 7) |
+| `URUSHFTP_OPEN_OPTIONS` | Développement : ouvre la fenêtre Options sur cette page (0 à 8) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Développement : ouvre la fenêtre des raccourcis clavier |
 
 ## Fichiers

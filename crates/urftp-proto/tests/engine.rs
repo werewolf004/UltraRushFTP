@@ -32,6 +32,7 @@ fn site(name: &str, port: u16, max_transfers: u32) -> SiteProfile {
         password: "secret".into(),
         protocol: SiteProtocol::Ftp(FtpConfig::default()),
         limits: SiteLimits { max_transfers, ..SiteLimits::default() },
+        session: Default::default(),
     }
 }
 
@@ -333,4 +334,34 @@ async fn unknown_site_fails_cleanly() {
     let r = engine(q, vec![], EngineOptions { retries: 0, ..opts() });
     r.engine.run().await;
     assert!(matches!(state(&r.engine, id), ItemState::Failed(e) if e == "unknown site: absent"));
+}
+
+#[tokio::test]
+async fn a_pooled_connection_kicked_while_idle_is_replaced() {
+    let srv = MockServer::start(MockConfig { idle_kick: Some(Duration::from_millis(150)), ..MockConfig::default() }).await;
+    srv.fs.lock().unwrap().files.insert("/a.bin".into(), payload(1000, 1));
+    srv.fs.lock().unwrap().files.insert("/b.bin".into(), payload(1000, 2));
+    let dir = temp_dir();
+    // Pooled connections are checked once idle for longer than the keep-alive interval.
+    let keep = urftp_proto::keepalive::KeepAlive { interval: Duration::from_millis(50), ..Default::default() };
+    let profile = SiteProfile {
+        session: urftp_proto::keepalive::SessionPolicy { keep_alive: Some(keep), ..Default::default() },
+        ..site("A", srv.addr.port(), 1)
+    };
+    let mut q = Queue::new();
+    let a = q.push(Endpoint::remote("A", "/a.bin"), Endpoint::local(local(&dir.join("a.bin"))), false, None, None);
+    let r = engine(q, vec![profile], opts());
+    r.engine.run().await;
+    assert_eq!(state(&r.engine, a), ItemState::Done);
+    assert_eq!(r.engine.idle_connections("A"), 1);
+
+    // The server kicks the idle connection; the next item must not fail because of it.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(srv.stats.lock().unwrap().kicks, 1);
+    let b = r.engine.queue().lock().push(Endpoint::remote("A", "/b.bin"), Endpoint::local(local(&dir.join("b.bin"))), false, None, None);
+    r.engine.run().await;
+    assert_eq!(state(&r.engine, b), ItemState::Done);
+    assert_eq!(r.engine.queue().lock().get(b).unwrap().attempts, 0, "no failed attempt: the dead connection was dropped first");
+    assert_eq!(srv.stats.lock().unwrap().logins, 2);
+    assert_eq!(std::fs::read(dir.join("b.bin")).unwrap(), payload(1000, 2));
 }

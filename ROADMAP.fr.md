@@ -54,12 +54,12 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 69 · 🟡 51 · ⬜ 147 · ➖ 17).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
-- ⬜ Maintien de connexion (liste de commandes, intervalle, commande aléatoire, arrêt,
-  déconnexion) et reconnexion après expulsion ou sur certaines réponses du serveur.
+- ✅ Maintien de connexion (liste de commandes, intervalle, commande aléatoire, arrêt,
+  déconnexion) et reconnexion après expulsion ou sur certaines réponses du serveur (G1).
 - ⬜ Plusieurs hôtes par site avec rotation en cas d'échec de connexion ; test de
   disponibilité des sites.
 - ⬜ Connexion fantôme (`!user`, `Maj`+connexion) et `-motdepasse` (`Ctrl`+connexion)

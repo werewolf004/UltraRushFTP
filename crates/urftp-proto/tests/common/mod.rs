@@ -58,6 +58,13 @@ pub struct MockConfig {
     pub transfer_delay: Option<std::time::Duration>,
     /// The first N `RETR` (all sessions together) fail with 451.
     pub fail_first_retr: usize,
+    /// Closes the control connection with `421` after this time without a command
+    /// (idle kick, like most servers).
+    pub idle_kick: Option<std::time::Duration>,
+    /// The first N listings (all sessions together) are refused with this reply.
+    pub fail_first_list: Option<(usize, &'static str)>,
+    /// Logins accepted in all (later ones get `530`).
+    pub max_logins: Option<usize>,
 }
 
 impl Default for MockConfig {
@@ -78,6 +85,9 @@ impl Default for MockConfig {
             refuse_port: false,
             transfer_delay: None,
             fail_first_retr: 0,
+            idle_kick: None,
+            fail_first_list: None,
+            max_logins: None,
         }
     }
 }
@@ -151,6 +161,8 @@ pub struct Stats {
     pub current_sessions: usize,
     pub max_sessions: usize,
     pub logins: usize,
+    /// Sessions closed by the idle kick.
+    pub kicks: usize,
 }
 
 /// Counts an authenticated session when it ends, whatever the exit path.
@@ -195,6 +207,7 @@ struct Shared {
     /// TLS client role (encrypted FXP): accepts the certificate of the other test server.
     tls_client: TlsConnector,
     fail_counter: AtomicUsize,
+    list_fail_counter: AtomicUsize,
 }
 
 #[derive(Debug)]
@@ -277,6 +290,7 @@ impl MockServer {
             tls,
             tls_client: make_tls_client(),
             fail_counter: AtomicUsize::new(0),
+            list_fail_counter: AtomicUsize::new(0),
         });
         tokio::spawn(async move {
             while let Ok((s, _)) = listener.accept().await {
@@ -420,7 +434,18 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
 
     loop {
         let mut line = String::new();
-        if c.read_line(&mut line).await? == 0 {
+        let read = match sh.cfg.idle_kick {
+            Some(limit) => match tokio::time::timeout(limit, c.read_line(&mut line)).await {
+                Ok(r) => r?,
+                Err(_) => {
+                    sh.stats.lock().unwrap().kicks += 1;
+                    reply(&mut c, "421 Idle timeout, closing control connection").await?;
+                    break;
+                }
+            },
+            None => c.read_line(&mut line).await?,
+        };
+        if read == 0 {
             break;
         }
         let line = line.trim_end_matches(['\r', '\n']).to_string();
@@ -435,6 +460,13 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
         }
         if sh.cfg.max_arg_len.is_some_and(|m| arg.len() > m) {
             reply(&mut c, "550 Path too long").await?;
+            continue;
+        }
+        if matches!(verb.as_str(), "LIST" | "MLSD")
+            && let Some((n, text)) = sh.cfg.fail_first_list
+            && sh.list_fail_counter.fetch_add(1, Ordering::SeqCst) < n
+        {
+            reply(&mut c, text).await?;
             continue;
         }
         let is_transfer = matches!(verb.as_str(), "LIST" | "MLSD" | "RETR" | "STOR" | "APPE");
@@ -472,7 +504,10 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 reply(&mut c, "331 Password required").await?;
             }
             "PASS" => {
-                if st.user_ok && arg == sh.cfg.pass {
+                let full = sh.cfg.max_logins.is_some_and(|m| sh.stats.lock().unwrap().logins >= m);
+                if full {
+                    reply(&mut c, "530 No more logins accepted").await?;
+                } else if st.user_ok && arg == sh.cfg.pass {
                     st.logged = true;
                     guard.login();
                     reply(&mut c, "230 Logged in").await?;

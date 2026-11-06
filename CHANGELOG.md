@@ -9,6 +9,20 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Added
+
+- **Keep alive** (Options → Keep alive): anti-idle commands sent while a connection is
+  idle (list, interval, random choice, stop after an idle time, log out).
+- **Automatic reconnection** when the server closes the connection (kick, idle timeout,
+  `421`) or sends a reply matching a mask; the panel goes back to its folder. The queue
+  engine checks a pooled connection that stayed idle before reusing it.
+
+### Changed
+
+- The browsing connection of the panels moved from the interface to `urftp-proto::browse`
+  so that it is tested against the test server.
+- Error messages of the protocol layer are now all in English (some were in French).
+
 ## [0.2.0] - 2026-11-06
 
 Interface standards: keyboard navigation, accessible names, WCAG 2.2 AA contrast and

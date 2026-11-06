@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 69 · 🟡 51 · ⬜ 147 · ➖ 17.
+Résumé (284 sujets) : ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
 
 ## Fenêtre principale et menus
 
@@ -244,14 +244,14 @@ Résumé (284 sujets) : ✅ 69 · 🟡 51 · ⬜ 147 · ➖ 17.
 | Délai de connexion, délai de réponse | ✅ | |
 | Essais maximum, délai entre essais | ✅ | |
 | Alterner les IP du serveur en cas d'échec de connexion | ⬜ | |
-| Reconnexion automatique sur certaines réponses du serveur | ⬜ | |
+| Reconnexion automatique sur certaines réponses du serveur | ✅ | Masques à jokers, page Maintien de connexion |
 | Gestion des serveurs derrière un NAT | ✅ | |
 | Adresse externe annoncée (mode actif) | 🟡 | Gérée par la couche protocole ; pas de réglage |
 | Lier à une adresse IP locale | ⬜ | |
 | Plage de ports locaux | 🟡 | Gérée par la couche protocole ; pas de réglage |
 | Ident : activer, nom, système, port | ✅ | |
 | Ident : seulement pendant la connexion | ⬜ | |
-| Maintien de connexion : commande, intervalle, arrêt, déconnexion, reconnexion après expulsion, commande aléatoire | ⬜ | |
+| Maintien de connexion : commande, intervalle, arrêt, déconnexion, reconnexion après expulsion, commande aléatoire | ✅ | Global ; par site au bloc G3 |
 | Proxy : liste de proxys nommés | 🟡 | Un proxy global et un proxy personnalisé par site |
 | Proxy : `NOOP` pendant les transferts, passif avec proxy | ⬜ | |
 | Proxy : contourner pour les adresses locales, exceptions | ✅ | |

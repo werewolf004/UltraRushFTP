@@ -161,6 +161,44 @@ impl Default for IdentSettings {
     }
 }
 
+/// Keep alive (anti-idle commands) and automatic reconnection ("Keep Alive" and
+/// "Auto Reconnect" of FTPRush v2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeepAliveSettings {
+    /// Send anti-idle commands while a connection is not used.
+    pub enabled: bool,
+    /// Commands, separated by `;` (`NOOP` when empty).
+    pub commands: String,
+    /// Seconds without activity before a command, then between two commands.
+    pub interval_secs: u32,
+    /// Pick the command at random in the list.
+    pub random: bool,
+    /// Stop after this many minutes without activity (0 = never).
+    pub stop_after_mins: u32,
+    /// Disconnect when the commands stop.
+    pub logout_after_stop: bool,
+    /// Reconnect when the server closes the connection (kick, idle timeout, `421`).
+    pub reconnect_when_kicked: bool,
+    /// Server replies that also trigger a reconnection: wildcard masks separated by `;`.
+    pub reconnect_replies: String,
+}
+
+impl Default for KeepAliveSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            commands: "NOOP".into(),
+            interval_secs: 60,
+            random: false,
+            stop_after_mins: 0,
+            logout_after_stop: false,
+            reconnect_when_kicked: true,
+            reconnect_replies: String::new(),
+        }
+    }
+}
+
 /// Interface language chosen in the options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum LanguageSetting {
@@ -186,6 +224,7 @@ pub struct Settings {
     pub priorities: Vec<MaskSetting>,
     pub proxy: GlobalProxy,
     pub ident: IdentSettings,
+    pub keep_alive: KeepAliveSettings,
 }
 
 impl Default for Settings {
@@ -202,6 +241,7 @@ impl Default for Settings {
             priorities: vec![MaskSetting::wildcard("*.sfv"), MaskSetting::wildcard("*.nfo")],
             proxy: GlobalProxy::default(),
             ident: IdentSettings::default(),
+            keep_alive: KeepAliveSettings::default(),
         }
     }
 }

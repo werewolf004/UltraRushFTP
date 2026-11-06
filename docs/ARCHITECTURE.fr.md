@@ -48,8 +48,10 @@ les crates :
 
 - L'interface (egui) tourne sur le fil principal et ne bloque jamais sur le réseau. Chaque
   panneau distant possède un *acteur* : une tâche tokio qui tient la connexion de
-  navigation, pilotée par des messages `BrowserCmd` et qui répond par des `BrowserEvent`
-  (`urftp-gui::browser`).
+  navigation, pilotée par des messages `BrowseCmd` et qui répond par des `BrowseEvent`
+  (`urftp-proto::browse`, relayée vers le fil de l'interface par `urftp-gui::browser`).
+  Inactive, elle envoie les commandes anti-inactivité de `urftp-proto::keepalive` ; quand
+  la connexion est perdue, elle se reconnecte et revient dans son dossier.
 - Les transferts sont exécutés par le moteur de file (`urftp-proto::engine`) sur un runtime
   tokio multi-fil séparé. Chaque onglet a sa `Queue` ; le moteur garde un réservoir de
   connexions par site et publie des `EngineEvent` (démarré, progression, terminé, ignoré,
