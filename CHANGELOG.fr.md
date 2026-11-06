@@ -10,6 +10,11 @@ la traduction.
 
 ## [Non publié]
 
+## [0.2.0] - 2026-11-06
+
+Normes de l'interface : navigation au clavier, noms accessibles, contraste WCAG 2.2 AA et
+taille des cibles vérifiés par des tests ; tableau de parité avec FTPRush v2.
+
 ### Ajouté
 
 - **Tableau de parité** [docs/PARITY.fr.md](docs/PARITY.fr.md) : chaque sujet de l'aide de
@@ -111,5 +116,6 @@ réels.
 - Alerte connue acceptée : `RUSTSEC-2023-0071` dans `rsa` (utilisée pour les clés SSH
   RSA) ; voir [SECURITY.fr.md](SECURITY.fr.md).
 
-[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.1.0...HEAD
+[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/werewolf004/UltraRushFTP/releases/tag/v0.1.0
