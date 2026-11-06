@@ -51,46 +51,97 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
   clavier, contraste WCAG 2.2 AA et cibles de 24 px vérifiés par des tests, tests de
   l'interface avec `egui_kittest`, états cohérents (focus, survol, désactivé, erreurs).
 
-## Ensuite
-
-- ⬜ Lecteurs d'écran : annoncer le curseur de la liste de fichiers (les lignes sont nommées
-  dans l'arbre AccessKit, mais le curseur ne déplace pas encore le focus système).
-
 ## Reste à faire pour la parité avec FTPRush v2
 
-### Connexions et sites
-- ⬜ Keep-alive (`NOOP`) et reconnexion automatique en cas d'expulsion.
-- ⬜ Liste d'IP par site avec rotation en cas d'échec de login (« Site IP List »).
-- ⬜ Ghost login (`!user`) depuis la fiche du site (les scripts gèrent déjà `RS_GHOST`).
-- ⬜ Nom Ident par site (enregistré dans la fiche, pas encore répondu par le serveur).
-- ⬜ Liste d'exclusion et règles « fichier existant » par site (globales seulement
-  aujourd'hui).
+Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 69 · 🟡 51 · ⬜ 147 · ➖ 17).
+Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
+
+### G — Connexions et sites
+- ⬜ Maintien de connexion (liste de commandes, intervalle, commande aléatoire, arrêt,
+  déconnexion) et reconnexion après expulsion ou sur certaines réponses du serveur.
+- ⬜ Plusieurs hôtes par site avec rotation en cas d'échec de connexion ; test de
+  disponibilité des sites.
+- ⬜ Connexion fantôme (`!user`, `Maj`+connexion) et `-motdepasse` (`Ctrl`+connexion)
+  depuis l'interface (les scripts gèrent déjà `RS_GHOST` / `RS_INVERT`).
+- ⬜ Réglages par site : nom Ident, essais et délais, maintien de connexion, reprise,
+  `FEAT`, `CLNT`, liste d'exclusion, priorités, règles « fichier existant », comptes
+  séparés pour envois et téléchargements.
+- ⬜ Réglages de listing accessibles : `LIST -a` (fichiers cachés), `STAT -l`, commande
+  personnalisée, espaces de tête, repli `PORT` quand `PASV` échoue, fuseau horaire, jeu de
+  caractères des serveurs non UTF-8.
+- ⬜ Réglages du mode actif accessibles : adresse externe, plage de ports locaux, adresse
+  IP locale.
+- ⬜ E-mail anonyme, dossier de téléchargement par défaut, réglages par défaut des sites.
 - ⬜ FXP entre adresses IPv6 (`EPRT`), connexion IPv4/IPv6 « happy eyeballs ».
 - ⬜ Validation sur des serveurs réels (glftpd, vsftpd, ProFTPD, FileZilla Server, IIS,
   OpenSSH).
 
-### File et transferts
-- ⬜ Sauvegarde/chargement et planification de la file ; actions de fin de file (veille,
-  hibernation, arrêt).
-- ⬜ `RS_NOCIRCLE` (le dossier n+1 attend le dossier n), `CompleteFlag`, nombre de
-  répétitions et filtres de dossiers/fichiers de `RushApp.FTP.Transfer`.
-- ⬜ XDupe, conversion de casse des noms, taille du tampon TCP, mode actif forcé par sens.
-- ⬜ Vérifications CRC / SFV / MD5.
+### H — File et transferts
+- ⬜ Pause, modification d'un élément (source, cible, mode, inversion FXP), marquer en
+  échec, retirer les échecs, informations sur la file.
+- ⬜ Enregistrer / charger / restaurer la file (file inachevée au démarrage,
+  enregistrement automatique).
+- ⬜ Options d'essais : par sens, essai cyclique, relance des échecs en fin de file,
+  réinitialisation au démarrage.
+- ⬜ Fin de file : rester connecté / déconnecter, veille, veille prolongée, arrêt, quitter
+  (avec confirmation).
+- ⬜ `RushApp.FTP.Transfer` : `RS_NOCIRCLE`, `CompleteFlag`, `RepeatCount`, `Depth`,
+  `SubCount`, tri, filtres dossiers/fichiers, `%F%` / `%D%`.
+- ⬜ Transfert conditionnel et synchronisation (masques, dates, tailles, suppression des
+  absents).
+- ⬜ XDupe, conversion de casse des noms, mode ASCII et liste ASCII, mode actif forcé,
+  tampon TCP, `MODE Z`, retour en arrière à la reprise, garde d'espace disque, pas de
+  limite de vitesse pour les adresses locales.
+- ⬜ CRC : vérification SFV au téléchargement, `XCRC`, réajout des fichiers défectueux,
+  création de SFV / MD5 ; règles SFV.
+- ⬜ Règles de dossiers : retirer les dossiers vides laissés par un transfert, garder la
+  date du serveur, entrer dans un dossier créé, refuser un dossier du même nom que son
+  parent, retirer la cible de 0 octet quand la source FXP refuse.
 
-### Interface
-- ⬜ Journaux FTP / transferts / système séparés ; barre d'état plus complète.
-- ⬜ Comparaison de répertoires, recherche rapide et recherche sur les sites, export
-  d'arborescence, espace utilisé.
-- ⬜ Concepteur de commandes brutes, gestionnaire de raccourcis, actions de souris,
-  dispositions enregistrées, couleurs.
-- ⬜ Notifications d'événements, icône et verrouillage dans la zone de notification, UPnP.
-- ⬜ `InputQuery` interactif, `RushApp.UI.*`, procédures et fonctions dans les scripts.
+### I — Navigation et opérations sur les fichiers
+- ⬜ Filtre rapide (`Ctrl+F`), marques, sélection par masque, copie de plusieurs noms,
+  renommage multiple.
+- ⬜ CHMOD, déplacer vers, modifier la date, listing brut, colonnes attributs /
+  propriétaire / groupe.
+- ⬜ Comparer des dossiers (nom, taille, partiel, masquer les identiques), chercher sur les
+  sites, espace utilisé, export d'arborescence.
+- ⬜ Cache des dossiers ; voir et modifier les fichiers distants avec des programmes
+  externes.
+- ⬜ Glisser depuis l'Explorateur, coller des fichiers locaux, navigation des deux côtés
+  (`Maj`+signet, `Maj`+double-clic).
+
+### J — Interface
+- ⬜ Journaux FTP / transferts / système séparés, journal sur disque, noms des sites dans
+  le journal ; barre d'état avec durées de la file et texte de progression.
+- ⬜ Boîte RAW (plusieurs lignes, tous les sites), commandes de site prédéfinies,
+  concepteur de commandes.
+- ⬜ Menu des favoris (sites, sites récents), ajout d'une connexion rapide au gestionnaire
+  de sites, téléchargement manuel et URL incrémentées, surveillance du presse-papiers.
+- ⬜ Gestionnaire de raccourcis, actions de souris réglables, confirmations (quitter,
+  fermer un onglet occupé).
+- ⬜ Icône de notification, verrouillage, notifications (sons, bulles, surveillance de
+  dossiers), clignotement de la fenêtre.
+- ⬜ Surlignage, polices, couleurs personnalisées (avec le test de contraste), options de
+  tri, options d'onglets, dispositions enregistrées.
+- ⬜ Gestionnaire de sites : mode liste, import texte brut et UltraFXP, export texte / CSV
+  / HTML / XML (sans mots de passe), mot de passe maître facultatif ; sauvegarde et
+  restauration de la configuration, instance unique ; fenêtre À propos.
+
+### K — Scripts
+- ⬜ Tableaux, index, `case`, procédures et fonctions de l'utilisateur.
+- ⬜ `RushApp.UI.Selection`, `RushApp.UI.Bar` / `Menu`, `OnSwitchLayout`.
+- ⬜ `InputQuery` interactif, `MatchExpr`, `MatchString` ; `ShellExecuteCommand` derrière
+  une règle de confirmation.
+- ⬜ Lecteurs d'écran : annoncer le curseur de la liste de fichiers (les lignes sont nommées
+  dans l'arbre AccessKit, mais le curseur ne déplace pas encore le focus système).
 
 ### Distribution
 - ⬜ Manifeste d'application (`longPathAware`, prise en compte du DPI), icône et ressources
   de version.
 - ⬜ Signature des binaires.
 - ⬜ Installateur (facultatif, en plus du zip portable).
+- ⬜ Redirection de ports UPnP (mode actif, Ident).
 
 ## Plus tard
 

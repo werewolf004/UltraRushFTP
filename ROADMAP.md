@@ -47,41 +47,84 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
   navigation, WCAG 2.2 AA contrast and 24 px targets checked by tests, interface tests
   with `egui_kittest`, consistent states (focus, hover, disabled, errors).
 
-## Next
-
-- ⬜ Screen readers: announce the file-list cursor (rows are named in the AccessKit tree
-  but the cursor does not move the system focus yet).
-
 ## Remaining for FTPRush v2 parity
 
-### Connections and sites
-- ⬜ Keep-alive (`NOOP`) and automatic reconnection when kicked.
-- ⬜ Per-site IP list with rotation on login failure ("Site IP List").
-- ⬜ Ghost login (`!user`) from the site record (scripts already support `RS_GHOST`).
-- ⬜ Per-site Ident name (stored in the record, not yet answered by the server).
-- ⬜ Per-site skip list and "existing file" rules (global only today).
+Every topic of the FTPRush v2 help, with its status, is in
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 69 · 🟡 51 · ⬜ 147 · ➖ 17). The
+planned work is grouped below into blocks, each ending with a release.
+
+### G — Connections and sites
+- ⬜ Keep alive (command list, interval, random command, stop after, log out) and
+  reconnection when kicked or on matching server replies.
+- ⬜ Several hosts per site with rotation on login failure; test availability of sites.
+- ⬜ Ghost login (`!user`, `Shift`+connect) and `-password` (`Ctrl`+connect) from the
+  interface (scripts already support `RS_GHOST` / `RS_INVERT`).
+- ⬜ Per-site settings: Ident name, retries and timeouts, keep alive, resume, `FEAT`,
+  `CLNT`, skip list, priorities, "existing file" rules, separate upload/download accounts.
+- ⬜ Listing settings exposed: `LIST -a` (hidden files), `STAT -l`, custom command, trim
+  spaces, `PORT` fallback when `PASV` fails, time zone, charset of non-UTF-8 servers.
+- ⬜ Active-mode settings exposed: external address, local port range, local IP binding.
+- ⬜ Anonymous e-mail, default download folder, default site settings.
 - ⬜ FXP between IPv6 addresses (`EPRT`), IPv4/IPv6 "happy eyeballs" connection.
 - ⬜ Validation against real servers (glftpd, vsftpd, ProFTPD, FileZilla Server, IIS,
   OpenSSH).
 
-### Queue and transfers
-- ⬜ Queue save/load and scheduling; end-of-queue actions (sleep, hibernate, shut down).
-- ⬜ `RS_NOCIRCLE` (folder n+1 waits for folder n), `CompleteFlag`, repeat count and
-  folder/file filters of `RushApp.FTP.Transfer`.
-- ⬜ XDupe, file-name case conversion, TCP buffer size, forced active mode per direction.
-- ⬜ CRC / SFV / MD5 checks.
+### H — Queue and transfers
+- ⬜ Pause, edit an item (source, target, mode, invert FXP), mark as failed, clear failed,
+  queue information.
+- ⬜ Save / load / restore the queue (unfinished queue at startup, auto save).
+- ⬜ Retry options: per direction, cycle retry, retry failed when the queue ends, reset on
+  start.
+- ⬜ End of queue: idle / disconnect, sleep, hibernate, shut down, exit (with
+  confirmation).
+- ⬜ `RushApp.FTP.Transfer`: `RS_NOCIRCLE`, `CompleteFlag`, `RepeatCount`, `Depth`,
+  `SubCount`, sorting, folder/file filters, `%F%` / `%D%`.
+- ⬜ Conditional transfer and synchronisation (masks, dates, sizes, delete missing).
+- ⬜ XDupe, file-name case conversion, ASCII mode and ASCII list, forced active mode, TCP
+  buffer, `MODE Z`, resume roll-back, free-disk-space guard, speed-limit bypass for local
+  addresses.
+- ⬜ CRC: SFV check on download, `XCRC`, re-add bad files, create SFV / MD5; SFV rules.
+- ⬜ Folder rules: remove empty folders left by a transfer, keep the server date on
+  downloads, enter a folder after creating it, refuse a folder named like its parent,
+  remove the 0-byte target when an FXP source refuses.
 
-### Interface
-- ⬜ Separate FTP / transfer / system logs; richer status bar.
-- ⬜ Directory comparison, quick search and search on sites, tree export, used space.
-- ⬜ Raw command designer, shortcut manager, mouse actions, saved layouts, colours.
-- ⬜ Event notifications, tray icon and lock, UPnP.
-- ⬜ Interactive `InputQuery`, `RushApp.UI.*`, procedures and functions in scripts.
+### I — Browsing and file operations
+- ⬜ Quick filter (`Ctrl+F`), marks, select by mask, copy several names, rename several
+  files.
+- ⬜ CHMOD, move to, modify date, view raw listing, attribute / owner / group columns.
+- ⬜ Compare folders (name, size, partial, hide same), find files on sites, used space,
+  directory tree export.
+- ⬜ Directory cache; view and edit remote files with external programs.
+- ⬜ Drag from Explorer, paste local files, both-sides navigation (`Shift`+bookmark,
+  `Shift`+double-click).
+
+### J — Interface
+- ⬜ Separate FTP / transfer / system logs, log to disk, site names in the log; status bar
+  with queue times and progress text.
+- ⬜ RAW dialog (several lines, all sites), predefined site commands, command designer.
+- ⬜ Favourites menu (sites, recent sites), add a quick connection to the site manager,
+  manual download and incremented URL list, clipboard monitoring.
+- ⬜ Shortcut manager, configurable mouse actions, confirmations (exit, close a busy tab).
+- ⬜ Tray icon, lock, notifications (sounds, pop-ups, folder monitoring), window flash.
+- ⬜ Highlights, fonts, custom colours (with the contrast test), sort options, tab layout
+  options, saved layouts.
+- ⬜ Site manager: list mode, import plain text and UltraFXP, export text / CSV / HTML /
+  XML (without passwords), optional master password; backup and restore of the
+  configuration, single instance; About window.
+
+### K — Scripting
+- ⬜ Arrays, indexes, `case`, user procedures and functions.
+- ⬜ `RushApp.UI.Selection`, `RushApp.UI.Bar` / `Menu`, `OnSwitchLayout`.
+- ⬜ Interactive `InputQuery`, `MatchExpr`, `MatchString`; `ShellExecuteCommand` behind a
+  confirmation rule.
+- ⬜ Screen readers: announce the file-list cursor (rows are named in the AccessKit tree
+  but the cursor does not move the system focus yet).
 
 ### Distribution
 - ⬜ Application manifest (`longPathAware`, DPI awareness), icon and version resources.
 - ⬜ Code signing of the binaries.
 - ⬜ Installer (optional, in addition to the portable zip).
+- ⬜ UPnP port mapping (active mode, Ident).
 
 ## Later
 

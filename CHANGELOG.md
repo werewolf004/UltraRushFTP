@@ -11,6 +11,8 @@ GitHub release with the same tag.
 
 ### Added
 
+- **Parity table** [docs/PARITY.md](docs/PARITY.md): every topic of the FTPRush v2 help
+  (284) with its status; the roadmap is regrouped into blocks G to K from it.
 - **Complete keyboard navigation**: `Tab` / `Shift+Tab` go through every control, `Esc`
   gives the keys back to the file list; in the list, arrows, `Page Up` / `Page Down`,
   `Home` / `End` move a visible cursor (`Shift` extends the selection, `Ctrl+Space`

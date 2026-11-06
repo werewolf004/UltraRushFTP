@@ -105,6 +105,7 @@ Toutes leurs options sont listées dans
 | [docs/ARCHITECTURE.fr.md](docs/ARCHITECTURE.fr.md) | Crates, règles de conception, protocoles, protocole mIRC |
 | [docs/DEPENDENCIES.fr.md](docs/DEPENDENCIES.fr.md) | Toutes les dépendances, leur licence et leur rôle |
 | [ROADMAP.fr.md](ROADMAP.fr.md) | Fait, en cours, prévu |
+| [docs/PARITY.fr.md](docs/PARITY.fr.md) | Chaque sujet de l'aide de FTPRush v2 et son état ici |
 | [CHANGELOG.fr.md](CHANGELOG.fr.md) | Changements par version |
 | [CONTRIBUTING.fr.md](CONTRIBUTING.fr.md) | Environnement de développement, règles, méthode de travail |
 | [SECURITY.fr.md](SECURITY.fr.md) | Modèle de sécurité et signalement d'une vulnérabilité |

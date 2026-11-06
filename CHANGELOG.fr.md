@@ -12,6 +12,9 @@ la traduction.
 
 ### Ajouté
 
+- **Tableau de parité** [docs/PARITY.fr.md](docs/PARITY.fr.md) : chaque sujet de l'aide de
+  FTPRush v2 (284) avec son état ; la feuille de route est regroupée en blocs G à K à partir
+  de ce tableau.
 - **Navigation complète au clavier** : `Tab` / `Maj+Tab` parcourent tous les contrôles,
   `Échap` rend les touches à la liste de fichiers ; dans la liste, les flèches,
   `Page préc.` / `Page suiv.`, `Début` / `Fin` déplacent un curseur visible (`Maj` étend la

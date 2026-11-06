@@ -97,6 +97,7 @@ All options of both are listed in [docs/OPTIONS.md](docs/OPTIONS.md#command-line
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Crates, design rules, protocols, mIRC protocol |
 | [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | Every dependency, its licence and why it is used |
 | [ROADMAP.md](ROADMAP.md) | Done, in progress, planned |
+| [docs/PARITY.md](docs/PARITY.md) | Every topic of the FTPRush v2 help and its status here |
 | [CHANGELOG.md](CHANGELOG.md) | Changes per version |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development set-up, rules, workflow |
 | [SECURITY.md](SECURITY.md) | Security model and how to report a vulnerability |
