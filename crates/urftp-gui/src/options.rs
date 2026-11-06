@@ -12,10 +12,10 @@ use urftp_core::skiplist::{RuleAction, RuleTarget};
 /// Conversions shared with the `urftp` tool.
 pub use urftp_proto::profile::{engine_options, global_proxy};
 
-use crate::theme::{ACCENT, LOG_ERROR, LOG_REPLY};
+use crate::theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Page {
+pub(crate) enum Page {
     General,
     Transfers,
     Speed,
@@ -27,10 +27,10 @@ enum Page {
 }
 
 impl Page {
-    const ALL: [Page; 8] =
+    pub(crate) const ALL: [Page; 8] =
         [Page::General, Page::Transfers, Page::Speed, Page::Exists, Page::Skiplist, Page::Priorities, Page::Proxy, Page::Ident];
 
-    fn label(self) -> String {
+    pub(crate) fn label(self) -> String {
         match self {
             Page::General => t!("options.page_general"),
             Page::Transfers => t!("options.page_transfers"),
@@ -89,10 +89,12 @@ impl OptionsWindow {
                 .id(egui::Id::new("options-window"))
                 .open(&mut open)
                 .default_size([760.0, 520.0])
+                // Below the menu and connection bars, which stay usable.
+                .default_pos([240.0, 110.0])
                 .collapsible(false)
                 .show(ctx, |ui| {
                     if let Some(e) = &self.error {
-                        ui.colored_label(LOG_ERROR, e);
+                        ui.colored_label(theme::colors(ui).error, format!("⚠ {e}"));
                     }
                     ui.horizontal_top(|ui| {
                         ui.vertical(|ui| {
@@ -144,24 +146,12 @@ impl OptionsWindow {
             Page::Transfers => {
                 egui::Grid::new("opt-xfer").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                     let t = &mut s.transfer;
-                    ui.label(t!("options.retries"));
-                    ui.add(egui::DragValue::new(&mut t.retries).range(0..=50));
-                    ui.end_row();
-                    ui.label(t!("options.retry_delay"));
-                    ui.add(egui::DragValue::new(&mut t.retry_delay_secs).range(0..=600));
-                    ui.end_row();
-                    ui.label(t!("options.max_total"));
-                    ui.add(egui::DragValue::new(&mut t.max_total).range(0..=100));
-                    ui.end_row();
-                    ui.label(t!("options.quick_transfers"));
-                    ui.add(egui::DragValue::new(&mut t.quick_connect_transfers).range(0..=50));
-                    ui.end_row();
-                    ui.label(t!("options.connect_timeout"));
-                    ui.add(egui::DragValue::new(&mut t.connect_timeout_secs).range(5..=600));
-                    ui.end_row();
-                    ui.label(t!("options.io_timeout"));
-                    ui.add(egui::DragValue::new(&mut t.io_timeout_secs).range(10..=3600));
-                    ui.end_row();
+                    theme::grid_row(ui, t!("options.retries"), egui::DragValue::new(&mut t.retries).range(0..=50));
+                    theme::grid_row(ui, t!("options.retry_delay"), egui::DragValue::new(&mut t.retry_delay_secs).range(0..=600));
+                    theme::grid_row(ui, t!("options.max_total"), egui::DragValue::new(&mut t.max_total).range(0..=100));
+                    theme::grid_row(ui, t!("options.quick_transfers"), egui::DragValue::new(&mut t.quick_connect_transfers).range(0..=50));
+                    theme::grid_row(ui, t!("options.connect_timeout"), egui::DragValue::new(&mut t.connect_timeout_secs).range(5..=600));
+                    theme::grid_row(ui, t!("options.io_timeout"), egui::DragValue::new(&mut t.io_timeout_secs).range(10..=3600));
                 });
                 ui.add_space(6.0);
                 ui.label(RichText::new(t!("options.timeouts_note")).weak());
@@ -169,12 +159,16 @@ impl OptionsWindow {
             Page::Speed => {
                 let t = &mut s.transfer;
                 egui::Grid::new("opt-speed").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                    ui.label(t!("options.download_limit"));
-                    ui.add(egui::DragValue::new(&mut t.download_limit_kib).range(0..=10_000_000).speed(16));
-                    ui.end_row();
-                    ui.label(t!("options.upload_limit"));
-                    ui.add(egui::DragValue::new(&mut t.upload_limit_kib).range(0..=10_000_000).speed(16));
-                    ui.end_row();
+                    theme::grid_row(
+                        ui,
+                        t!("options.download_limit"),
+                        egui::DragValue::new(&mut t.download_limit_kib).range(0..=10_000_000).speed(16),
+                    );
+                    theme::grid_row(
+                        ui,
+                        t!("options.upload_limit"),
+                        egui::DragValue::new(&mut t.upload_limit_kib).range(0..=10_000_000).speed(16),
+                    );
                 });
                 ui.add_space(6.0);
                 ui.label(RichText::new(t!("options.speed_note")).weak());
@@ -187,14 +181,14 @@ impl OptionsWindow {
                         (t!("options.exists_same"), &mut e.same),
                         (t!("options.exists_larger"), &mut e.larger),
                     ] {
-                        ui.label(&label);
-                        exists_combo(ui, &label, action);
+                        let l = ui.label(&label);
+                        exists_combo(ui, &label, action).labelled_by(l.id);
                         ui.end_row();
                     }
                 });
                 ui.add_space(6.0);
                 ui.checkbox(&mut e.overwrite_if_resume_fails, t!("options.exists_restart"));
-                if ui.small_button(t!("common.defaults")).clicked() {
+                if ui.button(t!("common.defaults")).clicked() {
                     *e = ExistsRules::default();
                 }
             }
@@ -205,19 +199,18 @@ impl OptionsWindow {
                 let id = &mut s.ident;
                 ui.checkbox(&mut id.enabled, t!("options.ident_enable"));
                 egui::Grid::new("opt-ident").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                    ui.label(t!("options.ident_name"));
-                    ui.add(egui::TextEdit::singleline(&mut id.name).hint_text(urftp_core::DEFAULT_IDENT_NAME).desired_width(180.0));
-                    ui.end_row();
-                    ui.label(t!("options.ident_system"));
-                    ui.add(egui::TextEdit::singleline(&mut id.system).desired_width(100.0));
-                    ui.end_row();
-                    ui.label(t!("options.ident_port"));
-                    ui.add(egui::DragValue::new(&mut id.port).range(1..=65535));
-                    ui.end_row();
+                    theme::grid_row(
+                        ui,
+                        t!("options.ident_name"),
+                        theme::single_line(&mut id.name).hint_text(urftp_core::DEFAULT_IDENT_NAME).desired_width(180.0),
+                    );
+                    theme::grid_row(ui, t!("options.ident_system"), theme::single_line(&mut id.system).desired_width(100.0));
+                    theme::grid_row(ui, t!("options.ident_port"), egui::DragValue::new(&mut id.port).range(1..=65535));
                 });
                 ui.add_space(6.0);
                 if let Some((msg, ok)) = &self.ident_status {
-                    ui.colored_label(if *ok { LOG_REPLY } else { LOG_ERROR }, msg);
+                    let p = theme::colors(ui);
+                    ui.colored_label(if *ok { p.success } else { p.error }, format!("{} {msg}", if *ok { "✔" } else { "⚠" }));
                 }
                 ui.label(RichText::new(t!("options.ident_note")).weak());
             }
@@ -243,16 +236,20 @@ fn language_combo(ui: &mut egui::Ui, value: &mut LanguageSetting) {
         LanguageSetting::French => Lang::Fr.native_name().to_string(),
     };
     ui.horizontal(|ui| {
-        ui.label(t!("options.language"));
-        egui::ComboBox::from_id_salt("opt-language").selected_text(label(*value)).show_ui(ui, |ui| {
-            for v in [LanguageSetting::System, LanguageSetting::English, LanguageSetting::French] {
-                ui.selectable_value(value, v, label(v));
-            }
-        });
+        let l = ui.label(t!("options.language"));
+        egui::ComboBox::from_id_salt("opt-language")
+            .selected_text(label(*value))
+            .show_ui(ui, |ui| {
+                for v in [LanguageSetting::System, LanguageSetting::English, LanguageSetting::French] {
+                    ui.selectable_value(value, v, label(v));
+                }
+            })
+            .response
+            .labelled_by(l.id);
     });
 }
 
-fn exists_combo(ui: &mut egui::Ui, id: &str, a: &mut ExistsAction) {
+fn exists_combo(ui: &mut egui::Ui, id: &str, a: &mut ExistsAction) -> egui::Response {
     let label = |a: ExistsAction| match a {
         ExistsAction::Resume => t!("exists.resume"),
         ExistsAction::Skip => t!("exists.skip"),
@@ -260,22 +257,33 @@ fn exists_combo(ui: &mut egui::Ui, id: &str, a: &mut ExistsAction) {
         ExistsAction::Overwrite => t!("exists.overwrite"),
         ExistsAction::Ask => t!("exists.ask"),
     };
-    egui::ComboBox::from_id_salt(id).selected_text(label(*a)).width(220.0).show_ui(ui, |ui| {
-        for v in [ExistsAction::Resume, ExistsAction::Skip, ExistsAction::Rename, ExistsAction::Overwrite, ExistsAction::Ask] {
-            ui.selectable_value(a, v, label(v));
-        }
-    });
+    egui::ComboBox::from_id_salt(id)
+        .selected_text(label(*a))
+        .width(220.0)
+        .show_ui(ui, |ui| {
+            for v in [ExistsAction::Resume, ExistsAction::Skip, ExistsAction::Rename, ExistsAction::Overwrite, ExistsAction::Ask] {
+                ui.selectable_value(a, v, label(v));
+            }
+        })
+        .response
 }
 
-/// Mask field with a "regex" box and a warning for an invalid expression.
-fn mask_field(ui: &mut egui::Ui, m: &mut MaskSetting, width: f32) {
+/// Mask field with a "regex" box; an invalid expression is shown in red *and* with a
+/// written warning (the colour is never the only signal).
+fn mask_field(ui: &mut egui::Ui, m: &mut MaskSetting, width: f32, name: &str) {
     let invalid = m.regex && m.compile().is_err();
-    let mut edit = egui::TextEdit::singleline(&mut m.mask).desired_width(width).hint_text("*.nfo");
+    let error = theme::colors(ui).error;
+    let mut edit = theme::single_line(&mut m.mask).desired_width(width).hint_text("*.nfo");
     if invalid {
-        edit = edit.text_color(LOG_ERROR);
+        edit = edit.text_color(error);
     }
-    ui.add(edit).on_hover_text(if invalid { t!("options.mask_invalid") } else { t!("options.mask_wildcard") });
-    ui.checkbox(&mut m.regex, "regex");
+    let r = ui.add(edit).on_hover_text(if invalid { t!("options.mask_invalid") } else { t!("options.mask_wildcard") });
+    theme::name(&r, name);
+    let rx = ui.checkbox(&mut m.regex, "regex");
+    theme::name(&rx, t!("options.mask_regex", mask = name));
+    if invalid {
+        ui.colored_label(error, format!("⚠ {}", t!("options.mask_invalid_short")));
+    }
 }
 
 fn skiplist_ui(ui: &mut egui::Ui, s: &mut Settings) {
@@ -298,7 +306,7 @@ fn skiplist_ui(ui: &mut egui::Ui, s: &mut Settings) {
                     ui.selectable_value(&mut r.action, RuleAction::Skip, t!("skip.skip"));
                     ui.selectable_value(&mut r.action, RuleAction::Allow, t!("skip.allow"));
                 });
-            ui.horizontal(|ui| mask_field(ui, &mut r.mask, 150.0));
+            ui.horizontal(|ui| mask_field(ui, &mut r.mask, 150.0, &t!("options.rule_mask", n = i + 1)));
             egui::ComboBox::from_id_salt(("skip-tgt", i))
                 .selected_text(match r.target {
                     RuleTarget::Files => t!("skip.files"),
@@ -311,21 +319,16 @@ fn skiplist_ui(ui: &mut egui::Ui, s: &mut Settings) {
                     ui.selectable_value(&mut r.target, RuleTarget::Dirs, t!("skip.dirs"));
                     ui.selectable_value(&mut r.target, RuleTarget::Both, t!("skip.both"));
                 });
-            ui.checkbox(&mut r.directions.upload, "⬆").on_hover_text(t!("options.uploads"));
-            ui.checkbox(&mut r.directions.download, "⬇").on_hover_text(t!("options.downloads"));
-            ui.checkbox(&mut r.directions.fxp, "↔").on_hover_text("FXP");
+            for (value, icon, label) in [
+                (&mut r.directions.upload, "⬆", t!("options.uploads")),
+                (&mut r.directions.download, "⬇", t!("options.downloads")),
+                (&mut r.directions.fxp, "↔", t!("queue.kind_fxp")),
+            ] {
+                let c = ui.checkbox(value, icon).on_hover_text(&label);
+                theme::name(&c, label);
+            }
             ui.checkbox(&mut r.full_path, t!("options.path")).on_hover_text(t!("options.path_hint"));
-            ui.horizontal(|ui| {
-                if ui.add_enabled(i > 0, egui::Button::new("⏶").small()).clicked() {
-                    swap = Some((i, i - 1));
-                }
-                if ui.add_enabled(i + 1 < n, egui::Button::new("⏷").small()).clicked() {
-                    swap = Some((i, i + 1));
-                }
-                if ui.small_button("✕").clicked() {
-                    remove = Some(i);
-                }
-            });
+            ui.horizontal(|ui| reorder_buttons(ui, i, n, &mut swap, &mut remove));
             ui.end_row();
         }
     });
@@ -340,6 +343,21 @@ fn skiplist_ui(ui: &mut egui::Ui, s: &mut Settings) {
     }
 }
 
+/// Move up / move down / remove buttons of row `i` out of `n`.
+fn reorder_buttons(ui: &mut egui::Ui, i: usize, n: usize, swap: &mut Option<(usize, usize)>, remove: &mut Option<usize>) {
+    let up = ui.add_enabled_ui(i > 0, |ui| theme::icon_button(ui, "⏶", t!("common.move_up"))).inner;
+    if up.clicked() {
+        *swap = Some((i, i - 1));
+    }
+    let down = ui.add_enabled_ui(i + 1 < n, |ui| theme::icon_button(ui, "⏷", t!("common.move_down"))).inner;
+    if down.clicked() {
+        *swap = Some((i, i + 1));
+    }
+    if theme::icon_button(ui, "✕", t!("common.remove")).clicked() {
+        *remove = Some(i);
+    }
+}
+
 fn priorities_ui(ui: &mut egui::Ui, list: &mut Vec<MaskSetting>) {
     ui.label(RichText::new(t!("options.prio_note")).weak());
     ui.add_space(4.0);
@@ -348,17 +366,9 @@ fn priorities_ui(ui: &mut egui::Ui, list: &mut Vec<MaskSetting>) {
     let n = list.len();
     for (i, m) in list.iter_mut().enumerate() {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("{}.", i + 1)).color(ACCENT));
-            mask_field(ui, m, 220.0);
-            if ui.add_enabled(i > 0, egui::Button::new("⏶").small()).clicked() {
-                swap = Some((i, i - 1));
-            }
-            if ui.add_enabled(i + 1 < n, egui::Button::new("⏷").small()).clicked() {
-                swap = Some((i, i + 1));
-            }
-            if ui.small_button("✕").clicked() {
-                remove = Some(i);
-            }
+            ui.label(RichText::new(format!("{}.", i + 1)).color(theme::colors(ui).accent_text));
+            mask_field(ui, m, 220.0, &t!("options.prio_mask", n = i + 1));
+            reorder_buttons(ui, i, n, &mut swap, &mut remove);
         });
     }
     if let Some((a, b)) = swap {
@@ -389,21 +399,20 @@ fn proxy_ui(ui: &mut egui::Ui, g: &mut GlobalProxy) {
                 }
             });
             ui.end_row();
-            ui.label(t!("options.proxy_host_port"));
+            let l = ui.label(t!("options.proxy_host_port"));
             ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut p.host).desired_width(200.0));
-                ui.add(egui::DragValue::new(&mut p.port).range(1..=65535));
+                let h = ui.add(theme::single_line(&mut p.host).desired_width(200.0));
+                theme::name(&h, t!("common.host"));
+                ui.add(egui::DragValue::new(&mut p.port).range(1..=65535)).labelled_by(l.id);
             });
             ui.end_row();
-            ui.label(t!("common.user"));
-            ui.add(egui::TextEdit::singleline(&mut p.user).desired_width(160.0));
-            ui.end_row();
-            ui.label(t!("common.password"));
-            ui.add(egui::TextEdit::singleline(&mut p.password).password(true).desired_width(160.0));
-            ui.end_row();
-            ui.label(t!("options.proxy_exceptions"));
-            ui.add(egui::TextEdit::singleline(&mut g.exceptions).hint_text("220.67.*;*.lan").desired_width(260.0));
-            ui.end_row();
+            theme::grid_row(ui, t!("common.user"), theme::single_line(&mut p.user).desired_width(160.0));
+            theme::grid_row(ui, t!("common.password"), theme::single_line(&mut p.password).password(true).desired_width(160.0));
+            theme::grid_row(
+                ui,
+                t!("options.proxy_exceptions"),
+                theme::single_line(&mut g.exceptions).hint_text("220.67.*;*.lan").desired_width(260.0),
+            );
         });
         ui.checkbox(&mut p.data_channel, t!("options.proxy_data"));
         ui.checkbox(&mut g.bypass_local, t!("options.proxy_bypass_local"));

@@ -1,6 +1,6 @@
 [package]
 name = "urftp-cli"
-description = "Ligne de commande d'UltraRushFTP."
+description = "Command-line tool of UltraRushFTP."
 version.workspace = true
 edition.workspace = true
 license-file.workspace = true

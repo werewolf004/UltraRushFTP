@@ -19,8 +19,9 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | File → Options… | Opens the Options window (also `⚙`) |
 | File → Quit | Quits |
 | View → Light theme / Dark theme | Switches the theme (also stored in the options) |
+| Help → Keyboard shortcuts | Lists the shortcuts below (also `F1`) |
 | Quick connect | Protocol (FTP, FTPS explicit, FTPS implicit, SFTP), host, port, user, password, **Connect**: opens the site in the right panel of the current tab (or in a new tab, see *General*) |
-| Tabs | One tab per site container; `✕` closes it, the title is the host or "Tab n" |
+| Tabs | One tab per site container; `✕` closes it, the title is the host or "Tab n"; `Ctrl+T` new, `Ctrl+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` next / previous |
 
 ### File panels
 
@@ -33,10 +34,27 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | Rename | right-click → Rename | `F2` |
 | Delete (with confirmation) | right-click → Delete | `Del` |
 | Transfer to the other panel | `Transfer` button, drag and drop, right-click | `Space` or `Insert` |
-| Switch panel | click | `Tab` |
-| Select all / several | `Ctrl`+click, `Shift`+click | `Ctrl+A` |
+| Switch panel | click | `F6` |
+| Move the cursor | — | arrows, `Page Up` / `Page Down`, `Home` / `End` |
+| Select all / several | `Ctrl`+click, `Shift`+click | `Ctrl+A`, `Shift`+movement, `Ctrl+Space` (row at the cursor) |
 | Copy the full path | right-click → Copy path | — |
 | Sort | click a column header (again: reverse order) | — |
+
+The file-list keys act on the active panel (marked `▸`, cursor outlined) when no control
+has the keyboard focus. `Tab` / `Shift+Tab` move between the controls of the window and
+`Esc` gives the keys back to the list.
+
+![Keyboard shortcuts](images/shortcuts.en.png)
+
+### Accessibility
+
+- Every control has a name for screen readers (AccessKit), including symbol buttons and
+  fields that only show a placeholder; file rows are read as "name, size, date".
+- Both themes meet WCAG 2.2 AA contrast (4.5:1 for text, 3:1 for focus and state
+  indicators) and pointer targets are at least 24 px or spaced as WCAG 2.5.8 allows; tests
+  check both.
+- States are never shown by colour alone (symbols, `⚠`, written warnings).
+- Confirmations of irreversible actions start on **Cancel**.
 
 ### Queue
 
@@ -254,6 +272,7 @@ Use `mirc/x86/rushmirc.dll` for 32-bit mIRC and `mirc/x64/rushmirc.dll` for 64-b
 | `URUSHFTP_IPC_CLASS` | Window class used for the mIRC link instead of `TfmRush` (tests next to a running FTPRush) |
 | `URUSHFTP_OPEN_SITES` | Development: opens the site manager on this site id |
 | `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 7) |
+| `URUSHFTP_OPEN_SHORTCUTS` | Development: opens the keyboard shortcuts window |
 
 ## Files
 

@@ -1,6 +1,6 @@
 [package]
 name = "urftp-core"
-description = "Modèle de données d'UltraRushFTP : sites, signets, onglets, file d'attente, skiplist."
+description = "Data model of UltraRushFTP: sites, bookmarks, tabs, queue, skip list."
 version.workspace = true
 edition.workspace = true
 license-file.workspace = true

@@ -1,4 +1,4 @@
-//! Interface graphique d'UltraRushFTP (egui + egui_dock).
+//! Graphical interface of UltraRushFTP (egui + egui_dock).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
@@ -9,6 +9,10 @@ mod sites;
 mod theme;
 
 use eframe::egui;
+
+/// Serialises the tests that change the interface language (a process-wide setting).
+#[cfg(test)]
+static TEST_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 /// Fatal startup failure.
 #[derive(Debug, thiserror::Error)]

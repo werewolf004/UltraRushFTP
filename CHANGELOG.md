@@ -9,6 +9,43 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Added
+
+- **Complete keyboard navigation**: `Tab` / `Shift+Tab` go through every control, `Esc`
+  gives the keys back to the file list; in the list, arrows, `Page Up` / `Page Down`,
+  `Home` / `End` move a visible cursor (`Shift` extends the selection, `Ctrl+Space`
+  toggles a row); `F6` switches panel; `Ctrl+T`, `Ctrl+W`, `Ctrl+Tab` and
+  `Ctrl+Shift+Tab` manage the tabs.
+- **Help → Keyboard shortcuts** window (`F1`).
+- **Accessible names** for every control (screen readers): symbol buttons, fields that only
+  had a placeholder, labels linked to their fields, file rows read with their size and
+  date.
+- **Interface tests** (`egui_kittest`) that drive the real window with the keyboard and
+  check, in English and French, that every control is named and that pointer targets meet
+  WCAG 2.5.8 (24 px, or enough spacing).
+- **Contrast test**: every text and indicator colour of both themes is measured against
+  the WCAG 2.2 AA ratios (4.5:1 text, 3:1 focus and state indicators).
+
+### Changed
+
+- Colours now come from one palette per theme; the light theme uses darker shades so that
+  log, state and error texts stay readable, and hovered rows get lighter instead of darker.
+- Primary and destructive buttons, text fields (24 px high) and the focus outline (2 px)
+  look the same everywhere.
+- States are no longer shown by colour alone: connection state symbol (`●` `◌` `✕`) with a
+  tooltip, `⚠` before errors, written warning for an invalid mask.
+- Confirmation dialogs (delete, untrusted server) open with the keyboard on **Cancel**;
+  `Esc` cancels them.
+- `F6` replaces `Tab` to switch panel (`Tab` now moves between controls, as in Windows).
+- The Options, Site manager and shortcuts windows open below the menu and connection bars.
+
+### Fixed
+
+- The **Cancel** buttons of the file dialogs and of the trust dialog were always in
+  French.
+- Text fields of the file dialogs kept the focus on every frame, so `Tab` could not reach
+  the buttons.
+
 ## [0.1.0] - 2026-11-05
 
 First version: protocol engine, tabbed interface, site manager, options, scripting, mIRC

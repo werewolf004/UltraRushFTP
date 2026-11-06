@@ -19,8 +19,9 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | Fichier → Options… | Ouvre la fenêtre Options (aussi `⚙`) |
 | Fichier → Quitter | Quitte |
 | Affichage → Thème clair / Thème sombre | Change le thème (enregistré aussi dans les options) |
+| Aide → Raccourcis clavier | Liste les raccourcis ci-dessous (aussi `F1`) |
 | Connexion rapide | Protocole (FTP, FTPS explicite, FTPS implicite, SFTP), hôte, port, utilisateur, mot de passe, **Connexion** : ouvre le site dans le panneau droit de l'onglet courant (ou dans un nouvel onglet, voir *Général*) |
-| Onglets | Un onglet par conteneur de sites ; `✕` le ferme, le titre est l'hôte ou « Onglet n » |
+| Onglets | Un onglet par conteneur de sites ; `✕` le ferme, le titre est l'hôte ou « Onglet n » ; `Ctrl+T` nouveau, `Ctrl+W` fermer, `Ctrl+Tab` / `Ctrl+Maj+Tab` suivant / précédent |
 
 ### Panneaux de fichiers
 
@@ -33,10 +34,28 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | Renommer | clic droit → Renommer | `F2` |
 | Supprimer (avec confirmation) | clic droit → Supprimer | `Suppr` |
 | Transférer vers l'autre panneau | bouton `Transférer`, glisser-déposer, clic droit | `Espace` ou `Inser` |
-| Changer de panneau | clic | `Tab` |
-| Tout sélectionner / plusieurs | `Ctrl`+clic, `Maj`+clic | `Ctrl+A` |
+| Changer de panneau | clic | `F6` |
+| Déplacer le curseur | — | flèches, `Page préc.` / `Page suiv.`, `Début` / `Fin` |
+| Tout sélectionner / plusieurs | `Ctrl`+clic, `Maj`+clic | `Ctrl+A`, `Maj`+déplacement, `Ctrl+Espace` (ligne du curseur) |
 | Copier le chemin complet | clic droit → Copier le chemin | — |
 | Trier | clic sur un en-tête de colonne (à nouveau : ordre inverse) | — |
+
+Les touches de la liste agissent sur le panneau actif (marqué `▸`, curseur encadré) quand
+aucun contrôle n'a le focus clavier. `Tab` / `Maj+Tab` passent d'un contrôle à l'autre et
+`Échap` rend les touches à la liste.
+
+![Raccourcis clavier](images/shortcuts.fr.png)
+
+### Accessibilité
+
+- Chaque contrôle a un nom pour les lecteurs d'écran (AccessKit), y compris les boutons à
+  symbole et les champs qui n'affichent qu'un texte indicatif ; les lignes de fichiers sont
+  lues « nom, taille, date ».
+- Les deux thèmes respectent le contraste WCAG 2.2 AA (4,5:1 pour le texte, 3:1 pour le
+  focus et les indicateurs d'état) et les cibles font au moins 24 px ou sont espacées comme
+  le permet le critère WCAG 2.5.8 ; des tests vérifient les deux.
+- Un état n'est jamais indiqué par la couleur seule (symboles, `⚠`, avertissements écrits).
+- Les confirmations d'actions irréversibles démarrent sur **Annuler**.
 
 ### File d'attente
 
@@ -258,6 +277,7 @@ bits.
 | `URUSHFTP_IPC_CLASS` | Classe de fenêtre de la liaison mIRC à la place de `TfmRush` (tests à côté d'un FTPRush ouvert) |
 | `URUSHFTP_OPEN_SITES` | Développement : ouvre le gestionnaire de sites sur ce numéro de site |
 | `URUSHFTP_OPEN_OPTIONS` | Développement : ouvre la fenêtre Options sur cette page (0 à 7) |
+| `URUSHFTP_OPEN_SHORTCUTS` | Développement : ouvre la fenêtre des raccourcis clavier |
 
 ## Fichiers
 

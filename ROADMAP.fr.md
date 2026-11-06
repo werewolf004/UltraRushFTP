@@ -46,14 +46,15 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 - ✅ C — Code en anglais ; interface et CLI en anglais et en français.
 - ✅ D — Documentation en anglais et en français avec captures, références des options et
   des dépendances, licence propriétaire.
+- ✅ E — Version 0.1.0 : premier tag, binaires et journal des changements sur GitHub.
+- ✅ F — Normes UI/UX (0.2.0) : nom accessible pour chaque contrôle, navigation complète au
+  clavier, contraste WCAG 2.2 AA et cibles de 24 px vérifiés par des tests, tests de
+  l'interface avec `egui_kittest`, états cohérents (focus, survol, désactivé, erreurs).
 
 ## Ensuite
 
-- ⬜ **E — version 0.1.0** : premier tag, binaires et journal des changements sur GitHub.
-- ⬜ **F — normes UI/UX et tests de l'interface** : libellés AccessKit pour chaque contrôle,
-  navigation complète au clavier, contraste WCAG AA vérifié par un test, tests automatiques
-  de l'interface (`egui_kittest`), espacements et états cohérents (focus, survol, désactivé,
-  erreurs).
+- ⬜ Lecteurs d'écran : annoncer le curseur de la liste de fichiers (les lignes sont nommées
+  dans l'arbre AccessKit, mais le curseur ne déplace pas encore le focus système).
 
 ## Reste à faire pour la parité avec FTPRush v2
 

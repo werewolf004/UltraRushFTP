@@ -1,6 +1,6 @@
 [package]
 name = "urftp-gui"
-description = "Interface graphique Windows d'UltraRushFTP (onglets, panneaux, file d'attente)."
+description = "Windows graphical interface of UltraRushFTP (tabs, file panels, queue)."
 version.workspace = true
 edition.workspace = true
 license-file.workspace = true
@@ -28,6 +28,9 @@ tokio = { workspace = true, features = ["rt-multi-thread", "sync", "fs", "time"]
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+
+[dev-dependencies]
+egui_kittest = { version = "0.36.2", features = ["eframe"] }
 
 [lints]
 workspace = true

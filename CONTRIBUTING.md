@@ -45,6 +45,13 @@ CI runs the same checks on every push and pull request; a red CI blocks the merg
 - **Tests**: every change comes with unit tests, and integration tests against the local
   test servers (`crates/urftp-proto/tests/common`) for protocol behaviour. Tests never
   reach the Internet and never talk to a running FTPRush (use `URUSHFTP_IPC_CLASS`).
+- **Interface**: take colours from `theme::colors(ui)` (never a literal colour), and use
+  the helpers of `theme.rs` — `icon_button` for a symbol button, `name` for a control
+  without visible text, `labelled` / `grid_row` to link a label to its field,
+  `single_line` for text fields, `primary_button` / `danger_button`. The theme and
+  interface tests (`cargo test -p urftp-gui`) fail on a missing name, a target under
+  24 px or a contrast below WCAG 2.2 AA; add a test in `app/ui_tests.rs` for new keyboard
+  behaviour.
 - **Documentation**: keep the English and French documents in step (`*.md` / `*.fr.md`).
   Update [docs/OPTIONS.md](docs/OPTIONS.md) for every new setting,
   [CHANGELOG.md](CHANGELOG.md) under *Unreleased*, and the screenshots with

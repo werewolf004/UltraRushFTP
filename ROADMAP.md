@@ -42,13 +42,15 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 - ✅ C — English code base; English and French interface and CLI.
 - ✅ D — Documentation in English and French with screenshots, options and dependency
   references, proprietary licence.
+- ✅ E — Release 0.1.0: first tag, binaries and changelog on GitHub.
+- ✅ F — UI/UX standards (0.2.0): accessible name for every control, complete keyboard
+  navigation, WCAG 2.2 AA contrast and 24 px targets checked by tests, interface tests
+  with `egui_kittest`, consistent states (focus, hover, disabled, errors).
 
 ## Next
 
-- ⬜ **E — release 0.1.0**: first tag, binaries and changelog on GitHub.
-- ⬜ **F — UI/UX standards and interface tests**: AccessKit labels for every control,
-  complete keyboard navigation, WCAG AA contrast checked by a test, automated interface
-  tests (`egui_kittest`), consistent spacing and states (focus, hover, disabled, errors).
+- ⬜ Screen readers: announce the file-list cursor (rows are named in the AccessKit tree
+  but the cursor does not move the system focus yet).
 
 ## Remaining for FTPRush v2 parity
 

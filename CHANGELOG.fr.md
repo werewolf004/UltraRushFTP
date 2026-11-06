@@ -10,6 +10,48 @@ la traduction.
 
 ## [Non publié]
 
+### Ajouté
+
+- **Navigation complète au clavier** : `Tab` / `Maj+Tab` parcourent tous les contrôles,
+  `Échap` rend les touches à la liste de fichiers ; dans la liste, les flèches,
+  `Page préc.` / `Page suiv.`, `Début` / `Fin` déplacent un curseur visible (`Maj` étend la
+  sélection, `Ctrl+Espace` sélectionne ou désélectionne une ligne) ; `F6` change de
+  panneau ; `Ctrl+T`, `Ctrl+W`, `Ctrl+Tab` et `Ctrl+Maj+Tab` gèrent les onglets.
+- Fenêtre **Aide → Raccourcis clavier** (`F1`).
+- **Noms accessibles** pour chaque contrôle (lecteurs d'écran) : boutons à symbole, champs
+  qui n'avaient qu'un texte indicatif, libellés reliés à leurs champs, lignes de fichiers
+  lues avec leur taille et leur date.
+- **Tests de l'interface** (`egui_kittest`) qui pilotent la vraie fenêtre au clavier et
+  vérifient, en anglais et en français, que chaque contrôle a un nom et que les cibles
+  respectent le critère WCAG 2.5.8 (24 px, ou un espacement suffisant).
+- **Test de contraste** : chaque couleur de texte et d'indicateur des deux thèmes est
+  mesurée par rapport aux rapports WCAG 2.2 AA (4,5:1 pour le texte, 3:1 pour le focus et
+  les indicateurs d'état).
+
+### Modifié
+
+- Les couleurs viennent d'une palette par thème ; le thème clair utilise des teintes plus
+  foncées pour que les textes du journal, des états et des erreurs restent lisibles, et
+  les lignes survolées s'éclaircissent au lieu de s'assombrir.
+- Les boutons principaux et destructifs, les champs de texte (24 px de haut) et le contour
+  de focus (2 px) ont le même aspect partout.
+- Les états ne sont plus indiqués par la couleur seule : symbole d'état de connexion (`●`
+  `◌` `✕`) avec une infobulle, `⚠` devant les erreurs, avertissement écrit pour un masque
+  invalide.
+- Les confirmations (suppression, serveur non approuvé) s'ouvrent avec le clavier sur
+  **Annuler** ; `Échap` les annule.
+- `F6` remplace `Tab` pour changer de panneau (`Tab` passe désormais d'un contrôle à
+  l'autre, comme dans Windows).
+- Les fenêtres Options, Gestionnaire de sites et Raccourcis s'ouvrent sous les barres de
+  menus et de connexion.
+
+### Corrigé
+
+- Les boutons **Annuler** des boîtes de dialogue de fichiers et de la boîte d'approbation
+  étaient toujours en français.
+- Les champs de texte des boîtes de dialogue de fichiers reprenaient le focus à chaque
+  image : `Tab` ne pouvait pas atteindre les boutons.
+
 ## [0.1.0] - 2026-11-05
 
 Première version : moteur de protocoles, interface à onglets, gestionnaire de sites,

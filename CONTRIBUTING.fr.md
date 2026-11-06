@@ -49,6 +49,13 @@ la fusion.
   contre les serveurs de test locaux (`crates/urftp-proto/tests/common`) pour le
   comportement des protocoles. Les tests n'accèdent jamais à Internet et ne parlent jamais
   à un FTPRush ouvert (utiliser `URUSHFTP_IPC_CLASS`).
+- **Interface** : prendre les couleurs dans `theme::colors(ui)` (jamais une couleur en dur)
+  et utiliser les aides de `theme.rs` — `icon_button` pour un bouton à symbole, `name` pour
+  un contrôle sans texte visible, `labelled` / `grid_row` pour relier un libellé à son
+  champ, `single_line` pour les champs de texte, `primary_button` / `danger_button`. Les
+  tests du thème et de l'interface (`cargo test -p urftp-gui`) échouent sur un nom
+  manquant, une cible de moins de 24 px ou un contraste sous WCAG 2.2 AA ; ajouter un test
+  dans `app/ui_tests.rs` pour tout nouveau comportement clavier.
 - **Documentation** : garder les documents anglais et français alignés (`*.md` /
   `*.fr.md`). Mettre à jour [docs/OPTIONS.fr.md](docs/OPTIONS.fr.md) pour chaque nouveau
   réglage, [CHANGELOG.fr.md](CHANGELOG.fr.md) sous *Non publié* (et la version anglaise),

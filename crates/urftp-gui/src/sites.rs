@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use urftp_i18n::t;
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use urftp_core::import::{self, ImportResult, ImportWarning};
 use urftp_core::settings::Settings;
 use urftp_core::site::{
@@ -14,7 +14,7 @@ use urftp_core::sitestore;
 use urftp_proto::session::SiteProfile;
 
 use crate::browser::TrustKind;
-use crate::theme::{ACCENT, LOG_ERROR, LOG_REPLY};
+use crate::theme;
 
 /// Connection profile from a site record and the global options (global proxy,
 /// timeouts).
@@ -151,6 +151,8 @@ impl SiteManager {
             .id(egui::Id::new("site-manager"))
             .open(&mut open)
             .default_size([900.0, 600.0])
+            // Below the menu and connection bars, which stay usable.
+            .default_pos([240.0, 110.0])
             .min_width(720.0)
             .collapsible(false)
             .show(ctx, |ui| {
@@ -246,7 +248,8 @@ impl SiteManager {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Selection::Site(id) = self.selection {
                     let enabled = self.book.find(id).is_some_and(|s| s.enabled && !s.host.trim().is_empty());
-                    let btn = egui::Button::new(RichText::new(t!("sites.connect")).color(Color32::WHITE)).fill(ACCENT);
+                    let p = theme::colors(ui);
+                    let btn = egui::Button::new(RichText::new(t!("sites.connect")).color(p.on_accent)).fill(p.accent_fill);
                     if ui.add_enabled(enabled, btn).clicked() {
                         self.save();
                         self.connect = Some(id);
@@ -273,8 +276,7 @@ impl SiteManager {
                 if !is_root {
                     let before = g.name.clone();
                     ui.horizontal(|ui| {
-                        ui.label(t!("sites.folder_name"));
-                        ui.text_edit_singleline(&mut g.name);
+                        theme::labelled(ui, t!("sites.folder_name"), theme::single_line(&mut g.name));
                     });
                     if g.name != before {
                         self.mark_dirty(ui);
@@ -310,10 +312,15 @@ impl SiteManager {
                 ui.label(t!("sites.delete_confirm", what = what));
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(RichText::new(t!("common.delete")).color(Color32::WHITE)).fill(LOG_ERROR)).clicked() {
+                    if theme::danger_button(ui, t!("common.delete")).clicked() {
                         answer = Some(true);
                     }
-                    if ui.button(t!("common.cancel")).clicked() {
+                    let cancel = ui.button(t!("common.cancel"));
+                    // Irreversible: the keyboard starts on Cancel.
+                    if ui.memory(|m| m.focused().is_none()) {
+                        cancel.request_focus();
+                    }
+                    if cancel.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                         answer = Some(false);
                     }
                 });
@@ -344,7 +351,9 @@ impl SiteManager {
             let mut close = false;
             egui::Modal::new(egui::Id::new("site-report")).show(ctx, |ui| {
                 ui.set_max_width(560.0);
-                ui.heading(RichText::new(&r.title).color(if r.error { LOG_ERROR } else { LOG_REPLY }));
+                let p = theme::colors(ui);
+                let mark = if r.error { "⚠" } else { "✔" };
+                ui.heading(RichText::new(format!("{mark} {}", r.title)).color(if r.error { p.error } else { p.success }));
                 ui.add_space(6.0);
                 egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
                     for l in &r.lines {
@@ -352,7 +361,11 @@ impl SiteManager {
                     }
                 });
                 ui.add_space(8.0);
-                if ui.button(t!("common.ok")).clicked() {
+                let ok = ui.button(t!("common.ok"));
+                if ui.memory(|m| m.focused().is_none()) {
+                    ok.request_focus();
+                }
+                if ok.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                     close = true;
                 }
             });
@@ -421,18 +434,20 @@ pub fn proto_label(p: SiteProtocol) -> String {
     }
 }
 
-fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
-    ui.label(label);
-    add(ui);
+/// Grid row: a label, then controls; `add` receives the label id, for `labelled_by`.
+fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui, egui::Id)) {
+    let l = ui.label(label);
+    add(ui, l.id);
     ui.end_row();
 }
 
-fn optional_limit(ui: &mut egui::Ui, value: &mut Option<u32>) {
+fn optional_limit(ui: &mut egui::Ui, value: &mut Option<u32>, label: egui::Id, name: &str) {
     let mut on = value.is_some();
     ui.horizontal(|ui| {
-        ui.checkbox(&mut on, "");
+        let c = ui.checkbox(&mut on, "");
+        theme::name(&c, t!("site.limit_on", limit = name));
         let mut v = value.unwrap_or(1);
-        ui.add_enabled(on, egui::DragValue::new(&mut v).range(0..=50));
+        ui.add_enabled(on, egui::DragValue::new(&mut v).range(0..=50)).labelled_by(label);
         *value = on.then_some(v);
     });
 }
@@ -442,36 +457,41 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
     ui.add_space(4.0);
     section(ui, &t!("site.connection"), |ui| {
         egui::Grid::new("site-conn").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-            row(ui, &t!("common.name"), |ui| {
-                ui.add(egui::TextEdit::singleline(&mut s.name).desired_width(320.0));
+            row(ui, &t!("common.name"), |ui, l| {
+                ui.add(theme::single_line(&mut s.name).desired_width(320.0)).labelled_by(l);
             });
-            row(ui, &t!("site.protocol"), |ui| {
+            row(ui, &t!("site.protocol"), |ui, l| {
                 let before = s.protocol;
-                egui::ComboBox::from_id_salt("site-proto").selected_text(proto_label(s.protocol)).show_ui(ui, |ui| {
-                    for p in SiteProtocol::ALL {
-                        ui.selectable_value(&mut s.protocol, p, proto_label(p));
-                    }
-                });
+                egui::ComboBox::from_id_salt("site-proto")
+                    .selected_text(proto_label(s.protocol))
+                    .show_ui(ui, |ui| {
+                        for p in SiteProtocol::ALL {
+                            ui.selectable_value(&mut s.protocol, p, proto_label(p));
+                        }
+                    })
+                    .response
+                    .labelled_by(l);
                 if s.protocol != before && s.port == before.default_port() {
                     s.port = s.protocol.default_port();
                 }
             });
-            row(ui, &t!("common.host"), |ui| {
-                ui.add(egui::TextEdit::singleline(&mut s.host).hint_text(t!("site.host_hint")).desired_width(240.0));
-                ui.label(t!("common.port"));
-                ui.add(egui::DragValue::new(&mut s.port).range(1..=65535));
+            row(ui, &t!("common.host"), |ui, l| {
+                ui.add(theme::single_line(&mut s.host).hint_text(t!("site.host_hint")).desired_width(240.0)).labelled_by(l);
+                theme::labelled(ui, t!("common.port"), egui::DragValue::new(&mut s.port).range(1..=65535));
             });
-            row(ui, &t!("common.user"), |ui| {
-                ui.add_enabled(!s.anonymous, egui::TextEdit::singleline(&mut s.user).desired_width(200.0));
+            row(ui, &t!("common.user"), |ui, l| {
+                ui.add_enabled(!s.anonymous, theme::single_line(&mut s.user).desired_width(200.0)).labelled_by(l);
                 ui.checkbox(&mut s.anonymous, t!("site.anonymous"));
             });
-            row(ui, &if s.ssh_key_file.is_some() { t!("site.passphrase") } else { t!("common.password") }, |ui| {
-                ui.add_enabled(!s.anonymous, egui::TextEdit::singleline(&mut s.password).password(!*show_password).desired_width(200.0));
-                if ui.small_button(if *show_password { "🙈" } else { "👁" }).on_hover_text(t!("site.show_hide")).clicked() {
+            row(ui, &if s.ssh_key_file.is_some() { t!("site.passphrase") } else { t!("common.password") }, |ui, l| {
+                ui.add_enabled(!s.anonymous, theme::single_line(&mut s.password).password(!*show_password).desired_width(200.0))
+                    .labelled_by(l);
+                let label = if *show_password { t!("site.hide_password") } else { t!("site.show_password") };
+                if theme::icon_button(ui, if *show_password { "🙈" } else { "👁" }, label).clicked() {
                     *show_password = !*show_password;
                 }
             });
-            row(ui, &t!("site.active"), |ui| {
+            row(ui, &t!("site.active"), |ui, _| {
                 ui.checkbox(&mut s.enabled, t!("site.enabled"));
             });
         });
@@ -485,7 +505,7 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
                 CertPolicy::AcceptAny => t!("site.cert_any"),
                 CertPolicy::Fingerprint(_) => t!("site.cert_pinned"),
             };
-            egui::ComboBox::from_id_salt("site-cert").selected_text(label).width(300.0).show_ui(ui, |ui| {
+            let cert = egui::ComboBox::from_id_salt("site-cert").selected_text(label).width(300.0).show_ui(ui, |ui| {
                 if ui.selectable_label(s.cert == CertPolicy::System, t!("site.cert_system")).clicked() {
                     s.cert = CertPolicy::System;
                 }
@@ -498,8 +518,10 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
                     s.cert = CertPolicy::Fingerprint(String::new());
                 }
             });
+            theme::name(&cert.response, t!("site.cert_policy"));
             if let CertPolicy::Fingerprint(fp) = &mut s.cert {
-                ui.add(egui::TextEdit::singleline(fp).hint_text(t!("site.fingerprint_hint")).desired_width(f32::INFINITY));
+                let r = ui.add(theme::single_line(fp).hint_text(t!("site.fingerprint_hint")).desired_width(f32::INFINITY));
+                theme::name(&r, t!("site.fingerprint"));
             }
         });
     }
@@ -511,7 +533,8 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
             if use_key {
                 let key = s.ssh_key_file.get_or_insert_with(String::new);
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(key).desired_width(360.0));
+                    let r = ui.add(theme::single_line(key).desired_width(360.0));
+                    theme::name(&r, t!("site.key_file"));
                     if ui.button(t!("common.browse")).clicked()
                         && let Some(p) = rfd::FileDialog::new().set_title(t!("site.key_dialog")).pick_file()
                     {
@@ -526,7 +549,7 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
             for (i, k) in s.ssh_host_keys.iter().enumerate() {
                 ui.horizontal(|ui| {
                     ui.code(k);
-                    if ui.small_button("✕").clicked() {
+                    if theme::icon_button(ui, "✕", t!("site.remove_host_key")).clicked() {
                         remove = Some(i);
                     }
                 });
@@ -540,23 +563,23 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
     section(ui, &t!("site.transfers"), |ui| {
         egui::Grid::new("site-xfer").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
             if s.protocol != SiteProtocol::Sftp {
-                row(ui, &t!("site.mode"), |ui| {
+                row(ui, &t!("site.mode"), |ui, _| {
                     ui.radio_value(&mut s.transfer_mode, TransferMode::Passive, t!("site.passive"));
                     ui.radio_value(&mut s.transfer_mode, TransferMode::Active, t!("site.active_mode"));
                 });
             }
-            row(ui, &t!("site.parallel"), |ui| {
-                ui.add(egui::DragValue::new(&mut s.max_transfers).range(0..=50));
+            row(ui, &t!("site.parallel"), |ui, l| {
+                ui.add(egui::DragValue::new(&mut s.max_transfers).range(0..=50)).labelled_by(l);
                 ui.label(RichText::new(t!("site.single_connection")).weak());
             });
-            row(ui, &t!("site.max_downloads"), |ui| optional_limit(ui, &mut s.max_downloads));
-            row(ui, &t!("site.max_uploads"), |ui| optional_limit(ui, &mut s.max_uploads));
-            row(ui, &t!("site.remote_dir"), |ui| {
-                ui.add(egui::TextEdit::singleline(&mut s.remote_dir).hint_text("/").desired_width(300.0));
+            row(ui, &t!("site.max_downloads"), |ui, l| optional_limit(ui, &mut s.max_downloads, l, &t!("site.max_downloads")));
+            row(ui, &t!("site.max_uploads"), |ui, l| optional_limit(ui, &mut s.max_uploads, l, &t!("site.max_uploads")));
+            row(ui, &t!("site.remote_dir"), |ui, l| {
+                ui.add(theme::single_line(&mut s.remote_dir).hint_text("/").desired_width(300.0)).labelled_by(l);
             });
-            row(ui, &t!("site.local_dir"), |ui| {
-                ui.add(egui::TextEdit::singleline(&mut s.local_dir).desired_width(300.0));
-                if ui.small_button("…").clicked()
+            row(ui, &t!("site.local_dir"), |ui, l| {
+                ui.add(theme::single_line(&mut s.local_dir).desired_width(300.0)).labelled_by(l);
+                if theme::icon_button(ui, "…", t!("site.pick_local_dir")).clicked()
                     && let Some(p) = rfd::FileDialog::new().pick_folder()
                 {
                     s.local_dir = p.to_string_lossy().into_owned();
@@ -571,7 +594,7 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
             ProxyChoice::Direct => t!("site.proxy_direct"),
             ProxyChoice::Custom(_) => t!("site.proxy_custom"),
         };
-        egui::ComboBox::from_id_salt("site-proxy").selected_text(label).show_ui(ui, |ui| {
+        let proxy = egui::ComboBox::from_id_salt("site-proxy").selected_text(label).show_ui(ui, |ui| {
             if ui.selectable_label(s.proxy == ProxyChoice::Global, t!("site.proxy_global")).clicked() {
                 s.proxy = ProxyChoice::Global;
             }
@@ -584,9 +607,10 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
                 s.proxy = ProxyChoice::Custom(SiteProxy { port: 1080, data_channel: true, ..SiteProxy::default() });
             }
         });
+        theme::name(&proxy.response, t!("site.proxy"));
         if let ProxyChoice::Custom(p) = &mut s.proxy {
             egui::Grid::new("site-proxy-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-                row(ui, &t!("common.type"), |ui| {
+                row(ui, &t!("common.type"), |ui, _| {
                     for (k, l) in [
                         (ProxyType::Socks4, "SOCKS4"),
                         (ProxyType::Socks4a, "SOCKS4A"),
@@ -596,17 +620,15 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
                         ui.radio_value(&mut p.kind, k, l);
                     }
                 });
-                row(ui, &t!("common.host"), |ui| {
-                    ui.add(egui::TextEdit::singleline(&mut p.host).desired_width(200.0));
-                    ui.label(t!("common.port"));
-                    ui.add(egui::DragValue::new(&mut p.port).range(1..=65535));
+                row(ui, &t!("common.host"), |ui, l| {
+                    ui.add(theme::single_line(&mut p.host).desired_width(200.0)).labelled_by(l);
+                    theme::labelled(ui, t!("common.port"), egui::DragValue::new(&mut p.port).range(1..=65535));
                 });
-                row(ui, &t!("common.user"), |ui| {
-                    ui.add(egui::TextEdit::singleline(&mut p.user).desired_width(140.0));
-                    ui.label(t!("common.password"));
-                    ui.add(egui::TextEdit::singleline(&mut p.password).password(true).desired_width(140.0));
+                row(ui, &t!("common.user"), |ui, l| {
+                    ui.add(theme::single_line(&mut p.user).desired_width(140.0)).labelled_by(l);
+                    theme::labelled(ui, t!("common.password"), theme::single_line(&mut p.password).password(true).desired_width(140.0));
                 });
-                row(ui, "", |ui| {
+                row(ui, "", |ui, _| {
                     ui.checkbox(&mut p.data_channel, t!("site.proxy_data"));
                 });
             });
@@ -620,7 +642,8 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
                     s.ident = IdentChoice::Custom(String::new());
                 }
                 if let IdentChoice::Custom(n) = &mut s.ident {
-                    ui.add(egui::TextEdit::singleline(n).hint_text(urftp_core::DEFAULT_IDENT_NAME).desired_width(160.0));
+                    let r = ui.add(theme::single_line(n).hint_text(urftp_core::DEFAULT_IDENT_NAME).desired_width(160.0));
+                    theme::name(&r, t!("site.ident_name"));
                 }
             } else {
                 s.ident = IdentChoice::Global;
@@ -632,10 +655,16 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
         let mut remove = None;
         egui::Grid::new("site-bm").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
             for (i, b) in s.bookmarks.iter_mut().enumerate() {
-                ui.add(egui::TextEdit::singleline(&mut b.name).hint_text(t!("common.name")).desired_width(110.0));
-                ui.add(egui::TextEdit::singleline(&mut b.remote_dir).hint_text(t!("common.remote")).desired_width(170.0));
-                ui.add(egui::TextEdit::singleline(&mut b.local_dir).hint_text(t!("common.local")).desired_width(170.0));
-                if ui.small_button("✕").clicked() {
+                for (value, key, width) in [
+                    (&mut b.name, "common.name", 110.0),
+                    (&mut b.remote_dir, "common.remote", 170.0),
+                    (&mut b.local_dir, "common.local", 170.0),
+                ] {
+                    let label = urftp_i18n::text(key);
+                    let r = ui.add(theme::single_line(value).hint_text(label).desired_width(width));
+                    theme::name(&r, t!("site.bookmark_field", n = i + 1, field = label));
+                }
+                if theme::icon_button(ui, "✕", t!("site.remove_bookmark", n = i + 1)).clicked() {
                     remove = Some(i);
                 }
                 ui.end_row();
@@ -644,13 +673,14 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
         if let Some(i) = remove {
             s.bookmarks.remove(i);
         }
-        if ui.small_button(t!("site.add_bookmark")).clicked() {
+        if ui.button(t!("site.add_bookmark")).clicked() {
             s.bookmarks.push(Bookmark::default());
         }
     });
 
     section(ui, &t!("site.notes"), |ui| {
-        ui.add(egui::TextEdit::multiline(&mut s.notes).desired_rows(3).desired_width(f32::INFINITY));
+        let r = ui.add(egui::TextEdit::multiline(&mut s.notes).desired_rows(3).desired_width(f32::INFINITY));
+        theme::name(&r, t!("site.notes"));
     });
 }
 
@@ -658,7 +688,7 @@ fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.add_space(6.0);
     egui::Frame::group(ui.style()).corner_radius(10).inner_margin(10).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.label(RichText::new(title).strong().color(ACCENT));
+        ui.label(RichText::new(title).strong().color(theme::colors(ui).accent_text));
         ui.add_space(4.0);
         add(ui);
     });

@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use parking_lot::Mutex;
 use std::time::Duration;
 
-use eframe::egui::{self, Color32, RichText, Sense};
+use eframe::egui::{self, RichText, Sense};
 use egui_dock::{DockArea, DockState, NodeIndex, Style as DockStyle, TabViewer};
 use egui_extras::{Column, TableBuilder};
 use tokio::runtime::Handle;
@@ -25,7 +25,7 @@ use crate::browser::{self, BrowserCmd, BrowserEvent, BrowserHandle, TrustKind};
 use crate::cmdline::StartupOptions;
 use crate::options::{self, OptionsWindow};
 use crate::sites::{self, SiteManager};
-use crate::theme::{self, ACCENT, LOG_COMMAND, LOG_ERROR, LOG_REPLY, LOG_STATUS, human_size};
+use crate::theme::{self, human_size};
 use urftp_core::settings::IdentSettings;
 use urftp_core::site::Site;
 use urftp_i18n::{Lang, language, t};
@@ -33,6 +33,8 @@ use urftp_proto::ident::{IdentConfig, IdentServer};
 use urftp_proto::throttle::RateLimiter;
 
 mod rushapp;
+#[cfg(test)]
+mod ui_tests;
 
 // ====================================================================== model
 
@@ -142,11 +144,31 @@ enum RemoteState {
     Disconnected,
 }
 
+/// Keyboard cursor of a file list (the row that arrows move and Enter opens).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct Cursor {
+    row: Option<usize>,
+    /// Bring the row into view on the next frame.
+    scroll: bool,
+}
+
+/// Cursor movement in a file list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorMove {
+    By(isize),
+    First,
+    Last,
+}
+
+/// Rows moved by Page Up / Page Down.
+const PAGE_ROWS: isize = 15;
+
 struct LocalView {
     path: PathBuf,
     path_edit: String,
     rows: Vec<FileRow>,
     selected: BTreeSet<usize>,
+    cursor: Cursor,
     error: Option<String>,
     sort: Sort,
 }
@@ -158,6 +180,7 @@ impl LocalView {
             path,
             rows: Vec::new(),
             selected: BTreeSet::new(),
+            cursor: Cursor::default(),
             error: None,
             sort: Sort::default(),
         };
@@ -167,6 +190,7 @@ impl LocalView {
 
     fn reload(&mut self) {
         self.selected.clear();
+        self.cursor = Cursor::default();
         self.path_edit = self.path.to_string_lossy().into_owned();
         match std::fs::read_dir(&self.path) {
             Ok(rd) => {
@@ -218,6 +242,7 @@ struct RemoteView {
     dir: String,
     rows: Vec<FileRow>,
     selected: BTreeSet<usize>,
+    cursor: Cursor,
     state: RemoteState,
     /// Record of the site manager it came from (to store a trusted fingerprint there).
     site_id: Option<u64>,
@@ -245,10 +270,62 @@ impl Side {
     }
 
     fn selected_mut(&mut self) -> &mut BTreeSet<usize> {
+        self.selection_mut().0
+    }
+
+    fn cursor(&self) -> Cursor {
         match self {
-            Side::Local(l) => &mut l.selected,
-            Side::Remote(r) => &mut r.selected,
+            Side::Local(l) => l.cursor,
+            Side::Remote(r) => r.cursor,
         }
+    }
+
+    fn selection_mut(&mut self) -> (&mut BTreeSet<usize>, &mut Cursor) {
+        match self {
+            Side::Local(l) => (&mut l.selected, &mut l.cursor),
+            Side::Remote(r) => (&mut r.selected, &mut r.cursor),
+        }
+    }
+
+    /// Moves the keyboard cursor and selects like Explorer: the row alone, or with
+    /// `extend` (Shift) every row from the previous cursor position.
+    fn move_cursor(&mut self, m: CursorMove, extend: bool) {
+        let n = self.rows().len();
+        if n == 0 {
+            return;
+        }
+        let last = n - 1;
+        let (sel, cur) = self.selection_mut();
+        let from = cur.row.map_or(0, |r| r.min(last));
+        let to = match (m, cur.row) {
+            (CursorMove::By(_), None) => 0,
+            (CursorMove::By(d), Some(_)) => from.saturating_add_signed(d).min(last),
+            (CursorMove::First, _) => 0,
+            (CursorMove::Last, _) => last,
+        };
+        if extend {
+            sel.extend(from.min(to)..=from.max(to));
+        } else {
+            sel.clear();
+            sel.insert(to);
+        }
+        *cur = Cursor { row: Some(to), scroll: true };
+    }
+
+    /// Selects or unselects the row under the cursor (Ctrl+Space).
+    fn toggle_cursor(&mut self) {
+        let (sel, cur) = self.selection_mut();
+        if let Some(r) = cur.row
+            && !sel.remove(&r)
+        {
+            sel.insert(r);
+        }
+    }
+
+    /// Folder under the cursor, or else the first selected folder (Enter).
+    fn folder_to_open(&self) -> Option<String> {
+        let at_cursor = self.cursor().row.and_then(|i| self.rows().get(i)).filter(|r| r.is_dir).map(|r| r.name.clone());
+        at_cursor.or_else(|| self.picked().into_iter().find(|(_, d)| *d).map(|(n, _)| n))
     }
 
     /// Transfer end for a name of this panel.
@@ -282,13 +359,14 @@ impl Side {
 
     /// Changes the sort and reorders the list (the selection is cleared).
     fn set_sort(&mut self, s: Sort) {
-        let (rows, sort, sel) = match self {
-            Side::Local(l) => (&mut l.rows, &mut l.sort, &mut l.selected),
-            Side::Remote(r) => (&mut r.rows, &mut r.sort, &mut r.selected),
+        let (rows, sort, sel, cur) = match self {
+            Side::Local(l) => (&mut l.rows, &mut l.sort, &mut l.selected, &mut l.cursor),
+            Side::Remote(r) => (&mut r.rows, &mut r.sort, &mut r.selected, &mut r.cursor),
         };
         *sort = s;
         sort_rows(rows, s);
         sel.clear();
+        *cur = Cursor::default();
     }
 
     /// Full path of a name (display, clipboard, operations).
@@ -379,7 +457,12 @@ fn default_dock() -> DockState<Pane> {
     dock
 }
 
+/// Starting folder of the local panels (a scratch folder in the interface tests).
 fn home_dir() -> PathBuf {
+    #[cfg(test)]
+    if let Some(dir) = ui_tests::HOME.get() {
+        return dir.clone();
+    }
     std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("C:\\"))
 }
 
@@ -480,6 +563,7 @@ impl Container {
                     r.rows = entries.iter().map(FileRow::from_remote).collect();
                     sort_rows(&mut r.rows, r.sort);
                     r.selected.clear();
+                    r.cursor = Cursor::default();
                     r.state = RemoteState::Connected;
                 }
             }
@@ -764,6 +848,10 @@ pub struct UltraRushApp {
     startup: Option<StartupOptions>,
     /// `-rx`: quit when nothing is left to transfer.
     exit_when_done: bool,
+    /// "Keyboard shortcuts" window (F1).
+    shortcuts_open: bool,
+    /// mIRC link (`TfmRush` window); off in the interface tests.
+    ipc_enabled: bool,
 }
 
 /// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
@@ -786,6 +874,27 @@ fn parse_connect_url(url: &str) -> Option<QuickConnect> {
     Some(QuickConnect { host: host.into(), port, user: user.into(), pass: pass.into(), proto })
 }
 
+/// Keyboard shortcuts shown by F1: (keys, description), as catalogue keys.
+const SHORTCUTS: [(&str, &str); 17] = [
+    ("shortcuts.k_tab", "shortcuts.tab"),
+    ("shortcuts.k_escape", "shortcuts.escape"),
+    ("shortcuts.k_f6", "shortcuts.f6"),
+    ("shortcuts.k_arrows", "shortcuts.arrows"),
+    ("shortcuts.k_shift_arrows", "shortcuts.shift_arrows"),
+    ("shortcuts.k_ctrl_space", "shortcuts.ctrl_space"),
+    ("shortcuts.k_ctrl_a", "shortcuts.ctrl_a"),
+    ("shortcuts.k_enter", "shortcuts.enter"),
+    ("shortcuts.k_backspace", "shortcuts.backspace"),
+    ("shortcuts.k_space", "shortcuts.space"),
+    ("shortcuts.k_f2", "shortcuts.f2"),
+    ("shortcuts.k_f5", "shortcuts.f5"),
+    ("shortcuts.k_f7", "shortcuts.f7"),
+    ("shortcuts.k_delete", "shortcuts.delete"),
+    ("shortcuts.k_ctrl_t", "shortcuts.ctrl_t"),
+    ("shortcuts.k_ctrl_tab", "shortcuts.ctrl_tab"),
+    ("shortcuts.k_f1", "shortcuts.f1"),
+];
+
 enum Action {
     Open(usize, String),
     Up(usize),
@@ -795,6 +904,10 @@ enum Action {
     StartQueue,
     ClearFinished,
     Focus(usize),
+    /// Keyboard cursor of a panel: movement, extend the selection (Shift)?
+    Cursor(usize, CursorMove, bool),
+    ToggleCursor(usize),
+    SelectAll(usize),
     Sort(usize, SortCol),
     NewFolder(usize),
     Rename(usize),
@@ -848,6 +961,9 @@ impl UltraRushApp {
             raw_callbacks: Vec::new(),
             exit_when_done: false,
             startup: Some(startup),
+            // Development (screenshots): `URUSHFTP_OPEN_SHORTCUTS=1` opens the shortcuts window.
+            shortcuts_open: std::env::var_os("URUSHFTP_OPEN_SHORTCUTS").is_some(),
+            ipc_enabled: true,
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -997,6 +1113,7 @@ impl UltraRushApp {
             dir: "/".into(),
             rows: Vec::new(),
             selected: BTreeSet::new(),
+            cursor: Cursor::default(),
             state: RemoteState::Connecting,
             site_id,
             sort: Sort::default(),
@@ -1105,8 +1222,14 @@ impl UltraRushApp {
                     ui.close();
                 }
             });
+            ui.menu_button(t!("menu.help"), |ui| {
+                if ui.button(t!("menu.shortcuts")).clicked() {
+                    self.shortcuts_open = true;
+                    ui.close();
+                }
+            });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(RichText::new("UltraRushFTP").strong().color(ACCENT));
+                ui.label(RichText::new("UltraRushFTP").strong().color(theme::colors(ui).accent_text));
             });
         });
         ui.add_space(4.0);
@@ -1114,27 +1237,35 @@ impl UltraRushApp {
             if ui.button(t!("quick.sites")).on_hover_text(t!("quick.sites_hint")).clicked() {
                 self.sites.open = !self.sites.open;
             }
-            if ui.button("⚙").on_hover_text(t!("quick.options_hint")).clicked() {
+            if theme::icon_button(ui, "⚙", t!("quick.options_hint")).clicked() {
                 self.options.open = !self.options.open;
             }
             ui.separator();
             ui.label("⚡");
             let before = self.quick.proto;
-            egui::ComboBox::from_id_salt("proto").selected_text(self.quick.proto.label()).width(120.0).show_ui(ui, |ui| {
+            let combo = egui::ComboBox::from_id_salt("proto").selected_text(self.quick.proto.label()).width(120.0).show_ui(ui, |ui| {
                 for p in [QuickProto::Ftp, QuickProto::FtpsExplicit, QuickProto::FtpsImplicit, QuickProto::Sftp] {
                     ui.selectable_value(&mut self.quick.proto, p, p.label());
                 }
             });
+            theme::name(&combo.response, t!("quick.protocol"));
             if before != self.quick.proto {
                 self.quick.port = self.quick.proto.default_port().to_string();
             }
-            ui.add(egui::TextEdit::singleline(&mut self.quick.host).hint_text(t!("common.host")).desired_width(180.0));
-            ui.add(egui::TextEdit::singleline(&mut self.quick.port).hint_text(t!("common.port")).desired_width(48.0));
-            ui.add(egui::TextEdit::singleline(&mut self.quick.user).hint_text(t!("common.user")).desired_width(120.0));
-            let pass = ui
-                .add(egui::TextEdit::singleline(&mut self.quick.pass).hint_text(t!("common.password")).password(true).desired_width(120.0));
-            let enter = pass.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            if ui.add(egui::Button::new(RichText::new(t!("quick.connect")).color(Color32::WHITE)).fill(ACCENT)).clicked() || enter {
+            // Placeholders are not labels: each field also gets an accessible name.
+            let mut enter = false;
+            for (value, key, width, password) in [
+                (&mut self.quick.host, "common.host", 180.0, false),
+                (&mut self.quick.port, "common.port", 48.0, false),
+                (&mut self.quick.user, "common.user", 120.0, false),
+                (&mut self.quick.pass, "common.password", 120.0, true),
+            ] {
+                let label = urftp_i18n::text(key);
+                let r = ui.add(theme::single_line(value).hint_text(label).password(password).desired_width(width));
+                theme::name(&r, label);
+                enter |= password && r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            }
+            if theme::primary_button(ui, t!("quick.connect")).clicked() || enter {
                 self.quick_connect(ui.ctx());
             }
         });
@@ -1150,16 +1281,27 @@ impl UltraRushApp {
                 if ui.selectable_label(i == self.active, text).clicked() {
                     self.active = i;
                 }
-                if self.tabs.len() > 1 && ui.small_button("✕").on_hover_text(t!("tabs.close")).clicked() {
-                    close = Some(i);
+                if self.tabs.len() > 1 {
+                    let r = theme::icon_button(ui, "✕", t!("tabs.close"));
+                    theme::name(&r, t!("tabs.close_named", title = tab.title(i + 1)));
+                    if r.clicked() {
+                        close = Some(i);
+                    }
                 }
                 ui.separator();
             }
-            if ui.button("+").on_hover_text(t!("tabs.new")).clicked() {
+            if theme::icon_button(ui, "+", t!("tabs.new")).clicked() {
                 self.new_tab();
             }
         });
         if let Some(i) = close {
+            self.close_tab(i);
+        }
+    }
+
+    /// Closes a tab (the last one stays).
+    fn close_tab(&mut self, i: usize) {
+        if self.tabs.len() > 1 && i < self.tabs.len() {
             self.tabs.remove(i);
             self.active = self.active.min(self.tabs.len() - 1);
         }
@@ -1222,6 +1364,16 @@ impl UltraRushApp {
                     tab.queue.lock().remove_where(|i| i.state.is_finished());
                 }
                 Action::Focus(side) => tab.focus = side,
+                Action::Cursor(side, m, extend) => {
+                    tab.focus = side;
+                    tab.sides[side].move_cursor(m, extend);
+                }
+                Action::ToggleCursor(side) => tab.sides[side].toggle_cursor(),
+                Action::SelectAll(side) => {
+                    tab.focus = side;
+                    let n = tab.sides[side].rows().len();
+                    tab.sides[side].selected_mut().extend(0..n);
+                }
                 Action::Sort(side, col) => {
                     let s = tab.sides[side].sort().toggle(col);
                     tab.sides[side].set_sort(s);
@@ -1277,52 +1429,107 @@ impl UltraRushApp {
         names.iter().filter_map(|n| self.sites.book.find_by_name(n)).map(|s| sites::to_profile(s, &self.options.settings)).collect()
     }
 
-    /// Keyboard shortcuts, applied to the active panel when no text field has the focus.
+    /// Keyboard shortcuts. Application shortcuts work everywhere outside dialogs; the file
+    /// list keys apply to the active panel when no control has the keyboard focus (Tab moves
+    /// between controls, Escape gives the keys back to the list).
     fn keyboard(&mut self, ctx: &egui::Context) -> Vec<Action> {
         let tab = &self.tabs[self.active];
-        if ctx.egui_wants_keyboard_input() || tab.prompt.is_some() || tab.trust.is_some() || self.sites.open || self.options.open {
+        if tab.prompt.is_some() || tab.trust.is_some() {
+            return Vec::new();
+        }
+        use egui::{Key, Modifiers};
+        let pressed = |m: Modifiers, k: Key| ctx.input_mut(|i| i.consume_key(m, k));
+        if pressed(Modifiers::NONE, Key::F1) {
+            self.shortcuts_open = !self.shortcuts_open;
+        }
+        if pressed(Modifiers::COMMAND, Key::T) {
+            self.new_tab();
+        }
+        if pressed(Modifiers::COMMAND, Key::W) {
+            self.close_tab(self.active);
+        }
+        let n = self.tabs.len();
+        if pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::Tab) {
+            self.active = (self.active + n - 1) % n;
+        } else if pressed(Modifiers::COMMAND, Key::Tab) {
+            self.active = (self.active + 1) % n;
+        }
+        let tab = &self.tabs[self.active];
+        let busy = ctx.egui_wants_keyboard_input() || ctx.memory(|m| m.focused().is_some());
+        if busy || self.sites.open || self.options.open || self.shortcuts_open {
             return Vec::new();
         }
         let side = tab.focus;
         let mut out = Vec::new();
-        ctx.input(|i| {
-            use egui::Key;
-            let first_dir = tab.sides[side].picked().into_iter().find(|(_, d)| *d).map(|(n, _)| n);
-            if i.key_pressed(Key::Enter)
-                && let Some(n) = first_dir
-            {
-                out.push(Action::Open(side, n));
+        if pressed(Modifiers::NONE, Key::F6) || pressed(Modifiers::SHIFT, Key::F6) {
+            out.push(Action::Focus(1 - side));
+        }
+        for (key, m) in [
+            (Key::ArrowUp, CursorMove::By(-1)),
+            (Key::ArrowDown, CursorMove::By(1)),
+            (Key::PageUp, CursorMove::By(-PAGE_ROWS)),
+            (Key::PageDown, CursorMove::By(PAGE_ROWS)),
+            (Key::Home, CursorMove::First),
+            (Key::End, CursorMove::Last),
+        ] {
+            // Shift first: a shortcut without modifiers also matches Shift+key.
+            if pressed(Modifiers::SHIFT, key) {
+                out.push(Action::Cursor(side, m, true));
+            } else if pressed(Modifiers::NONE, key) {
+                out.push(Action::Cursor(side, m, false));
             }
-            if i.key_pressed(Key::Backspace) {
-                out.push(Action::Up(side));
+        }
+        if pressed(Modifiers::COMMAND, Key::Space) {
+            out.push(Action::ToggleCursor(side));
+        }
+        if pressed(Modifiers::COMMAND, Key::A) {
+            out.push(Action::SelectAll(side));
+        }
+        if pressed(Modifiers::NONE, Key::Enter)
+            && let Some(n) = tab.sides[side].folder_to_open()
+        {
+            out.push(Action::Open(side, n));
+        }
+        for (key, action) in [
+            (Key::Backspace, Action::Up(side)),
+            (Key::F5, Action::Refresh(side)),
+            (Key::F2, Action::Rename(side)),
+            (Key::F7, Action::NewFolder(side)),
+            (Key::Delete, Action::Delete(side)),
+            (Key::Space, Action::Transfer(side)),
+            (Key::Insert, Action::Transfer(side)),
+        ] {
+            if pressed(Modifiers::NONE, key) {
+                out.push(action);
             }
-            if i.key_pressed(Key::F5) {
-                out.push(Action::Refresh(side));
-            }
-            if i.key_pressed(Key::F2) {
-                out.push(Action::Rename(side));
-            }
-            if i.key_pressed(Key::F7) {
-                out.push(Action::NewFolder(side));
-            }
-            if i.key_pressed(Key::Delete) {
-                out.push(Action::Delete(side));
-            }
-            if i.key_pressed(Key::Space) || i.key_pressed(Key::Insert) {
-                out.push(Action::Transfer(side));
-            }
-            if i.key_pressed(Key::Tab) {
-                out.push(Action::Focus(1 - side));
-            }
-        });
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A)) {
-            let n = tab.sides[side].rows().len();
-            // Direct selection: no need for an action.
-            let sel: BTreeSet<usize> = (0..n).collect();
-            out.push(Action::Focus(side));
-            self.tabs[self.active].sides[side].selected_mut().extend(sel);
         }
         out
+    }
+
+    /// "Keyboard shortcuts" window (F1, Help menu).
+    fn shortcuts_window(&mut self, ctx: &egui::Context) {
+        if !self.shortcuts_open {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new(t!("shortcuts.title"))
+            .id(egui::Id::new("shortcuts-window"))
+            .default_pos([240.0, 110.0])
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                egui::Grid::new("shortcuts").num_columns(2).spacing([24.0, 6.0]).striped(true).show(ui, |ui| {
+                    for (keys, what) in SHORTCUTS {
+                        ui.label(RichText::new(urftp_i18n::text(keys)).monospace().strong());
+                        ui.label(urftp_i18n::text(what));
+                        ui.end_row();
+                    }
+                });
+            });
+        if !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.shortcuts_open = false;
+        }
     }
 
     /// Input dialogs (new folder, rename) and confirmation (delete).
@@ -1336,15 +1543,15 @@ impl UltraRushApp {
             let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
             match prompt {
                 Prompt::NewFolder { name, .. } => {
-                    ui.heading(t!("prompt.new_folder"));
-                    let r = ui.add(egui::TextEdit::singleline(name).desired_width(f32::INFINITY));
-                    r.request_focus();
+                    let h = ui.heading(t!("prompt.new_folder"));
+                    let r = ui.add(theme::single_line(name).desired_width(f32::INFINITY)).labelled_by(h.id);
+                    focus_once(ui, &r);
                 }
                 Prompt::Rename { from, to, .. } => {
-                    ui.heading(t!("prompt.rename"));
+                    let h = ui.heading(t!("prompt.rename"));
                     ui.label(RichText::new(from.as_str()).weak());
-                    let r = ui.add(egui::TextEdit::singleline(to).desired_width(f32::INFINITY));
-                    r.request_focus();
+                    let r = ui.add(theme::single_line(to).desired_width(f32::INFINITY)).labelled_by(h.id);
+                    focus_once(ui, &r);
                 }
                 Prompt::Delete { items, .. } => {
                     ui.heading(t!("prompt.delete"));
@@ -1364,16 +1571,18 @@ impl UltraRushApp {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                let (label, color) = match prompt {
-                    Prompt::Delete { .. } => (t!("common.delete"), LOG_ERROR),
-                    _ => (t!("common.validate"), ACCENT),
-                };
-                if ui.add(egui::Button::new(RichText::new(label).color(Color32::WHITE)).fill(color)).clicked()
-                    || (enter && !matches!(prompt, Prompt::Delete { .. }))
-                {
+                let delete = matches!(prompt, Prompt::Delete { .. });
+                let ok =
+                    if delete { theme::danger_button(ui, t!("common.delete")) } else { theme::primary_button(ui, t!("common.validate")) };
+                if ok.clicked() || (enter && !delete) {
                     done = Some(true);
                 }
-                if ui.button("Annuler").clicked() || escape {
+                let cancel = ui.button(t!("common.cancel"));
+                // Deleting is irreversible: the keyboard starts on Cancel.
+                if delete {
+                    focus_once(ui, &cancel);
+                }
+                if cancel.clicked() || escape {
                     done = Some(false);
                 }
             });
@@ -1407,10 +1616,13 @@ impl UltraRushApp {
             ui.label(t!("trust.advice"));
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                if ui.add(egui::Button::new(RichText::new(t!("trust.accept")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
+                if theme::primary_button(ui, t!("trust.accept")).clicked() {
                     decision = Some(true);
                 }
-                if ui.button("Annuler").clicked() {
+                let cancel = ui.button(t!("common.cancel"));
+                // Trusting a server is a security decision: the keyboard starts on Cancel.
+                focus_once(ui, &cancel);
+                if cancel.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                     decision = Some(false);
                 }
             });
@@ -1439,6 +1651,14 @@ impl UltraRushApp {
     }
 }
 
+/// Gives the keyboard focus to a dialog control when nothing has it yet (on opening), so
+/// that Tab can then move to the other controls.
+fn focus_once(ui: &egui::Ui, r: &egui::Response) {
+    if ui.memory(|m| m.focused().is_none()) {
+        r.request_focus();
+    }
+}
+
 impl eframe::App for UltraRushApp {
     // Called on every frame, and also while the window is minimised: transfers, statistics
     // and mIRC requests keep being processed.
@@ -1446,7 +1666,9 @@ impl eframe::App for UltraRushApp {
         let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(Container::poll).collect();
         self.stats.record(&traffic);
         self.forward_raw_replies();
-        self.serve_ipc(ctx);
+        if self.ipc_enabled {
+            self.serve_ipc(ctx);
+        }
         // `-rx`: close when no queue runs and nothing is left to transfer.
         if self.exit_when_done
             && self.startup.is_none()
@@ -1509,6 +1731,7 @@ impl eframe::App for UltraRushApp {
         self.apply(actions, &ctx);
         self.prompt_dialog(&ctx);
         self.trust_dialog(&ctx);
+        self.shortcuts_window(&ctx);
         self.sites.show(&ctx);
         if self.options.show(&ctx) {
             self.apply_settings(&ctx);
@@ -1568,33 +1791,37 @@ impl TabViewer for PaneViewer<'_> {
 impl PaneViewer<'_> {
     fn file_pane(&mut self, ui: &mut egui::Ui, side: usize) {
         let arrow = if side == 0 { t!("files.transfer_right") } else { t!("files.transfer_left") };
+        let p = theme::colors(ui);
         ui.horizontal(|ui| {
-            if ui.button("⬆").on_hover_text(t!("files.parent")).clicked() {
+            if theme::icon_button(ui, "⬆", t!("files.parent")).clicked() {
                 self.actions.push(Action::Up(side));
             }
-            if ui.button("⟳").on_hover_text(t!("files.refresh")).clicked() {
+            if theme::icon_button(ui, "⟳", t!("files.refresh")).clicked() {
                 self.actions.push(Action::Refresh(side));
             }
-            if ui.button("📁+").on_hover_text(t!("files.new_folder")).clicked() {
+            if theme::icon_button(ui, "📁+", t!("files.new_folder")).clicked() {
                 self.actions.push(Action::NewFolder(side));
             }
             match &mut self.sides[side] {
                 Side::Local(l) => {
-                    let r = ui.add(egui::TextEdit::singleline(&mut l.path_edit).desired_width(ui.available_width() - 120.0));
+                    let r = ui.add(theme::single_line(&mut l.path_edit).desired_width(ui.available_width() - 120.0));
+                    theme::name(&r, t!("files.path"));
                     if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         l.path = PathBuf::from(l.path_edit.trim());
                         l.reload();
                     }
                 }
                 Side::Remote(r) => {
-                    let (dot, color) = match &r.state {
-                        RemoteState::Connected => ("●", LOG_REPLY),
-                        RemoteState::Connecting => ("●", Color32::from_rgb(0xE8, 0xB3, 0x3C)),
-                        _ => ("●", LOG_ERROR),
+                    // The state is told by the symbol and its text, not by the colour alone.
+                    let (dot, color, state) = match &r.state {
+                        RemoteState::Connected => ("●", p.success, t!("files.state_connected")),
+                        RemoteState::Connecting => ("◌", p.warning, t!("files.state_connecting")),
+                        _ => ("✕", p.error, t!("files.state_disconnected")),
                     };
-                    ui.label(RichText::new(dot).color(color));
+                    let d = ui.label(RichText::new(dot).color(color)).on_hover_text(&state);
+                    theme::name(&d, state);
                     ui.label(RichText::new(&r.dir).monospace());
-                    if ui.small_button(t!("files.disconnect")).clicked() {
+                    if ui.button(t!("files.disconnect")).clicked() {
                         self.actions.push(Action::Disconnect(side));
                     }
                 }
@@ -1608,7 +1835,7 @@ impl PaneViewer<'_> {
         });
         match &self.sides[side] {
             Side::Local(l) if l.error.is_some() => {
-                ui.colored_label(LOG_ERROR, l.error.as_deref().unwrap_or_default());
+                ui.colored_label(p.error, format!("⚠ {}", l.error.as_deref().unwrap_or_default()));
             }
             Side::Remote(r) => match &r.state {
                 RemoteState::Connecting => {
@@ -1618,7 +1845,7 @@ impl PaneViewer<'_> {
                     });
                 }
                 RemoteState::Failed(e) => {
-                    ui.colored_label(LOG_ERROR, e);
+                    ui.colored_label(p.error, format!("⚠ {e}"));
                 }
                 _ => {}
             },
@@ -1629,6 +1856,11 @@ impl PaneViewer<'_> {
         let rows: Vec<FileRow> = self.sides[side].rows().to_vec();
         let selected = self.sides[side].selected().clone();
         let sort = self.sides[side].sort();
+        let cursor = self.sides[side].cursor();
+        // The cursor is drawn in the panel that has the keyboard only.
+        let cursor_row = cursor.row.filter(|_| self.focus == side);
+        self.sides[side].selection_mut().1.scroll = false;
+        let cursor_stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
         let mut clicked: Option<(usize, bool, bool)> = None;
         let mut opened: Option<String> = None;
         let mut sort_by: Option<SortCol> = None;
@@ -1637,10 +1869,18 @@ impl PaneViewer<'_> {
         // The whole list is a drop zone: files dragged from the other panel are
         // transferred into it.
         let (_, dropped) = ui.dnd_drop_zone::<DragFiles, ()>(egui::Frame::new(), |ui| {
-            TableBuilder::new(ui)
+            let painter = ui.painter().clone();
+            let mut table = TableBuilder::new(ui);
+            if cursor.scroll
+                && let Some(r) = cursor.row
+            {
+                table = table.scroll_to_row(r, None);
+            }
+            table
                 .id_salt(("files", side))
                 .striped(true)
-                .sense(Sense::click_and_drag())
+                // Rows are not in the Tab order: the list is driven by its keyboard cursor.
+                .sense(Sense::CLICK | Sense::DRAG)
                 .column(Column::remainder().at_least(160.0).clip(true))
                 .column(Column::initial(90.0).at_least(60.0))
                 .column(Column::initial(130.0).at_least(80.0))
@@ -1675,6 +1915,16 @@ impl PaneViewer<'_> {
                             ui.label(RichText::new(&f.modified).weak());
                         });
                         let resp = row.response();
+                        if cursor_row == Some(i) {
+                            painter.rect_stroke(resp.rect.shrink(1.0), 3.0, cursor_stroke, egui::StrokeKind::Inside);
+                        }
+                        let size = if f.is_dir { t!("files.folder") } else { human_size(f.size) };
+                        let spoken = format!("{}, {size}, {}", f.name, f.modified);
+                        let is_selected = selected.contains(&i);
+                        resp.ctx.accesskit_node_builder(resp.id, |n| {
+                            n.set_label(spoken);
+                            n.set_selected(is_selected);
+                        });
                         if resp.drag_started() && !selected.contains(&i) {
                             clicked = Some((i, false, false));
                         }
@@ -1736,10 +1986,12 @@ impl PaneViewer<'_> {
         }
         if let Some((i, toggle, range)) = clicked {
             self.actions.push(Action::Focus(side));
-            let sel = self.sides[side].selected_mut();
+            let (sel, cur) = self.sides[side].selection_mut();
+            let previous = cur.row;
+            *cur = Cursor { row: Some(i), scroll: false };
             if range {
-                // Shift: from the last selection to here.
-                let anchor = sel.iter().next_back().copied().unwrap_or(i);
+                // Shift: from the cursor (or the last selection) to here.
+                let anchor = previous.or_else(|| sel.iter().next_back().copied()).unwrap_or(i);
                 let (a, b) = if anchor <= i { (anchor, i) } else { (i, anchor) };
                 sel.extend(a..=b);
             } else if toggle {
@@ -1756,6 +2008,7 @@ impl PaneViewer<'_> {
 
     fn queue_pane(&mut self, ui: &mut egui::Ui) {
         let items = self.queue.lock().items().to_vec();
+        let p = theme::colors(ui);
         let failed = items.iter().filter(|i| matches!(i.state, ItemState::Failed(_) | ItemState::Stopped)).count();
         ui.horizontal(|ui| {
             if ui.button(t!("queue.start")).clicked() {
@@ -1800,7 +2053,15 @@ impl PaneViewer<'_> {
                         urftp_core::TransferKind::Fxp => "↔",
                     };
                     row.col(|ui| {
-                        ui.label(dir);
+                        let d = ui.label(dir);
+                        theme::name(
+                            &d,
+                            match it.kind() {
+                                urftp_core::TransferKind::Upload => t!("queue.kind_upload"),
+                                urftp_core::TransferKind::Download => t!("queue.kind_download"),
+                                urftp_core::TransferKind::Fxp => t!("queue.kind_fxp"),
+                            },
+                        );
                     });
                     row.col(|ui| {
                         let name = Path::new(&it.src.path)
@@ -1820,17 +2081,19 @@ impl PaneViewer<'_> {
                             (_, Some(t)) if t > 0 => done as f32 / t as f32,
                             _ => 0.0,
                         };
-                        ui.add(egui::ProgressBar::new(frac.clamp(0.0, 1.0)).fill(ACCENT).show_percentage().corner_radius(6));
+                        let bar =
+                            ui.add(egui::ProgressBar::new(frac.clamp(0.0, 1.0)).fill(p.accent_fill).show_percentage().corner_radius(6));
+                        theme::name(&bar, t!("queue.col_progress"));
                     });
                     row.col(|ui| {
                         let (text, color) = match &it.state {
-                            ItemState::Waiting => (t!("state.waiting"), LOG_STATUS),
-                            ItemState::Running => (t!("state.running"), ACCENT),
-                            ItemState::Done => (t!("state.done"), LOG_REPLY),
-                            ItemState::Skipped(r) => (t!("state.skipped", reason = skip_text(r)), LOG_STATUS),
-                            ItemState::NeedsConfirmation => (t!("state.confirm"), Color32::from_rgb(0xE8, 0xB3, 0x3C)),
-                            ItemState::Stopped => (t!("state.stopped"), LOG_STATUS),
-                            ItemState::Failed(e) => (t!("state.failed", error = e), LOG_ERROR),
+                            ItemState::Waiting => (t!("state.waiting"), p.status),
+                            ItemState::Running => (t!("state.running"), p.accent_text),
+                            ItemState::Done => (t!("state.done"), p.success),
+                            ItemState::Skipped(r) => (t!("state.skipped", reason = skip_text(r)), p.status),
+                            ItemState::NeedsConfirmation => (t!("state.confirm"), p.warning),
+                            ItemState::Stopped => (t!("state.stopped"), p.status),
+                            ItemState::Failed(e) => (t!("state.failed", error = e), p.error),
                         };
                         ui.label(RichText::new(&text).color(color)).on_hover_text(text);
                     });
@@ -1872,48 +2135,54 @@ impl PaneViewer<'_> {
     /// Script console: run FTPRush Pascal Script or evaluate an expression, like
     /// `RushScript` and `Invoke` from mIRC.
     fn script_pane(&mut self, ui: &mut egui::Ui) {
+        let p = theme::colors(ui);
         ui.horizontal(|ui| {
-            ui.label(t!("script.invoke"));
-            let r = ui.add(egui::TextEdit::singleline(self.invoke).hint_text("RushApp.TotalDownloadSize").desired_width(320.0));
+            let r = theme::labelled(
+                ui,
+                t!("script.invoke"),
+                theme::single_line(self.invoke).hint_text("RushApp.TotalDownloadSize").desired_width(320.0),
+            );
             let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if ui.button(t!("script.evaluate")).clicked() || enter {
                 self.actions.push(Action::Invoke);
             }
             ui.separator();
-            if ui.add(egui::Button::new(RichText::new(t!("script.run")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
+            if theme::primary_button(ui, t!("script.run")).clicked() {
                 self.actions.push(Action::RunScript);
             }
         });
         ui.add_space(4.0);
         ui.columns(2, |cols| {
             egui::ScrollArea::vertical().id_salt("script-src").show(&mut cols[0], |ui| {
-                ui.add(
+                let r = ui.add(
                     egui::TextEdit::multiline(self.script)
                         .code_editor()
                         .desired_rows(8)
                         .desired_width(f32::INFINITY)
-                        .hint_text("RushApp.FTP.Login('MonSite', '/', 0);"),
+                        .hint_text("RushApp.FTP.Login('MySite', '/', 0);"),
                 );
+                theme::name(&r, t!("script.source"));
             });
             egui::ScrollArea::vertical().id_salt("script-out").stick_to_bottom(true).show(&mut cols[1], |ui| {
                 if self.script_out.is_empty() {
                     ui.label(RichText::new(t!("script.placeholder")).weak());
                 }
                 for (ok, line) in self.script_out {
-                    ui.label(RichText::new(line).monospace().color(if *ok { LOG_REPLY } else { LOG_ERROR }));
+                    ui.label(RichText::new(line).monospace().color(if *ok { p.success } else { p.error }));
                 }
             });
         });
     }
 
     fn log_pane(&mut self, ui: &mut egui::Ui) {
+        let p = theme::colors(ui);
         egui::ScrollArea::vertical().auto_shrink(false).stick_to_bottom(true).show(ui, |ui| {
             for e in self.log {
                 let color = match e.kind {
-                    LogKind::Command => LOG_COMMAND,
-                    LogKind::Reply => LOG_REPLY,
-                    LogKind::Status => LOG_STATUS,
-                    LogKind::Error => LOG_ERROR,
+                    LogKind::Command => p.command,
+                    LogKind::Reply => p.success,
+                    LogKind::Status => p.status,
+                    LogKind::Error => p.error,
                 };
                 let side = if e.side == 0 { t!("pane.left") } else { t!("pane.right") };
                 ui.label(RichText::new(format!("[{side}] {}", e.text)).monospace().color(color));

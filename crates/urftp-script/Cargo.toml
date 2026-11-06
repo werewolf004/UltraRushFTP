@@ -1,6 +1,6 @@
 [package]
 name = "urftp-script"
-description = "Interpréteur du sous-ensemble Pascal Script de FTPRush (objet RushApp)."
+description = "Interpreter of the FTPRush Pascal Script subset (RushApp object)."
 version.workspace = true
 edition.workspace = true
 license-file.workspace = true
