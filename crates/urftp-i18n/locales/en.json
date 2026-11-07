@@ -176,7 +176,6 @@
   "host.login_error": "Login: {error}",
   "host.login_skipped": "Login: {error}, site skipped",
   "host.login_default_dir": "Login: {error}, default folder",
-  "host.invert_unsupported": "Login: RS_INVERT is not supported, ignored",
   "host.cwd_no_bookmark": "CWD: bookmark \"{bookmark}\" missing on {site}",
   "host.raw_empty": "empty command",
   "host.raw_no_target": "RAW \"{command}\": no connection targeted",
@@ -275,6 +274,9 @@
   "site.bookmark_field": "Bookmark {n}: {field}",
   "site.limit_on": "Limit: {limit}",
   "site.remove_bookmark": "Remove bookmark {n}",
+  "site.alt_hosts": "Other addresses",
+  "site.alt_hosts_hint": "host:port, one per line",
+  "site.alt_hosts_tip": "Tried in turn when the main address cannot be reached or refuses the login; the address that worked is used first next time",
 
   "options.title": "⚙ Options",
   "options.page_general": "⚙ General",
@@ -404,6 +406,12 @@
   "import.passwords_not_imported": "passwords not imported: enter them again for the {n} site(s)",
 
   "sites.new_site_default": "New site",
+  "sites.test": "✔ Test availability",
+  "sites.test_hint": "Connects to the selected site, or to every enabled site of the selected folder, then logs out",
+  "sites.test_running": "Test in progress…",
+  "sites.test_up": "Available: {address} answered in {ms} ms",
+  "sites.test_down": "Unavailable: {error}",
+  "sites.connect_hint": "Shift: ghost login (!user) · Ctrl: -password (no welcome messages)",
 
   "skip.reason_rule": "skip list: {mask}",
   "skip.reason_zero": "0-byte file",

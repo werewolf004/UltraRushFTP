@@ -12,7 +12,7 @@ use crate::engine::EngineOptions;
 use crate::ftp::{FtpConfig, Security, TlsOptions, TlsVerify};
 use crate::keepalive::{KeepAlive, Reconnect, SessionPolicy, split_list};
 use crate::proxy::{ProxyConfig, ProxyKind, parse_exceptions};
-use crate::session::{SiteProfile, SiteProtocol as ProfileProtocol};
+use crate::session::{HostList, SiteProfile, SiteProtocol as ProfileProtocol};
 use crate::sftp::{HostKeyPolicy, SftpAuth, SftpConfig};
 use crate::throttle::RateLimiter;
 
@@ -58,6 +58,30 @@ pub fn session_policy(s: &Settings) -> SessionPolicy {
             attempts: s.transfer.retries.max(1),
             delay: Duration::from_secs(u64::from(s.transfer.retry_delay_secs)),
         },
+    }
+}
+
+/// `host`, `host:port`, `[v6]:port` or a bare IPv6 address; `None` when empty or when the
+/// port is not a number.
+pub fn parse_address(s: &str, default_port: u16) -> Option<(String, u16)> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if let Some(rest) = s.strip_prefix('[') {
+        let (host, after) = rest.split_once(']')?;
+        let port = match after.strip_prefix(':') {
+            Some(p) => p.trim().parse().ok()?,
+            None if after.trim().is_empty() => default_port,
+            None => return None,
+        };
+        return Some((host.to_string(), port));
+    }
+    match s.split_once(':') {
+        // Several ':' without brackets: a bare IPv6 address.
+        Some((_, rest)) if rest.contains(':') => Some((s.to_string(), default_port)),
+        Some((host, port)) => Some((host.trim().to_string(), port.trim().parse().ok()?)),
+        None => Some((s.to_string(), default_port)),
     }
 }
 
@@ -116,6 +140,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
         protocol,
         limits: site.limits(),
         session: session_policy(settings),
+        hosts: HostList::new(site.alt_hosts.iter().filter_map(|a| parse_address(a, site.port)).collect()),
     }
 }
 
@@ -175,6 +200,33 @@ mod tests {
         let p = site_profile(&Site { host: "h".into(), ..Site::default() }, &settings);
         let ProfileProtocol::Ftp(cfg) = &p.protocol else { panic!() };
         assert_eq!(cfg.proxy.as_ref().map(|x| x.host.as_str()), Some("proxy.lan"));
+    }
+
+    #[test]
+    fn addresses() {
+        assert_eq!(parse_address(" ftp.example.com ", 21), Some(("ftp.example.com".into(), 21)));
+        assert_eq!(parse_address("ftp.example.com:2121", 21), Some(("ftp.example.com".into(), 2121)));
+        assert_eq!(parse_address("[2001:db8::1]:990", 21), Some(("2001:db8::1".into(), 990)));
+        assert_eq!(parse_address("[2001:db8::1]", 21), Some(("2001:db8::1".into(), 21)));
+        assert_eq!(parse_address("2001:db8::1", 21), Some(("2001:db8::1".into(), 21)));
+        assert_eq!(parse_address("host:abc", 21), None);
+        assert_eq!(parse_address("  ", 21), None);
+
+        let site = Site { host: "a".into(), port: 21, alt_hosts: vec!["b:2121".into(), "".into(), "c".into()], ..Site::default() };
+        let p = site_profile(&site, &Settings::default());
+        assert_eq!(p.addresses(), [("a".to_string(), 21), ("b".into(), 2121), ("c".into(), 21)]);
+        assert_eq!(p.current_address(), ("a".to_string(), 21));
+    }
+
+    #[test]
+    fn login_variants() {
+        let p = site_profile(&Site { user: "bob".into(), password: "pw".into(), ..Site::default() }, &Settings::default());
+        let v = p.clone().with_login_variant(true, true);
+        assert_eq!((v.user.as_str(), v.password.as_str()), ("!bob", "-pw"));
+        let again = v.with_login_variant(true, true);
+        assert_eq!((again.user.as_str(), again.password.as_str()), ("!bob", "-pw"), "never doubled");
+        let sftp = site_profile(&Site { protocol: SiteProtocol::Sftp, user: "bob".into(), ..Site::default() }, &Settings::default());
+        assert_eq!(sftp.with_login_variant(true, true).user, "bob", "FTP only");
     }
 
     #[test]

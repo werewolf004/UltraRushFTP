@@ -1,8 +1,12 @@
 //! Common remote session (FTP/FTPS or SFTP) and site profile, for the queue engine.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
+
 use urftp_core::queue::SiteLimits;
 
-use crate::ftp::{FtpClient, FtpConfig, FtpError, LogSink, RemoteEntry, Reply, path};
+use crate::ftp::{FtpClient, FtpConfig, FtpError, LogLine, LogSink, RemoteEntry, Reply, path};
 use crate::keepalive::SessionPolicy;
 use crate::sftp::{SftpAuth, SftpClient, SftpConfig, SftpError};
 
@@ -27,6 +31,53 @@ pub struct SiteProfile {
     pub limits: SiteLimits,
     /// Keep alive and reconnection.
     pub session: SessionPolicy,
+    /// Other addresses of the site, tried in turn when one fails.
+    pub hosts: HostList,
+}
+
+/// Other `host:port` addresses of a site ("Site IP List" of FTPRush v2).
+///
+/// A connection starts with the address that worked last, then moves on to the next one
+/// when the server cannot be reached or refuses the login. The address that worked is
+/// remembered by every copy of the profile (engine pool, browsing panel).
+#[derive(Debug, Clone, Default)]
+pub struct HostList {
+    pub alternates: Vec<(String, u16)>,
+    preferred: Arc<AtomicUsize>,
+}
+
+impl HostList {
+    pub fn new(alternates: Vec<(String, u16)>) -> Self {
+        Self { alternates, preferred: Arc::default() }
+    }
+}
+
+impl SiteProfile {
+    /// Every address of the site, the main one first.
+    pub fn addresses(&self) -> Vec<(String, u16)> {
+        std::iter::once((self.host.clone(), self.port)).chain(self.hosts.alternates.iter().cloned()).collect()
+    }
+
+    /// Address that worked last (the main one at first).
+    pub fn current_address(&self) -> (String, u16) {
+        let all = self.addresses();
+        let i = self.hosts.preferred.load(Ordering::Relaxed) % all.len();
+        all[i].clone()
+    }
+
+    /// Ghost login (`!user`: the server closes the other sessions of the account) and
+    /// `-password` (glftpd and others: no welcome messages). FTP only.
+    pub fn with_login_variant(mut self, ghost: bool, quiet: bool) -> Self {
+        if matches!(self.protocol, SiteProtocol::Ftp(_)) {
+            if ghost && !self.user.starts_with('!') {
+                self.user.insert(0, '!');
+            }
+            if quiet && !self.password.starts_with('-') {
+                self.password.insert(0, '-');
+            }
+        }
+        self
+    }
 }
 
 /// Error of a session or transfer operation.
@@ -72,6 +123,17 @@ impl SessionError {
 
 pub type Result<T, E = SessionError> = std::result::Result<T, E>;
 
+/// Is it worth trying the next address of the site? Yes when the server cannot be reached
+/// or refuses the connection or the login (full, banned...); no when the certificate or
+/// the host key must be confirmed first.
+fn rotates(e: &SessionError) -> bool {
+    match e {
+        SessionError::Ftp(FtpError::Certificate { .. }) | SessionError::Sftp(SftpError::HostKey { .. }) => false,
+        SessionError::Ftp(FtpError::Unexpected { .. }) | SessionError::Sftp(SftpError::AuthFailed) => true,
+        e => crate::keepalive::is_connection_lost(e) || matches!(e, SessionError::Ftp(FtpError::Proxy(_) | FtpError::Tls(_))),
+    }
+}
+
 /// Open, authenticated connection to a site.
 pub enum RemoteSession {
     Ftp(Box<FtpClient>),
@@ -79,17 +141,64 @@ pub enum RemoteSession {
 }
 
 impl RemoteSession {
-    /// Opens a connection and logs in.
+    /// Opens a connection and logs in, trying the other addresses of the site in turn
+    /// when one cannot be reached or refuses the login.
     pub async fn open(site: &SiteProfile, log: Option<LogSink>) -> Result<Self> {
+        let all = site.addresses();
+        let first = site.hosts.preferred.load(Ordering::Relaxed) % all.len();
+        let mut k = 0;
+        loop {
+            let i = (first + k) % all.len();
+            let (host, port) = &all[i];
+            match Self::open_at(site, host, *port, log.clone()).await {
+                Ok(s) => {
+                    site.hosts.preferred.store(i, Ordering::Relaxed);
+                    return Ok(s);
+                }
+                Err(e) if k + 1 < all.len() && rotates(&e) => {
+                    let (next, next_port) = &all[(i + 1) % all.len()];
+                    if let Some(l) = &log {
+                        l(LogLine::Status(format!("{host}:{port} failed ({e}): trying {next}:{next_port}")));
+                    }
+                    k += 1;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// Connects to the site (every address in turn), logs in and out: availability test.
+    /// Returns the address that answered and the time taken.
+    pub async fn probe(site: &SiteProfile) -> Result<((String, u16), Duration)> {
+        let t0 = Instant::now();
+        let session = Self::open(site, None).await?;
+        let took = t0.elapsed();
+        session.quit().await;
+        Ok((site.current_address(), took))
+    }
+
+    /// Logs out politely (`QUIT`, SSH disconnect); errors are ignored.
+    pub async fn quit(self) {
+        match self {
+            RemoteSession::Ftp(c) => {
+                let _ = (*c).quit().await;
+            }
+            RemoteSession::Sftp(c) => {
+                let _ = (*c).quit().await;
+            }
+        }
+    }
+
+    async fn open_at(site: &SiteProfile, host: &str, port: u16, log: Option<LogSink>) -> Result<Self> {
         Ok(match &site.protocol {
             SiteProtocol::Ftp(cfg) => {
-                let mut c = FtpClient::connect_with_log(&site.host, site.port, cfg.clone(), log).await?;
+                let mut c = FtpClient::connect_with_log(host, port, cfg.clone(), log).await?;
                 c.login(&site.user, &site.password).await?;
                 RemoteSession::Ftp(Box::new(c))
             }
             SiteProtocol::Sftp { config, key } => {
                 let auth = key.clone().unwrap_or_else(|| SftpAuth::Password(site.password.clone()));
-                let c = SftpClient::connect(&site.host, site.port, &site.user, &auth, config.clone(), log).await?;
+                let c = SftpClient::connect(host, port, &site.user, &auth, config.clone(), log).await?;
                 RemoteSession::Sftp(Box::new(c))
             }
         })

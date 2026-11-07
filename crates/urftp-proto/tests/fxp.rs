@@ -44,7 +44,7 @@ async fn plain_fxp_source_passive() {
     assert_eq!(dst_file(&d), data);
     assert!(s.received().iter().any(|l| l == "PASV"));
     assert!(d.received().iter().any(|l| l.starts_with("PORT 127,0,0,1,")));
-    // Les deux connexions restent utilisables.
+    // Both connections stay usable.
     a.noop().await.unwrap();
     b.noop().await.unwrap();
 }
@@ -212,4 +212,59 @@ async fn clear_security_forces_plain_data_between_tls_servers() {
     assert_eq!(dst_file(&d), data);
     assert!(!s.received().iter().any(|l| l == "SSCN ON"));
     assert!(a.is_data_protected() && b.is_data_protected());
+}
+
+/// IPv6 loopback available on this machine (absent on some CI runners).
+fn ipv6_loopback() -> bool {
+    std::net::TcpListener::bind("[::1]:0").is_ok()
+}
+
+async fn login_v6(srv: &MockServer, cfg: FtpConfig) -> FtpClient {
+    let mut c = FtpClient::connect("::1", srv.addr.port(), cfg).await.unwrap();
+    c.login("test", "secret").await.unwrap();
+    c
+}
+
+#[tokio::test]
+async fn fxp_between_ipv6_servers_uses_epsv_and_eprt() {
+    if !ipv6_loopback() {
+        return;
+    }
+    let data = payload(200_000);
+    let v6 = MockConfig { ipv6: true, ..MockConfig::default() };
+    let (s, d) = pair(v6.clone(), v6, &data).await;
+    let (mut a, mut b) = (login_v6(&s, FtpConfig::default()).await, login_v6(&d, FtpConfig::default()).await);
+
+    let out = fxp(&mut a, "/pub/release.rar", &mut b, "/incoming/release.rar", &FxpOptions::default()).await.unwrap();
+    assert!(!out.encrypted);
+    assert_eq!(dst_file(&d), data);
+    assert!(s.received().iter().any(|l| l == "EPSV"));
+    assert!(!s.received().iter().any(|l| l == "PASV"), "PASV cannot announce an IPv6 address");
+    assert!(d.received().iter().any(|l| l.starts_with("EPRT |2|::1|")));
+    a.noop().await.unwrap();
+    b.noop().await.unwrap();
+}
+
+#[tokio::test]
+async fn encrypted_ipv6_fxp_without_sscn_is_refused_or_falls_back() {
+    if !ipv6_loopback() {
+        return;
+    }
+    let data = payload(5_000);
+    let v6 = MockConfig { ipv6: true, tls: MockTls::Explicit, cpsv: true, ..MockConfig::default() };
+    let (s, d) = pair(v6.clone(), v6, &data).await;
+    let mut a = FtpClient::connect("::1", s.addr.port(), tls_config()).await.unwrap();
+    a.login("test", "secret").await.unwrap();
+    let mut b = FtpClient::connect("::1", d.addr.port(), tls_config()).await.unwrap();
+    b.login("test", "secret").await.unwrap();
+
+    let strict = FxpOptions { security: FxpSecurity::Cpsv, allow_clear_fallback: false, ..FxpOptions::default() };
+    let e = fxp(&mut a, "/pub/release.rar", &mut b, "/incoming/release.rar", &strict).await.unwrap_err();
+    assert!(e.to_string().contains("SSCN"), "{e}");
+    assert!(dst_file(&d).is_empty());
+
+    let lenient = FxpOptions { security: FxpSecurity::Cpsv, allow_clear_fallback: true, ..FxpOptions::default() };
+    let out = fxp(&mut a, "/pub/release.rar", &mut b, "/incoming/release.rar", &lenient).await.unwrap();
+    assert!(!out.encrypted);
+    assert_eq!(dst_file(&d), data);
 }

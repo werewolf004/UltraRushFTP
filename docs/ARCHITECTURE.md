@@ -53,6 +53,9 @@ Declared once in `[workspace.lints]` (root `Cargo.toml`) and inherited by every 
 - Transfers are run by the queue engine (`urftp-proto::engine`) on a separate multi-thread
   tokio runtime. Each tab has its own `Queue`; the engine keeps a connection pool per site
   and publishes `EngineEvent`s (started, progress, done, skipped, failed…).
+- Every connection (panel, engine, availability test) goes through
+  `RemoteSession::open`, which tries the other addresses of the site in turn, and opens
+  its TCP socket with `urftp-proto::net` (IPv6/IPv4 "happy eyeballs", RFC 8305).
 - `App::logic` runs every frame, including while the window is minimised, so transfers,
   statistics and mIRC requests keep being processed.
 

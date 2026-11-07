@@ -1,6 +1,10 @@
 //! Site manager: tree of folders and sites, settings form, import.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use urftp_i18n::t;
 
 use eframe::egui::{self, RichText};
@@ -35,6 +39,32 @@ struct Report {
     error: bool,
 }
 
+/// How the user asked to log in (`Shift` / `Ctrl` held on Connect).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LoginVariant {
+    /// Ghost login `!user`: the server closes the other sessions of the account.
+    pub ghost: bool,
+    /// `-password`: no welcome messages (glftpd...).
+    pub quiet: bool,
+}
+
+impl LoginVariant {
+    pub fn from_modifiers(m: egui::Modifiers) -> Self {
+        Self { ghost: m.shift, quiet: m.command }
+    }
+}
+
+/// Result of the availability test of a site.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Probe {
+    Running,
+    Up { address: String, millis: u128 },
+    Down(String),
+}
+
+/// Results of the availability tests, written by the network tasks.
+pub type Probes = Arc<Mutex<HashMap<u64, Probe>>>;
+
 pub struct SiteManager {
     pub open: bool,
     pub book: SiteBook,
@@ -45,7 +75,10 @@ pub struct SiteManager {
     last_change: f64,
     report: Option<Report>,
     confirm_delete: Option<Selection>,
-    connect: Option<u64>,
+    connect: Option<(u64, LoginVariant)>,
+    /// Sites to test, picked up by the application which owns the runtime.
+    probe_request: Vec<Site>,
+    pub probes: Probes,
 }
 
 /// Site books of other clients present on this machine.
@@ -86,6 +119,8 @@ impl SiteManager {
             report,
             confirm_delete: None,
             connect: None,
+            probe_request: Vec::new(),
+            probes: Probes::default(),
         }
     }
 
@@ -96,10 +131,31 @@ impl SiteManager {
         }
     }
 
-    /// Site the user asked to connect to.
-    pub fn take_connect(&mut self) -> Option<Site> {
-        let id = self.connect.take()?;
-        self.book.find(id).cloned()
+    /// Site the user asked to connect to, and how.
+    pub fn take_connect(&mut self) -> Option<(Site, LoginVariant)> {
+        let (id, variant) = self.connect.take()?;
+        self.book.find(id).cloned().map(|s| (s, variant))
+    }
+
+    /// Sites whose availability the user asked to test (marked as running).
+    pub fn take_probe_requests(&mut self) -> Vec<Site> {
+        let sites = std::mem::take(&mut self.probe_request);
+        let mut probes = self.probes.lock();
+        for s in &sites {
+            probes.insert(s.id, Probe::Running);
+        }
+        sites
+    }
+
+    /// Enabled sites of the selection (one site, or a folder and its subfolders).
+    fn selected_sites(&self) -> Vec<Site> {
+        let usable = |s: &&Site| s.enabled && !s.host.trim().is_empty();
+        match &self.selection {
+            Selection::Site(id) => self.book.find(*id).filter(usable).cloned().into_iter().collect(),
+            Selection::Group(path) => {
+                self.book.root.group(path).map(|g| g.sites_recursive().into_iter().filter(usable).cloned().collect()).unwrap_or_default()
+            }
+        }
     }
 
     /// Stores a trusted fingerprint in the site record.
@@ -163,7 +219,8 @@ impl SiteManager {
                         ui.set_width(260.0);
                         egui::ScrollArea::vertical().id_salt("site-tree").max_height(ui.available_height() - 4.0).show(ui, |ui| {
                             let mut clicked = None;
-                            tree(ui, &self.book.root, &mut Vec::new(), &self.selection, &mut clicked);
+                            let probes = self.probes.lock().clone();
+                            tree(ui, &self.book.root, &mut Vec::new(), &self.selection, &probes, &mut clicked);
                             if let Some(sel) = clicked {
                                 self.selection = sel;
                             }
@@ -220,6 +277,11 @@ impl SiteManager {
             if ui.add_enabled(deletable, egui::Button::new(t!("sites.delete"))).clicked() {
                 self.confirm_delete = Some(self.selection.clone());
             }
+            let to_test = self.selected_sites();
+            let test = egui::Button::new(t!("sites.test"));
+            if ui.add_enabled(!to_test.is_empty(), test).on_hover_text(t!("sites.test_hint")).clicked() {
+                self.probe_request = to_test;
+            }
             ui.separator();
             ui.menu_button(t!("sites.import"), |ui| {
                 if ui.button(t!("sites.import_pick")).clicked() {
@@ -250,9 +312,9 @@ impl SiteManager {
                     let enabled = self.book.find(id).is_some_and(|s| s.enabled && !s.host.trim().is_empty());
                     let p = theme::colors(ui);
                     let btn = egui::Button::new(RichText::new(t!("sites.connect")).color(p.on_accent)).fill(p.accent_fill);
-                    if ui.add_enabled(enabled, btn).clicked() {
+                    if ui.add_enabled(enabled, btn).on_hover_text(t!("sites.connect_hint")).clicked() {
                         self.save();
-                        self.connect = Some(id);
+                        self.connect = Some((id, LoginVariant::from_modifiers(ui.input(|i| i.modifiers))));
                         self.open = false;
                     }
                 }
@@ -289,9 +351,10 @@ impl SiteManager {
             }
             Selection::Site(id) => {
                 let show_password = &mut self.show_password;
+                let probe = self.probes.lock().get(&id).cloned();
                 let Some(site) = self.book.find_mut(id) else { return };
                 let before = site.clone();
-                site_form(ui, site, show_password);
+                site_form(ui, site, show_password, probe.as_ref());
                 if *site != before {
                     self.dirty = true;
                     self.last_change = ui.input(|i| i.time);
@@ -376,7 +439,26 @@ impl SiteManager {
     }
 }
 
-fn tree(ui: &mut egui::Ui, g: &SiteGroup, path: &mut Vec<usize>, sel: &Selection, clicked: &mut Option<Selection>) {
+/// Short mark of a test result, with its colour and its detail.
+fn probe_mark(ui: &egui::Ui, p: &Probe) -> (RichText, String) {
+    let c = theme::colors(ui);
+    match p {
+        Probe::Running => (RichText::new("…").weak(), t!("sites.test_running")),
+        Probe::Up { address, millis } => {
+            (RichText::new(format!("✔ {millis} ms")).color(c.success), t!("sites.test_up", address = address, ms = millis))
+        }
+        Probe::Down(e) => (RichText::new("✖").color(c.error), t!("sites.test_down", error = e)),
+    }
+}
+
+fn tree(
+    ui: &mut egui::Ui,
+    g: &SiteGroup,
+    path: &mut Vec<usize>,
+    sel: &Selection,
+    probes: &HashMap<u64, Probe>,
+    clicked: &mut Option<Selection>,
+) {
     let title = if path.is_empty() { t!("sites.all_sites") } else { format!("📁 {}", g.name) };
     let header = egui::CollapsingHeader::new(RichText::new(title).strong())
         .id_salt(("grp", path.clone()))
@@ -384,7 +466,7 @@ fn tree(ui: &mut egui::Ui, g: &SiteGroup, path: &mut Vec<usize>, sel: &Selection
         .show(ui, |ui| {
             for (i, child) in g.groups.iter().enumerate() {
                 path.push(i);
-                tree(ui, child, path, sel, clicked);
+                tree(ui, child, path, sel, probes, clicked);
                 path.pop();
             }
             for s in &g.sites {
@@ -397,9 +479,15 @@ fn tree(ui: &mut egui::Ui, g: &SiteGroup, path: &mut Vec<usize>, sel: &Selection
                 if !s.enabled {
                     text = text.weak().strikethrough();
                 }
-                if ui.selectable_label(*sel == Selection::Site(s.id), text).on_hover_text(format!("{}:{}", s.host, s.port)).clicked() {
-                    *clicked = Some(Selection::Site(s.id));
-                }
+                ui.horizontal(|ui| {
+                    if ui.selectable_label(*sel == Selection::Site(s.id), text).on_hover_text(format!("{}:{}", s.host, s.port)).clicked() {
+                        *clicked = Some(Selection::Site(s.id));
+                    }
+                    if let Some(p) = probes.get(&s.id) {
+                        let (mark, detail) = probe_mark(ui, p);
+                        ui.label(mark).on_hover_text(detail);
+                    }
+                });
             }
         });
     if header.header_response.clicked() {
@@ -452,7 +540,7 @@ fn optional_limit(ui: &mut egui::Ui, value: &mut Option<u32>, label: egui::Id, n
     });
 }
 
-fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
+fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: Option<&Probe>) {
     ui.heading(format!("{} {}", if s.protocol == SiteProtocol::Sftp { "🔑" } else { "🌐" }, s.name));
     ui.add_space(4.0);
     section(ui, &t!("site.connection"), |ui| {
@@ -491,10 +579,24 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool) {
                     *show_password = !*show_password;
                 }
             });
+            row(ui, &t!("site.alt_hosts"), |ui, l| {
+                let mut text = s.alt_hosts.join("\n");
+                let edit = egui::TextEdit::multiline(&mut text).desired_rows(2).desired_width(240.0).hint_text(t!("site.alt_hosts_hint"));
+                if ui.add(edit).labelled_by(l).on_hover_text(t!("site.alt_hosts_tip")).changed() {
+                    s.alt_hosts = if text.is_empty() { Vec::new() } else { text.split('\n').map(String::from).collect() };
+                }
+            });
             row(ui, &t!("site.active"), |ui, _| {
                 ui.checkbox(&mut s.enabled, t!("site.enabled"));
             });
         });
+        if let Some(p) = probe {
+            let (mark, detail) = probe_mark(ui, p);
+            ui.horizontal(|ui| {
+                ui.label(mark);
+                ui.label(detail);
+            });
+        }
     });
 
     if s.protocol.is_tls() {

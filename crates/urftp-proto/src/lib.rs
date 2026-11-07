@@ -5,6 +5,7 @@
 //!   fallback) and implicit FTPS, `PBSZ 0` / `PROT P|C`, TLS session reuse on the data
 //!   channels, system / fingerprint / no verification, passive and active modes, and
 //!   site-to-site FXP ([`ftp::fxp`]): clear or encrypted (`SSCN`, `CPSV`), auto-reverse.
+//! - [`net`]: TCP connection with IPv6/IPv4 "happy eyeballs".
 //! - [`proxy`]: SOCKS4, SOCKS4A, SOCKS5, HTTP tunnel, bypass rules.
 //! - [`ident`]: Ident server (RFC 1413) with a global or per-site name.
 //! - [`sftp`]: SFTP (SSH) client with password or key (OpenSSH, PEM, PuTTY), host key
@@ -22,6 +23,7 @@ pub mod engine;
 pub mod ftp;
 pub mod ident;
 pub mod keepalive;
+pub mod net;
 pub mod profile;
 pub mod proxy;
 pub mod session;

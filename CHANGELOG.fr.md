@@ -12,6 +12,16 @@ la traduction.
 
 ### Ajouté
 
+- **Plusieurs adresses par site** (fiche du site → Autres adresses) : essayées à tour de
+  rôle quand l'une ne répond pas ou refuse la connexion ; celle qui a marché sert en premier
+  la fois suivante.
+- **Test de disponibilité** d'un site ou de tous les sites d'un dossier (barre d'outils du
+  gestionnaire de sites).
+- **Connexion fantôme et `-motdepasse`** depuis le gestionnaire de sites (`Maj` / `Ctrl` +
+  Connecter) ; `RS_INVERT` est désormais pris en charge dans les scripts.
+- **« Happy eyeballs » IPv4/IPv6** : un nom qui a les deux sortes d'adresses se connecte
+  par la première qui répond, une route IPv6 morte ne coûte plus un délai complet.
+- **FXP entre serveurs IPv6** (`EPSV` côté passif, `EPRT` côté actif).
 - **Maintien de connexion** (Options → Maintien de connexion) : commandes anti-inactivité
   envoyées quand une connexion ne sert pas (liste, intervalle, choix au hasard, arrêt
   après un temps d'inactivité, déconnexion).

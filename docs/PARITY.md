@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
+Summary (284 topics): ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
 
 ## Main window and menus
 
@@ -164,14 +164,14 @@ Summary (284 topics): ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
 | Export plain text / CSV / HTML / FTPRush XML | ⬜ | Without passwords |
 | Default site setting | ⬜ | User, password and limits of a new site |
 | Security setting (password on the site book, show passwords) | 🟡 | Passwords protected by Windows DPAPI; no master password or lock |
-| Test availability of sites | ⬜ | |
+| Test availability of sites | ✅ | One site or a whole folder, in parallel |
 
 ### Site properties
 
 | Topic | Status | Notes |
 |---|---|---|
 | Protocol: plain FTP, `AUTH TLS`, implicit SSL, `AUTH SSL`, SFTP | ✅ | `AUTH SSL` as fallback of explicit FTPS |
-| Several host:port entries | 🟡 | Stored (`alt_hosts`); not chosen or rotated yet |
+| Several host:port entries | ✅ | Rotation on failure, the address that worked is used first |
 | Port, user, password, anonymous | ✅ | |
 | Passive mode, active fallback when `PASV` fails | 🟡 | Passive / active per site; no automatic fallback |
 | Server behind NAT (use the host address for `PASV`) | ✅ | Automatic when `PASV` returns a private address |
@@ -386,8 +386,8 @@ Summary (284 topics): ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
 | FAQ: "Protocol not supported (10043)" | ➖ | No OpenSSL DLL: TLS is built in (rustls) |
 | FAQ: multi-language file names | ✅ | UTF-8 |
 | FAQ: limit connections for a site | ✅ | |
-| Tip: `Shift` + connect = ghost login `!user` | ⬜ | `RS_GHOST` works in scripts |
-| Tip: `Ctrl` + connect = `-password` | ⬜ | `RS_INVERT` works in scripts |
+| Tip: `Shift` + connect = ghost login `!user` | ✅ | Site manager; `RS_GHOST` in scripts |
+| Tip: `Ctrl` + connect = `-password` | ✅ | Site manager; `RS_INVERT` in scripts |
 | Tip: `Shift` + bookmark = both sides | ⬜ | |
 | Tip: `Shift` + double-click folder = both sides | ⬜ | |
 | Tip: `%F%` / `%D%` in skip and allow lists of `Transfer` | ⬜ | |
@@ -398,4 +398,5 @@ Summary (284 topics): ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
 Pages without features: welcome, acknowledgements, customer support, menu headings (8
 pages). UltraRushFTP adds what FTPRush v2 did not have: dark theme, keyboard navigation and
 screen-reader names checked by tests, DPAPI-protected passwords, imports from FileZilla
-and FlashFXP, the `urftp` command-line tool.
+and FlashFXP, the `urftp` command-line tool, IPv4/IPv6 "happy eyeballs" connections and
+FXP between IPv6 servers (`EPSV` / `EPRT`).

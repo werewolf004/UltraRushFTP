@@ -53,7 +53,7 @@ $sites = @{
         groups = @(
             @{ name = 'Demo'; groups = @(); sites = @(
                     @{ id = 1; name = 'Local demo'; host = '127.0.0.1'; port = [int]$port; user = 'test'; password = 'b64:c2VjcmV0'
-                        max_transfers = 3; remote_dir = '/pub'; local_dir = $local
+                        max_transfers = 3; remote_dir = '/pub'; local_dir = $local; alt_hosts = @("localhost:$port")
                         bookmarks = @(@{ name = 'releases'; remote_dir = '/pub/Releases'; local_dir = '' })
                         notes = 'Development server: cargo run -p urftp-proto --example dev_server' },
                     @{ id = 2; name = 'Example FTPS'; host = 'ftp.example.com'; port = 21; protocol = 'ftps_explicit'; user = 'demo'; max_transfers = 4 },

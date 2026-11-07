@@ -179,7 +179,8 @@ idle before reusing it, and opens a new one when the server has dropped it.
 |---|---|---|
 | Name | "New site" | Used by scripts, mIRC and `urftp` (case-insensitive) |
 | Protocol | FTP | FTP, FTPS (explicit), FTPS (implicit), SFTP; the port follows (21, 990, 22) |
-| Host, port | — / 21 | — |
+| Host, port | — / 21 | Name or IP address; when a name has IPv6 and IPv4 addresses both are tried ("happy eyeballs") |
+| Other addresses | none | `host:port` (or `[IPv6]:port`), one per line: tried in turn when the main address cannot be reached or refuses the login; the address that worked is used first next time |
 | User, password, anonymous | — | Password encrypted with DPAPI; with an SSH key it is the passphrase |
 | Site enabled | on | A disabled site cannot be connected (`RushApp.FTP.DisableSite`) |
 | Also encrypt transfers (PROT P) | on | FTPS: encrypted data channels |
@@ -194,6 +195,15 @@ idle before reusing it, and opens a new one when the server has dropped it.
 | Ident name specific to this site | off | Stored; not yet answered by the Ident server (see the roadmap) |
 | Bookmarks | none | Name, remote folder, local folder; used by `RS_BOOKMARK` in scripts |
 | Notes | empty | Free text |
+
+**Connect** (site manager): hold `Shift` for a ghost login (`!user`: the server closes
+the other sessions of the account) and `Ctrl` for `-password` (glftpd and others: no
+welcome messages). FTP and FTPS only.
+
+**Test availability** (site manager toolbar): connects to the selected site, or to every
+enabled site of the selected folder at the same time, then logs out. The tree shows the
+time taken (`✔ 120 ms`) or `✖`; the site form shows the address that answered or the
+error.
 
 **Import** (site manager toolbar): FileZilla (`sitemanager.xml` or export), FTPRush v3
 (`site.json`), FTPRush v1/v2 (`RushSite.xml`), FlashFXP (`.ftp`). The format is detected
@@ -263,9 +273,10 @@ mIRC. Supported language: variables, strings, integers, booleans, operators (bit
 
 Flags handled: `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`, `RS_DIRDES`, `RS_DIRSRC`,
 `RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`, `RS_FOLDER`, `RS_FULLPATH`, `RS_GHOST`,
-`RS_LOGIN`, `RS_LOGOUT`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`, `RS_POPUP`, `RS_TRANSFER`,
-`RS_UP`, `RS_WAITING`. `RS_INVERT`, the filters and repeat count of `Transfer` and
-interactive `InputQuery` are recognised but not supported yet (a message says so).
+`RS_INVERT` (`-password`), `RS_LOGIN`, `RS_LOGOUT`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`,
+`RS_POPUP`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`. The filters and repeat count of
+`Transfer` and interactive `InputQuery` are recognised but not supported yet (a message
+says so).
 
 ## mIRC DLL
 

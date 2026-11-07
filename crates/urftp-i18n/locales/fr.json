@@ -176,7 +176,6 @@
   "host.login_error": "Login : {error}",
   "host.login_skipped": "Login : {error}, site ignoré",
   "host.login_default_dir": "Login : {error}, dossier par défaut",
-  "host.invert_unsupported": "Login : RS_INVERT n'est pas pris en charge, ignoré",
   "host.cwd_no_bookmark": "CWD : signet « {bookmark} » absent de {site}",
   "host.raw_empty": "commande vide",
   "host.raw_no_target": "RAW « {command} » : aucune connexion visée",
@@ -275,6 +274,9 @@
   "site.bookmark_field": "Signet {n} : {field}",
   "site.limit_on": "Limiter : {limit}",
   "site.remove_bookmark": "Retirer le signet {n}",
+  "site.alt_hosts": "Autres adresses",
+  "site.alt_hosts_hint": "hôte:port, une par ligne",
+  "site.alt_hosts_tip": "Essayées à tour de rôle quand l'adresse principale ne répond pas ou refuse la connexion ; celle qui a marché sert en premier la fois suivante",
 
   "options.title": "⚙ Options",
   "options.page_general": "⚙ Général",
@@ -404,6 +406,12 @@
   "import.passwords_not_imported": "mots de passe non importés : à ressaisir pour les {n} site(s)",
 
   "sites.new_site_default": "Nouveau site",
+  "sites.test": "✔ Tester la disponibilité",
+  "sites.test_hint": "Se connecte au site sélectionné, ou à chaque site actif du dossier sélectionné, puis se déconnecte",
+  "sites.test_running": "Test en cours…",
+  "sites.test_up": "Disponible : {address} a répondu en {ms} ms",
+  "sites.test_down": "Indisponible : {error}",
+  "sites.connect_hint": "Maj : connexion fantôme (!user) · Ctrl : -motdepasse (sans messages d'accueil)",
 
   "skip.reason_rule": "liste d'exclusion : {mask}",
   "skip.reason_zero": "fichier de 0 octet",

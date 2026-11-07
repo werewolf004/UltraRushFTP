@@ -11,7 +11,7 @@
 use std::net::{IpAddr, SocketAddr};
 use std::time::{Duration, Instant};
 
-use super::client::{needs_fix, parse_pasv};
+use super::client::{needs_fix, parse_epsv, parse_pasv};
 use super::{FtpClient, FtpError, Result, TransferType};
 
 /// Which side listens.
@@ -210,41 +210,32 @@ async fn run(
         }
     }
 
-    // ----- Passive side: PRET, then PASV or CPSV.
-    if passive.features().has("PRET") {
-        passive.ok(&format!("PRET {passive_cmd}")).await?;
-    }
-    let pasv_cmd = if method == Method::Cpsv { "CPSV" } else { "PASV" };
-    let mut r = passive.raw(pasv_cmd).await?;
-    if r.code != 227 && method == Method::Cpsv {
+    // ----- Passive side: PRET, then PASV or CPSV (EPSV when it is reached over IPv6:
+    // PASV can only announce an IPv4 address).
+    let ipv6 = passive.server_ip().is_some_and(|ip| ip.to_canonical().is_ipv6());
+    if ipv6 && method == Method::Cpsv {
+        // CPSV has no extended form: encryption needs SSCN between IPv6 servers.
         if !opts.allow_clear_fallback {
-            return Err(Attempt::Failed(FtpError::Unexpected { command: "CPSV".into(), reply: r }));
+            return Err(Attempt::Failed(FtpError::Protocol("encrypted FXP between IPv6 servers needs SSCN (CPSV is IPv4 only)".into())));
         }
-        passive.status("Neither SSCN nor CPSV: FXP in clear (fallback allowed)");
+        passive.status("CPSV is IPv4 only: FXP in clear (fallback allowed)");
         method = Method::Plain;
         passive.set_data_protection(false).await?;
         active.set_data_protection(false).await?;
-        r = passive.raw("PASV").await?;
     }
-    if r.code != 227 {
-        return Err(Attempt::Failed(FtpError::Unexpected { command: pasv_cmd.into(), reply: r }));
+    if passive.features().has("PRET") {
+        passive.ok(&format!("PRET {passive_cmd}")).await?;
     }
-    let (ip, port) = parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("unreadable {pasv_cmd} reply: {r}")))?;
-    let mut ip = IpAddr::V4(ip);
-    if let Some(server) = passive.server_ip()
-        && needs_fix(ip, Some(server))
-    {
-        passive.status(format!("{pasv_cmd} returns {ip}: using {server}"));
-        ip = server;
-    }
-    let addr = SocketAddr::new(ip, port);
+    let addr = if ipv6 { extended_passive(passive).await? } else { classic_passive(passive, active, opts, &mut method).await? };
 
-    // ----- Active side: PORT to the address of the passive side.
-    let IpAddr::V4(v4) = addr.ip() else {
-        return Err(Attempt::Failed(FtpError::Protocol("IPv6 FXP not supported (PORT)".into())));
+    // ----- Active side: PORT (IPv4) or EPRT (IPv6) to the address of the passive side.
+    let port_cmd = match addr.ip() {
+        IpAddr::V4(v4) => {
+            let o = v4.octets();
+            format!("PORT {},{},{},{},{},{}", o[0], o[1], o[2], o[3], addr.port() >> 8, addr.port() & 0xff)
+        }
+        IpAddr::V6(v6) => format!("EPRT |2|{v6}|{}|", addr.port()),
     };
-    let o = v4.octets();
-    let port_cmd = format!("PORT {},{},{},{},{},{}", o[0], o[1], o[2], o[3], port >> 8, port & 0xff);
     let r = active.raw(&port_cmd).await?;
     if !r.is_completion() {
         let e = FtpError::Unexpected { command: port_cmd, reply: r.clone() };
@@ -280,4 +271,48 @@ async fn run(
         return Err(Attempt::Failed(FtpError::Unexpected { command: transfer_dst, reply: rd }));
     }
     Ok(method != Method::Plain)
+}
+
+/// `EPSV`: the passive side only gives a port, on the address of its control connection.
+async fn extended_passive(passive: &mut FtpClient) -> std::result::Result<SocketAddr, Attempt> {
+    let r = passive.raw("EPSV").await?;
+    if r.code != 229 {
+        return Err(Attempt::Failed(FtpError::Unexpected { command: "EPSV".into(), reply: r }));
+    }
+    let port = parse_epsv(r.text()).ok_or_else(|| FtpError::Protocol(format!("unreadable EPSV reply: {r}")))?;
+    let ip = passive.server_ip().ok_or_else(|| FtpError::Protocol("EPSV: address of the server unknown".into()))?;
+    Ok(SocketAddr::new(ip, port))
+}
+
+/// `PASV` or `CPSV` (IPv4), with the clear fallback when `CPSV` is refused.
+async fn classic_passive(
+    passive: &mut FtpClient,
+    active: &mut FtpClient,
+    opts: &FxpOptions,
+    method: &mut Method,
+) -> std::result::Result<SocketAddr, Attempt> {
+    let pasv_cmd = if *method == Method::Cpsv { "CPSV" } else { "PASV" };
+    let mut r = passive.raw(pasv_cmd).await?;
+    if r.code != 227 && *method == Method::Cpsv {
+        if !opts.allow_clear_fallback {
+            return Err(Attempt::Failed(FtpError::Unexpected { command: "CPSV".into(), reply: r }));
+        }
+        passive.status("Neither SSCN nor CPSV: FXP in clear (fallback allowed)");
+        *method = Method::Plain;
+        passive.set_data_protection(false).await?;
+        active.set_data_protection(false).await?;
+        r = passive.raw("PASV").await?;
+    }
+    if r.code != 227 {
+        return Err(Attempt::Failed(FtpError::Unexpected { command: pasv_cmd.into(), reply: r }));
+    }
+    let (ip, port) = parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("unreadable {pasv_cmd} reply: {r}")))?;
+    let mut ip = IpAddr::V4(ip);
+    if let Some(server) = passive.server_ip()
+        && needs_fix(ip, Some(server))
+    {
+        passive.status(format!("{pasv_cmd} returns {ip}: using {server}"));
+        ip = server;
+    }
+    Ok(SocketAddr::new(ip, port))
 }

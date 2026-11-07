@@ -50,22 +50,22 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
 - ✅ Keep alive (command list, interval, random command, stop after, log out) and
   reconnection when kicked or on matching server replies (G1).
-- ⬜ Several hosts per site with rotation on login failure; test availability of sites.
-- ⬜ Ghost login (`!user`, `Shift`+connect) and `-password` (`Ctrl`+connect) from the
-  interface (scripts already support `RS_GHOST` / `RS_INVERT`).
+- ✅ Several hosts per site with rotation on login failure; test availability of sites (G2).
+- ✅ Ghost login (`!user`, `Shift`+connect) and `-password` (`Ctrl`+connect) from the
+  interface, `RS_INVERT` in scripts (G2).
 - ⬜ Per-site settings: Ident name, retries and timeouts, keep alive, resume, `FEAT`,
   `CLNT`, skip list, priorities, "existing file" rules, separate upload/download accounts.
 - ⬜ Listing settings exposed: `LIST -a` (hidden files), `STAT -l`, custom command, trim
   spaces, `PORT` fallback when `PASV` fails, time zone, charset of non-UTF-8 servers.
 - ⬜ Active-mode settings exposed: external address, local port range, local IP binding.
 - ⬜ Anonymous e-mail, default download folder, default site settings.
-- ⬜ FXP between IPv6 addresses (`EPRT`), IPv4/IPv6 "happy eyeballs" connection.
+- ✅ FXP between IPv6 addresses (`EPSV` / `EPRT`), IPv4/IPv6 "happy eyeballs" connection (G2).
 - ⬜ Validation against real servers (glftpd, vsftpd, ProFTPD, FileZilla Server, IIS,
   OpenSSH).
 

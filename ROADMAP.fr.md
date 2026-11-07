@@ -54,16 +54,16 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
 - ✅ Maintien de connexion (liste de commandes, intervalle, commande aléatoire, arrêt,
   déconnexion) et reconnexion après expulsion ou sur certaines réponses du serveur (G1).
-- ⬜ Plusieurs hôtes par site avec rotation en cas d'échec de connexion ; test de
-  disponibilité des sites.
-- ⬜ Connexion fantôme (`!user`, `Maj`+connexion) et `-motdepasse` (`Ctrl`+connexion)
-  depuis l'interface (les scripts gèrent déjà `RS_GHOST` / `RS_INVERT`).
+- ✅ Plusieurs hôtes par site avec rotation en cas d'échec de connexion ; test de
+  disponibilité des sites (G2).
+- ✅ Connexion fantôme (`!user`, `Maj`+connexion) et `-motdepasse` (`Ctrl`+connexion)
+  depuis l'interface, `RS_INVERT` dans les scripts (G2).
 - ⬜ Réglages par site : nom Ident, essais et délais, maintien de connexion, reprise,
   `FEAT`, `CLNT`, liste d'exclusion, priorités, règles « fichier existant », comptes
   séparés pour envois et téléchargements.
@@ -73,7 +73,7 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
 - ⬜ Réglages du mode actif accessibles : adresse externe, plage de ports locaux, adresse
   IP locale.
 - ⬜ E-mail anonyme, dossier de téléchargement par défaut, réglages par défaut des sites.
-- ⬜ FXP entre adresses IPv6 (`EPRT`), connexion IPv4/IPv6 « happy eyeballs ».
+- ✅ FXP entre adresses IPv6 (`EPSV` / `EPRT`), connexion IPv4/IPv6 « happy eyeballs » (G2).
 - ⬜ Validation sur des serveurs réels (glftpd, vsftpd, ProFTPD, FileZilla Server, IIS,
   OpenSSH).
 

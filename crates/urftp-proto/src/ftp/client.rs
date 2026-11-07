@@ -137,7 +137,7 @@ impl FtpClient {
                 (tcp, ip)
             }
             None => {
-                let tcp = timeout(ct, TcpStream::connect((host, port))).await?;
+                let tcp = timeout(ct, crate::net::connect(host, port)).await?;
                 let ip = tcp.peer_addr()?.ip();
                 (tcp, Some(ip))
             }
@@ -201,7 +201,7 @@ impl FtpClient {
             welcome = c.read_reply().await?;
         }
         if !welcome.is_completion() {
-            return Err(FtpError::Unexpected { command: "(connexion)".into(), reply: welcome });
+            return Err(FtpError::Unexpected { command: "(connection)".into(), reply: welcome });
         }
         c.welcome = welcome;
         if matches!(c.config.security, Security::Explicit(_)) {
@@ -664,7 +664,7 @@ impl FtpClient {
             }
             match target {
                 DataTarget::Addr(a) => timeout(ct, TcpStream::connect(a)).await,
-                DataTarget::Host(port) => timeout(ct, TcpStream::connect((host.as_str(), port))).await,
+                DataTarget::Host(port) => timeout(ct, crate::net::connect(&host, port)).await,
             }
         }
     }
@@ -885,7 +885,7 @@ pub(super) fn parse_pasv(text: &str) -> Option<(Ipv4Addr, u16)> {
 }
 
 /// `Entering Extended Passive Mode (|||6446|)`.
-fn parse_epsv(text: &str) -> Option<u16> {
+pub(super) fn parse_epsv(text: &str) -> Option<u16> {
     let inner = &text[text.find('(')? + 1..];
     let delim = inner.chars().next()?;
     let parts: Vec<&str> = inner.split(delim).collect();

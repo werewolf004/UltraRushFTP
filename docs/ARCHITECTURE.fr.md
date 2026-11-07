@@ -56,6 +56,9 @@ les crates :
   tokio multi-fil séparé. Chaque onglet a sa `Queue` ; le moteur garde un réservoir de
   connexions par site et publie des `EngineEvent` (démarré, progression, terminé, ignoré,
   échec…).
+- Toute connexion (panneau, moteur, test de disponibilité) passe par
+  `RemoteSession::open`, qui essaie à tour de rôle les autres adresses du site, et ouvre
+  sa socket TCP avec `urftp-proto::net` (« happy eyeballs » IPv6/IPv4, RFC 8305).
 - `App::logic` s'exécute à chaque image, y compris fenêtre réduite : transferts,
   statistiques et demandes de mIRC continuent d'être traités.
 

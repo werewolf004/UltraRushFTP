@@ -48,7 +48,7 @@ pub struct MockConfig {
     pub ident_port: Option<u16>,
     /// Accepts `SSCN ON/OFF` (and announces it in `FEAT`).
     pub sscn: bool,
-    /// Accepte `CPSV`.
+    /// Accepts `CPSV`.
     pub cpsv: bool,
     /// Announces `PRET` in `FEAT`.
     pub pret: bool,
@@ -65,6 +65,9 @@ pub struct MockConfig {
     pub fail_first_list: Option<(usize, &'static str)>,
     /// Logins accepted in all (later ones get `530`).
     pub max_logins: Option<usize>,
+    /// Listens on `[::1]` instead of `127.0.0.1` (`PASV` is then refused, like real
+    /// servers reached over IPv6).
+    pub ipv6: bool,
 }
 
 impl Default for MockConfig {
@@ -88,6 +91,7 @@ impl Default for MockConfig {
             idle_kick: None,
             fail_first_list: None,
             max_logins: None,
+            ipv6: false,
         }
     }
 }
@@ -272,7 +276,7 @@ fn make_tls() -> (TlsAcceptor, String) {
 
 impl MockServer {
     pub async fn start(cfg: MockConfig) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener = TcpListener::bind(if cfg.ipv6 { "[::1]:0" } else { "127.0.0.1:0" }).await.unwrap();
         let addr = listener.local_addr().unwrap();
         let fs = Arc::new(Mutex::new(Fs::new()));
         let stats = Arc::new(Mutex::new(Stats::default()));
@@ -548,11 +552,12 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 }
             }
             "EPSV" if sh.cfg.epsv => {
-                let l = TcpListener::bind("127.0.0.1:0").await?;
+                let l = TcpListener::bind(if sh.cfg.ipv6 { "[::1]:0" } else { "127.0.0.1:0" }).await?;
                 let port = l.local_addr()?.port();
                 st.pending = Some(Pending::Pasv(l));
                 reply(&mut c, &format!("229 Entering Extended Passive Mode (|||{port}|)")).await?;
             }
+            "PASV" if sh.cfg.ipv6 => reply(&mut c, "500 PASV is IPv4 only, use EPSV").await?,
             "PASV" => {
                 let l = TcpListener::bind("127.0.0.1:0").await?;
                 let port = l.local_addr()?.port();

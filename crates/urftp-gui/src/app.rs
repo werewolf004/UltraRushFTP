@@ -1088,6 +1088,7 @@ impl UltraRushApp {
             protocol,
             limits: SiteLimits { max_transfers: s.transfer.quick_connect_transfers, ..SiteLimits::default() },
             session: urftp_proto::profile::session_policy(s),
+            hosts: Default::default(),
         })
     }
 
@@ -1140,8 +1141,25 @@ impl UltraRushApp {
     }
 
     /// Connection from a site manager record.
-    fn connect_site(&mut self, site: Site, ctx: &egui::Context) {
-        let profile = sites::to_profile(&site, &self.options.settings);
+    /// Availability tests asked in the site manager: every site in parallel.
+    fn run_probes(&mut self, ctx: &egui::Context) {
+        for site in self.sites.take_probe_requests() {
+            let profile = sites::to_profile(&site, &self.options.settings);
+            let probes = self.sites.probes.clone();
+            let ctx = ctx.clone();
+            self.rt.spawn(async move {
+                let result = match urftp_proto::session::RemoteSession::probe(&profile).await {
+                    Ok(((host, port), took)) => sites::Probe::Up { address: format!("{host}:{port}"), millis: took.as_millis() },
+                    Err(e) => sites::Probe::Down(e.to_string()),
+                };
+                probes.lock().insert(site.id, result);
+                ctx.request_repaint();
+            });
+        }
+    }
+
+    fn connect_site(&mut self, site: Site, variant: sites::LoginVariant, ctx: &egui::Context) {
+        let profile = sites::to_profile(&site, &self.options.settings).with_login_variant(variant.ghost, variant.quiet);
         let remote = (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone());
         self.connect_profile(profile, Some(site.id), remote, ctx);
         if !site.local_dir.trim().is_empty()
@@ -1173,7 +1191,7 @@ impl UltraRushApp {
                 self.quick = q;
                 self.quick_connect(ctx);
             } else if let Some(site) = self.sites.book.find_by_name(target).cloned() {
-                self.connect_site(site, ctx);
+                self.connect_site(site, sites::LoginVariant::default(), ctx);
             } else if let Some(q) = parse_connect_url(&format!("ftp://{target}")) {
                 self.quick = q;
                 self.quick_connect(ctx);
@@ -1755,9 +1773,10 @@ impl eframe::App for UltraRushApp {
         if self.options.show(&ctx) {
             self.apply_settings(&ctx);
         }
-        if let Some(site) = self.sites.take_connect() {
-            self.connect_site(site, &ctx);
+        if let Some((site, variant)) = self.sites.take_connect() {
+            self.connect_site(site, variant, &ctx);
         }
+        self.run_probes(&ctx);
     }
 }
 

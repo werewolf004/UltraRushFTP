@@ -11,6 +11,14 @@ GitHub release with the same tag.
 
 ### Added
 
+- **Several addresses per site** (site record → Other addresses): tried in turn when one
+  cannot be reached or refuses the login; the address that worked is used first next time.
+- **Test availability** of a site or of every site of a folder (site manager toolbar).
+- **Ghost login and `-password`** from the site manager (`Shift` / `Ctrl` + Connect);
+  `RS_INVERT` is now handled in scripts.
+- **IPv4/IPv6 "happy eyeballs"**: a name with both kinds of addresses connects through the
+  first that answers, a dead IPv6 route no longer costs a full timeout.
+- **FXP between IPv6 servers** (`EPSV` on the passive side, `EPRT` on the active side).
 - **Keep alive** (Options → Keep alive): anti-idle commands sent while a connection is
   idle (list, interval, random choice, stop after an idle time, log out).
 - **Automatic reconnection** when the server closes the connection (kick, idle timeout,

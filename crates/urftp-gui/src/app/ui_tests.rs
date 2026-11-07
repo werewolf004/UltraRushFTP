@@ -359,3 +359,54 @@ fn tabs_open_switch_and_close_from_the_keyboard() {
     ui.key_with(Modifiers::COMMAND, Key::W);
     assert_eq!(ui.app().tabs.len(), 1, "the last tab stays");
 }
+
+#[test]
+fn availability_test_marks_an_unreachable_site() {
+    let mut ui = Ui::start(Lang::En, true);
+    // A local port nobody listens on: the test fails quickly.
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let site = urftp_core::site::Site { name: "Down".into(), host: "127.0.0.1".into(), port, ..Default::default() };
+    let id = ui.app().sites.book.add_site(&[], site);
+    ui.app().sites.open = true;
+    ui.run();
+    ui.harness.get_by_label_contains("Down").click();
+    ui.run();
+    ui.harness.get_by_label(&t!("sites.test")).click();
+    ui.run();
+    let mut result = None;
+    for _ in 0..100 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        ui.run();
+        result = ui.app().sites.probes.lock().get(&id).cloned();
+        if matches!(result, Some(crate::sites::Probe::Down(_))) {
+            break;
+        }
+    }
+    assert!(matches!(result, Some(crate::sites::Probe::Down(_))), "{result:?}");
+    assert_eq!(ui.harness.query_all_by_label("✖").count(), 2, "the tree and the form show the failure");
+}
+
+#[test]
+fn other_addresses_are_edited_one_per_line() {
+    let mut ui = Ui::start(Lang::En, true);
+    let site = urftp_core::site::Site { name: "Multi".into(), host: "a.example.com".into(), ..Default::default() };
+    let id = ui.app().sites.book.add_site(&[], site);
+    ui.app().sites.open = true;
+    ui.run();
+    ui.harness.get_by_label_contains("Multi").click();
+    ui.run();
+    let label = t!("site.alt_hosts");
+    let field = ui.harness.get_by_role_and_label(Role::MultilineTextInput, &label);
+    field.focus();
+    field.type_text("b.example.com:2121");
+    ui.run();
+    assert_eq!(ui.app().sites.book.find(id).map(|s| s.alt_hosts.clone()), Some(vec!["b.example.com:2121".to_string()]));
+}
+
+#[test]
+fn shift_and_ctrl_pick_the_login_variant() {
+    use crate::sites::LoginVariant;
+    assert_eq!(LoginVariant::from_modifiers(Modifiers::NONE), LoginVariant::default());
+    assert_eq!(LoginVariant::from_modifiers(Modifiers::SHIFT), LoginVariant { ghost: true, quiet: false });
+    assert_eq!(LoginVariant::from_modifiers(Modifiers::COMMAND), LoginVariant { ghost: false, quiet: true });
+}

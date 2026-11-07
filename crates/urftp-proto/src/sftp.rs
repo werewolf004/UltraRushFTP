@@ -20,7 +20,6 @@ use russh_sftp::client::SftpSession;
 use russh_sftp::client::error::Error as SftpLibError;
 use russh_sftp::protocol::{FileAttributes, OpenFlags};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::TcpStream;
 
 use crate::ftp::listing::{EntryKind, FtpTime, RemoteEntry};
 use crate::ftp::{LogLine, LogSink, path};
@@ -199,7 +198,7 @@ impl SftpClient {
                 status(format!("Connecting through proxy {:?} {}:{}", p.kind, p.host, p.port));
                 limit(ct, async { Ok(proxy::connect(p, host, port).await?) }).await?
             }
-            None => limit(ct, async { Ok(TcpStream::connect((host, port)).await?) }).await?,
+            None => limit(ct, async { Ok(crate::net::connect(host, port).await?) }).await?,
         };
         tcp.set_nodelay(true)?;
 
@@ -383,7 +382,7 @@ impl SftpClient {
     pub async fn quit(self) -> Result<()> {
         self.status("Disconnecting");
         let _ = self.sftp.close().await;
-        self.ssh.disconnect(russh::Disconnect::ByApplication, "", "fr").await.map_err(ssh_err)
+        self.ssh.disconnect(russh::Disconnect::ByApplication, "", "en").await.map_err(ssh_err)
     }
 }
 

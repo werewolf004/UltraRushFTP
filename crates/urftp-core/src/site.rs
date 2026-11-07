@@ -211,6 +211,13 @@ impl SiteGroup {
         self.sites.len() + self.groups.iter().map(SiteGroup::site_count).sum::<usize>()
     }
 
+    /// Sites of this folder and of its subfolders.
+    pub fn sites_recursive(&self) -> Vec<&Site> {
+        let mut out = Vec::new();
+        self.visit(&mut Vec::new(), &mut out);
+        out.into_iter().map(|(_, s)| s).collect()
+    }
+
     fn visit<'a>(&'a self, path: &mut Vec<String>, out: &mut Vec<(Vec<String>, &'a Site)>) {
         for s in &self.sites {
             out.push((path.clone(), s));
@@ -253,6 +260,13 @@ impl SiteGroup {
     }
 
     /// Group designated by a sequence of indices (empty = this group).
+    pub fn group(&self, path: &[usize]) -> Option<&SiteGroup> {
+        match path.split_first() {
+            None => Some(self),
+            Some((&i, rest)) => self.groups.get(i)?.group(rest),
+        }
+    }
+
     pub fn group_mut(&mut self, path: &[usize]) -> Option<&mut SiteGroup> {
         match path.split_first() {
             None => Some(self),

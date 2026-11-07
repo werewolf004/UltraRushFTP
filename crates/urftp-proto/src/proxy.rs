@@ -83,7 +83,7 @@ pub enum ProxyError {
 
 /// Opens a TCP connection to `target_host:target_port` through the proxy.
 pub async fn connect(proxy: &ProxyConfig, target_host: &str, target_port: u16) -> Result<TcpStream, ProxyError> {
-    let mut s = TcpStream::connect((proxy.host.as_str(), proxy.port)).await?;
+    let mut s = crate::net::connect(&proxy.host, proxy.port).await?;
     s.set_nodelay(true)?;
     match proxy.kind {
         ProxyKind::Socks4 | ProxyKind::Socks4a => socks4(&mut s, proxy, target_host, target_port).await?,

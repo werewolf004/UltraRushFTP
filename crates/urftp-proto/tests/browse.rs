@@ -24,6 +24,7 @@ fn profile(srv: &MockServer, session: SessionPolicy) -> SiteProfile {
         protocol: SiteProtocol::Ftp(FtpConfig::default()),
         limits: SiteLimits::default(),
         session,
+        hosts: Default::default(),
     }
 }
 

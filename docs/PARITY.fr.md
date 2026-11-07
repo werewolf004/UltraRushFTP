@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
+Résumé (284 sujets) : ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
 
 ## Fenêtre principale et menus
 
@@ -164,14 +164,14 @@ Résumé (284 sujets) : ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
 | Export texte brut / CSV / HTML / FTPRush XML | ⬜ | Sans les mots de passe |
 | Réglages par défaut d'un site | ⬜ | Utilisateur, mot de passe et limites d'un nouveau site |
 | Réglages de sécurité (mot de passe du carnet, afficher les mots de passe) | 🟡 | Mots de passe protégés par DPAPI de Windows ; pas de mot de passe maître ni de verrouillage |
-| Tester la disponibilité des sites | ⬜ | |
+| Tester la disponibilité des sites | ✅ | Un site ou tout un dossier, en parallèle |
 
 ### Propriétés d'un site
 
 | Sujet | État | Remarques |
 |---|---|---|
 | Protocole : FTP simple, `AUTH TLS`, SSL implicite, `AUTH SSL`, SFTP | ✅ | `AUTH SSL` en repli du FTPS explicite |
-| Plusieurs entrées hôte:port | 🟡 | Enregistrées (`alt_hosts`) ; pas encore choisies ni alternées |
+| Plusieurs entrées hôte:port | ✅ | Rotation en cas d'échec, l'adresse qui a marché sert en premier |
 | Port, utilisateur, mot de passe, anonyme | ✅ | |
 | Mode passif, repli actif quand `PASV` échoue | 🟡 | Passif / actif par site ; pas de repli automatique |
 | Serveur derrière un NAT (adresse de l'hôte pour `PASV`) | ✅ | Automatique quand `PASV` renvoie une adresse privée |
@@ -386,8 +386,8 @@ Résumé (284 sujets) : ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
 | FAQ : « Protocol not supported (10043) » | ➖ | Pas de DLL OpenSSL : le TLS est intégré (rustls) |
 | FAQ : noms de fichiers multilingues | ✅ | UTF-8 |
 | FAQ : limiter les connexions d'un site | ✅ | |
-| Astuce : `Maj` + connexion = connexion fantôme `!user` | ⬜ | `RS_GHOST` marche dans les scripts |
-| Astuce : `Ctrl` + connexion = `-motdepasse` | ⬜ | `RS_INVERT` marche dans les scripts |
+| Astuce : `Maj` + connexion = connexion fantôme `!user` | ✅ | Gestionnaire de sites ; `RS_GHOST` dans les scripts |
+| Astuce : `Ctrl` + connexion = `-motdepasse` | ✅ | Gestionnaire de sites ; `RS_INVERT` dans les scripts |
 | Astuce : `Maj` + signet = les deux côtés | ⬜ | |
 | Astuce : `Maj` + double-clic sur un dossier = les deux côtés | ⬜ | |
 | Astuce : `%F%` / `%D%` dans les listes d'exclusion et d'autorisation de `Transfer` | ⬜ | |
@@ -398,4 +398,5 @@ Résumé (284 sujets) : ✅ 71 · 🟡 51 · ⬜ 145 · ➖ 17.
 Pages sans fonction : accueil, remerciements, support, titres de menus (8 pages).
 UltraRushFTP ajoute ce que FTPRush v2 n'avait pas : thème sombre, navigation au clavier et
 noms pour lecteurs d'écran contrôlés par des tests, mots de passe protégés par DPAPI,
-imports depuis FileZilla et FlashFXP, l'outil en ligne de commande `urftp`.
+imports depuis FileZilla et FlashFXP, l'outil en ligne de commande `urftp`, les connexions
+IPv4/IPv6 « happy eyeballs » et le FXP entre serveurs IPv6 (`EPSV` / `EPRT`).

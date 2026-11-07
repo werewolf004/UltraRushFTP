@@ -182,7 +182,8 @@ serveur l'a coupée.
 |---|---|---|
 | Nom | « Nouveau site » | Utilisé par les scripts, mIRC et `urftp` (insensible à la casse) |
 | Protocole | FTP | FTP, FTPS explicite, FTPS implicite, SFTP ; le port suit (21, 990, 22) |
-| Hôte, port | — / 21 | — |
+| Hôte, port | — / 21 | Nom ou adresse IP ; quand un nom a des adresses IPv6 et IPv4, les deux sont essayées (« happy eyeballs ») |
+| Autres adresses | aucune | `hôte:port` (ou `[IPv6]:port`), une par ligne : essayées à tour de rôle quand l'adresse principale ne répond pas ou refuse la connexion ; celle qui a marché sert en premier la fois suivante |
 | Utilisateur, mot de passe, anonyme | — | Mot de passe chiffré par DPAPI ; avec une clé SSH, c'est sa phrase de passe |
 | Site activé | oui | Un site désactivé ne peut pas être connecté (`RushApp.FTP.DisableSite`) |
 | Chiffrer aussi les transferts (PROT P) | oui | FTPS : canaux de données chiffrés |
@@ -197,6 +198,15 @@ serveur l'a coupée.
 | Nom Ident propre à ce site | non | Enregistré ; pas encore répondu par le serveur Ident (voir la feuille de route) |
 | Signets | aucun | Nom, dossier distant, dossier local ; utilisés par `RS_BOOKMARK` dans les scripts |
 | Notes | vide | Texte libre |
+
+**Connecter** (gestionnaire de sites) : `Maj` enfoncée pour une connexion fantôme
+(`!user` : le serveur ferme les autres sessions du compte) et `Ctrl` pour `-motdepasse`
+(glftpd et d'autres : pas de messages d'accueil). FTP et FTPS seulement.
+
+**Tester la disponibilité** (barre d'outils du gestionnaire de sites) : se connecte au
+site sélectionné, ou à tous les sites actifs du dossier sélectionné en même temps, puis se
+déconnecte. L'arborescence affiche le temps de réponse (`✔ 120 ms`) ou `✖` ; la fiche du
+site indique l'adresse qui a répondu ou l'erreur.
 
 **Import** (barre du gestionnaire de sites) : FileZilla (`sitemanager.xml` ou export),
 FTPRush v3 (`site.json`), FTPRush v1/v2 (`RushSite.xml`), FlashFXP (`.ftp`). Le format est
@@ -267,10 +277,10 @@ opérateurs (`or`/`and` bit à bit sur les drapeaux), `if/then/else`, `while`,
 
 Drapeaux gérés : `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`, `RS_DIRDES`, `RS_DIRSRC`,
 `RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`, `RS_FOLDER`, `RS_FULLPATH`, `RS_GHOST`,
-`RS_LOGIN`, `RS_LOGOUT`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`, `RS_POPUP`, `RS_TRANSFER`,
-`RS_UP`, `RS_WAITING`. `RS_INVERT`, les filtres et le nombre de répétitions de `Transfer`
-et l'`InputQuery` interactif sont reconnus mais pas encore pris en charge (un message
-l'indique).
+`RS_INVERT` (`-motdepasse`), `RS_LOGIN`, `RS_LOGOUT`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`,
+`RS_POPUP`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`. Les filtres et le nombre de répétitions
+de `Transfer` et l'`InputQuery` interactif sont reconnus mais pas encore pris en charge (un
+message l'indique).
 
 ## DLL mIRC
 

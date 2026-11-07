@@ -33,6 +33,7 @@ fn site(name: &str, port: u16, max_transfers: u32) -> SiteProfile {
         protocol: SiteProtocol::Ftp(FtpConfig::default()),
         limits: SiteLimits { max_transfers, ..SiteLimits::default() },
         session: Default::default(),
+        hosts: Default::default(),
     }
 }
 
