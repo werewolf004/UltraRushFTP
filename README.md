@@ -98,6 +98,7 @@ All options of both are listed in [docs/OPTIONS.md](docs/OPTIONS.md#command-line
 | [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | Every dependency, its licence and why it is used |
 | [ROADMAP.md](ROADMAP.md) | Done, in progress, planned |
 | [docs/PARITY.md](docs/PARITY.md) | Every topic of the FTPRush v2 help and its status here |
+| [docs/VALIDATION.md](docs/VALIDATION.md) | Checking UltraRushFTP against real servers: script, checklist, results |
 | [CHANGELOG.md](CHANGELOG.md) | Changes per version |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development set-up, rules, workflow |
 | [SECURITY.md](SECURITY.md) | Security model and how to report a vulnerability |

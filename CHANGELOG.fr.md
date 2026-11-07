@@ -12,6 +12,14 @@ la traduction.
 
 ### Ajouté
 
+- **Validation sur de vrais serveurs** : `scripts/validate-server.ps1` déroule un scénario
+  fixe avec `urftp` (liste, envoi et téléchargement d'un dossier en plusieurs transferts,
+  reprise dans les deux sens, écrasement, FXP, suppression), compare chaque fichier par
+  SHA-256 et écrit un rapport anonymisé ; guide et liste de contrôle par serveur dans
+  [docs/VALIDATION.fr.md](docs/VALIDATION.fr.md). Le script est aussi dans l'archive de la
+  version.
+- **`urftp -v` journalise aussi les connexions de transfert**, pas seulement la première
+  connexion.
 - **File non terminée gardée d'un lancement à l'autre** : enregistrée automatiquement
   (`queue.json`) et proposée au démarrage suivant (Options › Général : demander, charger ou
   abandonner).

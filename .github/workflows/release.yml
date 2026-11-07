@@ -61,6 +61,7 @@ jobs:
           $dir = "dist/$name"
           New-Item -ItemType Directory -Force "$dir/mirc/x64", "$dir/mirc/x86" | Out-Null
           Copy-Item target/release/UltraRushFTP.exe, target/release/urftp.exe $dir
+          Copy-Item scripts/validate-server.ps1 $dir
           Copy-Item target/release/rushmirc.dll "$dir/mirc/x64/"
           Copy-Item target/i686-pc-windows-msvc/release/rushmirc.dll "$dir/mirc/x86/"
           Get-ChildItem -File -Include 'LICENSE*', 'README*.md', 'CHANGELOG*.md', 'SECURITY*.md', 'ROADMAP*.md', 'CONTRIBUTING*.md', 'THIRD-PARTY-LICENSES.txt' -Path * | Copy-Item -Destination $dir

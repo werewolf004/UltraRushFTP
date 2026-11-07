@@ -17,7 +17,7 @@ use urftp_core::queue::{Endpoint, ItemState, Queue};
 use urftp_core::settings::{LanguageSetting, Settings};
 use urftp_core::site::{CertPolicy, SiteBook};
 use urftp_core::sitestore;
-use urftp_proto::engine::{Engine, EngineEvent};
+use urftp_proto::engine::{Engine, EngineEvent, TransferLog};
 use urftp_proto::ftp::{LogLine, LogSink, RemoteEntry, path as rpath};
 use urftp_proto::profile::{engine_options, site_profile};
 use urftp_proto::session::{RemoteSession, SiteProfile};
@@ -194,6 +194,7 @@ async fn run_queue(ctx: &Ctx, sites: Vec<SiteProfile>, src: Endpoint, dst: Endpo
     let dl = RateLimiter::new(s.transfer.download_limit_kib * 1024);
     let ul = RateLimiter::new(s.transfer.upload_limit_kib * 1024);
     let mut opts = engine_options(s, &dl, &ul);
+    opts.log = ctx.log_sink().map(TransferLog);
     if let Some(a) = ctx.opts.exists {
         opts.exists = ExistsRules { smaller: a, same: a, larger: a, ..opts.exists };
     }

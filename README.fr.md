@@ -106,6 +106,7 @@ Toutes leurs options sont listées dans
 | [docs/DEPENDENCIES.fr.md](docs/DEPENDENCIES.fr.md) | Toutes les dépendances, leur licence et leur rôle |
 | [ROADMAP.fr.md](ROADMAP.fr.md) | Fait, en cours, prévu |
 | [docs/PARITY.fr.md](docs/PARITY.fr.md) | Chaque sujet de l'aide de FTPRush v2 et son état ici |
+| [docs/VALIDATION.fr.md](docs/VALIDATION.fr.md) | Vérifier UltraRushFTP sur de vrais serveurs : script, liste de contrôle, résultats |
 | [CHANGELOG.fr.md](CHANGELOG.fr.md) | Changements par version |
 | [CONTRIBUTING.fr.md](CONTRIBUTING.fr.md) | Environnement de développement, règles, méthode de travail |
 | [SECURITY.fr.md](SECURITY.fr.md) | Modèle de sécurité et signalement d'une vulnérabilité |

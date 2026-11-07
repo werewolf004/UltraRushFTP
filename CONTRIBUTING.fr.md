@@ -18,6 +18,7 @@ bienvenues de la part des collaborateurs invités par le propriétaire, selon le
 ```text
 cargo test --workspace --all-features
 cargo run -p urftp-proto --example dev_server   # serveur FTP local, utilisateur test / secret
+pwsh scripts/validate-server.ps1 -SelfTest      # scénario de validation sur deux serveurs locaux
 cargo run -p urftp-gui
 ```
 

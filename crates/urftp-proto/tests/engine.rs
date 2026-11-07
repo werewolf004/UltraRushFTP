@@ -17,8 +17,8 @@ use urftp_core::pattern::Pattern;
 use urftp_core::priority::PriorityList;
 use urftp_core::queue::{Endpoint, ItemId, ItemState, Queue, SiteLimits};
 use urftp_core::skiplist::{RuleTarget, SkipList, SkipRule};
-use urftp_proto::engine::{Engine, EngineEvent, EngineOptions};
-use urftp_proto::ftp::FtpConfig;
+use urftp_proto::engine::{Engine, EngineEvent, EngineOptions, TransferLog};
+use urftp_proto::ftp::{FtpConfig, LogLine};
 use urftp_proto::session::{SiteProfile, SiteProtocol};
 use urftp_proto::sftp::{HostKeyPolicy, SftpConfig};
 use urftp_proto::throttle::RateLimiter;
@@ -111,6 +111,29 @@ async fn multi_transfer_respects_the_site_limit() {
     assert!(took < Duration::from_millis(6 * 200), "parallel transfers: {took:?}");
     assert_eq!(srv.stats.lock().unwrap().logins, 3, "connections are reused");
     assert_eq!(r.engine.idle_connections("A"), 3);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[tokio::test]
+async fn transfer_connections_write_to_the_log() {
+    let srv = MockServer::start(MockConfig::default()).await;
+    srv.fs.lock().unwrap().files.insert("/logged.bin".into(), payload(1000, 7));
+    let dir = temp_dir();
+    let mut q = Queue::new();
+    q.push(Endpoint::remote("A", "/logged.bin"), Endpoint::local(local(&dir.join("logged.bin"))), false, None, None);
+    let lines = Arc::new(Mutex::new(Vec::new()));
+    let sink = lines.clone();
+    let log = TransferLog(Arc::new(move |l: LogLine| {
+        if let LogLine::Command(c) = l {
+            sink.lock().push(c);
+        }
+    }));
+    let r = engine(q, vec![site("A", srv.addr.port(), 1)], EngineOptions { log: Some(log), ..opts() });
+    r.engine.run().await;
+    let lines = lines.lock();
+    assert!(lines.iter().any(|c| c == "RETR logged.bin" || c == "RETR /logged.bin"), "{lines:?}");
+    assert!(lines.iter().any(|c| c == "PASS ****"), "password masked: {lines:?}");
+    drop(lines);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

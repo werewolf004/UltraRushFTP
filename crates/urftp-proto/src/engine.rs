@@ -27,7 +27,7 @@ use urftp_core::priority::PriorityList;
 use urftp_core::queue::{Endpoint, ItemId, ItemState, Load, Queue, QueueItem, SiteLimits};
 use urftp_core::skiplist::{Candidate, SkipList, SkipReason};
 
-use crate::ftp::{EntryKind, FxpOptions, fxp, path as rpath};
+use crate::ftp::{EntryKind, FxpOptions, LogSink, fxp, path as rpath};
 use crate::session::{Account, RemoteSession, SessionError, SiteProfile, SiteRules};
 use crate::throttle::{RateLimiter, Throttled};
 
@@ -47,6 +47,18 @@ pub struct EngineOptions {
     pub download_limit: Arc<RateLimiter>,
     /// Upload speed (local → server).
     pub upload_limit: Arc<RateLimiter>,
+    /// Protocol log of the transfer connections (`None`: not logged).
+    pub log: Option<TransferLog>,
+}
+
+/// Protocol log shared by every connection of the engine.
+#[derive(Clone)]
+pub struct TransferLog(pub LogSink);
+
+impl std::fmt::Debug for TransferLog {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TransferLog")
+    }
 }
 
 impl Default for EngineOptions {
@@ -61,6 +73,7 @@ impl Default for EngineOptions {
             fxp: FxpOptions::default(),
             download_limit: RateLimiter::new(0),
             upload_limit: RateLimiter::new(0),
+            log: None,
         }
     }
 }
@@ -115,6 +128,7 @@ struct SitePool {
     profile: SiteProfile,
     /// Idle connections and when they were released.
     idle: Mutex<HashMap<Account, Vec<(RemoteSession, Instant)>>>,
+    log: Option<LogSink>,
 }
 
 impl SitePool {
@@ -134,7 +148,7 @@ impl SitePool {
             }
             // Gone (idle kick...): try the next one, or open a new connection.
         }
-        RemoteSession::open(&self.profile.with_account(account), None).await
+        RemoteSession::open(&self.profile.with_account(account), self.log.clone()).await
     }
 
     fn check_after(&self) -> Duration {
@@ -174,7 +188,11 @@ impl Engine {
         opts: EngineOptions,
         events: Option<UnboundedSender<EngineEvent>>,
     ) -> Arc<Self> {
-        let sites = sites.into_iter().map(|p| (p.name.clone(), Arc::new(SitePool { profile: p, idle: Mutex::default() }))).collect();
+        let log = opts.log.as_ref().map(|l| l.0.clone());
+        let sites = sites
+            .into_iter()
+            .map(|p| (p.name.clone(), Arc::new(SitePool { profile: p, idle: Mutex::default(), log: log.clone() })))
+            .collect();
         Arc::new(Self { queue, sites, opts, events, load: Mutex::default(), running: Mutex::default() })
     }
 

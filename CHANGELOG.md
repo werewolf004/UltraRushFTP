@@ -11,6 +11,12 @@ GitHub release with the same tag.
 
 ### Added
 
+- **Validation against real servers**: `scripts/validate-server.ps1` runs a fixed scenario
+  with `urftp` (listing, folder upload and download with several transfers, resume both
+  ways, overwrite, FXP, removal), compares every file by SHA-256 and writes an anonymised
+  report; guide and checklist per server in [docs/VALIDATION.md](docs/VALIDATION.md). The
+  script is also in the release archive.
+- **`urftp -v` logs the transfer connections** too, not only the first connection.
 - **Unfinished queue kept across restarts**: saved automatically (`queue.json`) and offered
   at the next start (Options › General: ask, load or discard).
 - **Compatibility with the original mIRC DLL of FTPRush** (Options › General), off by

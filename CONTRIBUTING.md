@@ -17,6 +17,7 @@ from collaborators invited by the owner, under the terms of the [LICENSE](LICENS
 ```text
 cargo test --workspace --all-features
 cargo run -p urftp-proto --example dev_server   # local FTP server, user test / secret
+pwsh scripts/validate-server.ps1 -SelfTest      # validation scenario on two local servers
 cargo run -p urftp-gui
 ```
 
