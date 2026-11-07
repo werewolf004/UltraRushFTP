@@ -5,7 +5,9 @@ use urftp_i18n::{Lang, t};
 
 use eframe::egui::{self, RichText};
 use urftp_core::exists::{ExistsAction, ExistsRules};
-use urftp_core::settings::{GlobalProxy, KeepAliveSettings, LanguageSetting, MaskSetting, Settings, SkipRuleSetting, SkipSettings};
+use urftp_core::settings::{
+    GlobalProxy, KeepAliveSettings, LanguageSetting, MaskSetting, QueueAtStart, Settings, SkipRuleSetting, SkipSettings,
+};
 use urftp_core::site::ProxyType;
 use urftp_core::skiplist::{RuleAction, RuleTarget};
 
@@ -177,7 +179,25 @@ impl OptionsWindow {
                         }
                     });
                     ui.end_row();
+                    let l = ui.label(t!("options.queue_at_start"));
+                    let label = |v: QueueAtStart| match v {
+                        QueueAtStart::Ask => t!("options.queue_ask"),
+                        QueueAtStart::Load => t!("options.queue_load"),
+                        QueueAtStart::Discard => t!("options.queue_discard"),
+                    };
+                    egui::ComboBox::from_id_salt("opt-queue-start")
+                        .selected_text(label(s.queue_at_start))
+                        .show_ui(ui, |ui| {
+                            for v in [QueueAtStart::Ask, QueueAtStart::Load, QueueAtStart::Discard] {
+                                ui.selectable_value(&mut s.queue_at_start, v, label(v));
+                            }
+                        })
+                        .response
+                        .labelled_by(l.id);
+                    ui.end_row();
                 });
+                ui.checkbox(&mut s.ftprush_dll_window, t!("options.ftprush_dll_window"));
+                ui.label(RichText::new(t!("options.ftprush_dll_window_note")).weak());
                 ui.add_space(8.0);
                 ui.label(RichText::new(t!("options.data_dir", path = urftp_core::sitestore::data_dir().display())).weak());
             }

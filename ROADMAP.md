@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -76,7 +76,8 @@ planned work is grouped below into blocks, each ending with a release.
 ### H — Queue and transfers
 - ⬜ Pause, edit an item (source, target, mode, invert FXP), mark as failed, clear failed,
   queue information.
-- ⬜ Save / load / restore the queue (unfinished queue at startup, auto save).
+- ✅ Unfinished queue saved automatically and offered at startup.
+- ⬜ Load / save a queue file by hand.
 - ⬜ Retry options: per direction, cycle retry, retry failed when the queue ends, reset on
   start.
 - ⬜ End of queue: idle / disconnect, sleep, hibernate, shut down, exit (with

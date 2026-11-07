@@ -18,6 +18,7 @@ pub mod localpath;
 pub mod pattern;
 pub mod priority;
 pub mod queue;
+pub mod queuestore;
 pub mod secret;
 pub mod settings;
 pub mod site;

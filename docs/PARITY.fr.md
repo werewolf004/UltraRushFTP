@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17.
+Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 
 ## Fenêtre principale et menus
 
@@ -83,7 +83,7 @@ Résumé (284 sujets) : ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17.
 | Retirer tous les échecs | ⬜ | |
 | Marquer la sélection / tout en échec | ⬜ | |
 | Informations sur la file | ⬜ | Nombres, tailles, durées |
-| Restaurer la file, charger / enregistrer un fichier de file | ⬜ | |
+| Restaurer la file, charger / enregistrer un fichier de file | 🟡 | La file non terminée est restaurée au démarrage ; pas de fichier de file à charger ou enregistrer à la main |
 | Planifier la file en tâche | ⬜ | |
 | Bascules de limite de vitesse d'envoi / de réception | 🟡 | Limites dans les options ; pas de bascule en un clic |
 
@@ -281,7 +281,7 @@ Résumé (284 sujets) : ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17.
 | Liste d'exclusion : couleur des éléments exclus | ⬜ | |
 | Liste d'exclusion : mode auto / manuel / les deux | ⬜ | Appliquée à tout élément aujourd'hui |
 | Règles « fichier existant » (reprendre, ignorer, renommer, écraser, demander) | ✅ | Plus écraser si la reprise échoue |
-| File : recharger la file inachevée au démarrage, enregistrement automatique | ⬜ | |
+| File : recharger la file inachevée au démarrage, enregistrement automatique | ✅ | Demander, charger ou abandonner (Options › Général) |
 | File : garder les éléments en échec | ✅ | |
 | File : nouvel essai cyclique (l'élément en échec passe en bas) | ⬜ | |
 | File : relancer tous les échecs à la fin de la file | ⬜ | |

@@ -112,10 +112,12 @@ pub fn callback_hwnd() -> isize {
 }
 
 fn target_window() -> Option<HWND> {
-    let class = wide(&crate::window_class());
-    // SAFETY: `class` is a valid NUL-terminated UTF-16 string; a null title matches any.
-    let h = unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) };
-    (!h.is_null()).then_some(h)
+    crate::dll_target_classes().iter().find_map(|c| {
+        let class = wide(c);
+        // SAFETY: `class` is a valid NUL-terminated UTF-16 string; a null title matches any.
+        let h = unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) };
+        (!h.is_null()).then_some(h)
+    })
 }
 
 /// Copies `s` into the mIRC buffer (truncated, NUL-terminated).

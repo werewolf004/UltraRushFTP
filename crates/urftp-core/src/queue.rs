@@ -229,6 +229,15 @@ impl Queue {
         ids
     }
 
+    /// Appends items in this order, with their state (queue loaded from disk).
+    pub fn append(&mut self, items: impl IntoIterator<Item = (Endpoint, Endpoint, bool, Option<u64>, Option<usize>, ItemState)>) {
+        for (src, dst, is_dir, size, priority, state) in items {
+            let mut item = self.make(src, dst, is_dir, size, priority);
+            item.state = state;
+            self.items.push(item);
+        }
+    }
+
     /// First waiting item allowed by `can_start`.
     pub fn next_runnable(&self, mut can_start: impl FnMut(&QueueItem) -> bool) -> Option<ItemId> {
         self.items.iter().find(|i| i.state == ItemState::Waiting && can_start(i)).map(|i| i.id)

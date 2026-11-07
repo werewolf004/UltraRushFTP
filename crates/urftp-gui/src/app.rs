@@ -851,6 +851,14 @@ struct QuickConnect {
 
 pub struct UltraRushApp {
     rt: Handle,
+    /// Queues left unfinished last time, waiting for the user's answer, with the ones
+    /// ticked to be loaded.
+    saved_queue: Option<(urftp_core::queuestore::SavedQueues, Vec<bool>)>,
+    /// What was last written to `queue.json`, and when the queues were last compared.
+    queue_written: Option<urftp_core::queuestore::SavedQueues>,
+    queue_checked: std::time::Instant,
+    /// Class of the mIRC link window applied (compatibility mode or not).
+    ipc_compat_applied: Option<bool>,
     tabs: Vec<Container>,
     active: usize,
     next_id: u32,
@@ -969,6 +977,10 @@ impl UltraRushApp {
         let ul = options.settings.transfer.upload_limit_kib * 1024;
         let mut app = Self {
             rt,
+            saved_queue: None,
+            queue_written: None,
+            queue_checked: std::time::Instant::now(),
+            ipc_compat_applied: None,
             tabs: vec![Container::new(1)],
             active: 0,
             next_id: 2,
@@ -1002,7 +1014,145 @@ impl UltraRushApp {
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
+        app.load_saved_queue();
         app
+    }
+
+    /// Queue left unfinished: loaded, offered or discarded according to the options.
+    pub(crate) fn load_saved_queue(&mut self) {
+        use urftp_core::queuestore::SavedQueues;
+        use urftp_core::settings::QueueAtStart;
+        let path = SavedQueues::default_path();
+        let saved = match SavedQueues::load(&path) {
+            Ok(Some(q)) => q,
+            Ok(None) => return,
+            Err(e) => {
+                self.tabs[self.active].push_log(0, LogKind::Error, t!("queue.unreadable", error = e));
+                return;
+            }
+        };
+        match self.options.settings.queue_at_start {
+            QueueAtStart::Ask => {
+                let ticks = vec![true; saved.tabs.len()];
+                self.saved_queue = Some((saved, ticks));
+            }
+            QueueAtStart::Load => self.restore_queue(saved),
+            QueueAtStart::Discard => {
+                let _ = SavedQueues::default().save(&path);
+            }
+        }
+    }
+
+    /// Puts the saved queues back: the first one in the first tab when its queue is empty,
+    /// the others in new tabs.
+    fn restore_queue(&mut self, saved: urftp_core::queuestore::SavedQueues) {
+        let n = saved.item_count();
+        for (i, tab) in saved.tabs.into_iter().enumerate() {
+            let target = if i == 0 && self.tabs[0].queue.lock().items().is_empty() {
+                0
+            } else {
+                self.new_tab();
+                self.tabs.len() - 1
+            };
+            *self.tabs[target].queue.lock() = tab.into_queue();
+        }
+        self.active = 0;
+        self.tabs[0].push_log(0, LogKind::Status, t!("queue.restored", n = n));
+        self.save_queue();
+    }
+
+    /// Writes the unfinished queues to disk when they changed (not while the saved queue
+    /// waits for an answer: it would be overwritten).
+    pub(crate) fn save_queue(&mut self) {
+        use urftp_core::queuestore::SavedQueues;
+        if self.saved_queue.is_some() {
+            return;
+        }
+        let queues: Vec<(String, Queue)> = self.tabs.iter().enumerate().map(|(i, t)| (t.title(i + 1), t.queue.lock().clone())).collect();
+        let now = SavedQueues::snapshot(queues.iter().map(|(title, q)| (title.clone(), q)));
+        if self.queue_written.as_ref() == Some(&now) {
+            return;
+        }
+        if now.is_empty() && self.queue_written.is_none() && !SavedQueues::default_path().exists() {
+            self.queue_written = Some(now);
+            return;
+        }
+        match now.save(&SavedQueues::default_path()) {
+            Ok(()) => self.queue_written = Some(now),
+            Err(e) => self.tabs[self.active].push_log(0, LogKind::Error, t!("queue.save_failed", error = e)),
+        }
+    }
+
+    /// "Unfinished queue" dialog at startup: one line per tab, each one ticked to be loaded.
+    fn saved_queue_dialog(&mut self, ctx: &egui::Context) {
+        let Some((saved, ticks)) = &mut self.saved_queue else { return };
+        let mut answer = None;
+        egui::Modal::new(egui::Id::new("saved-queue")).show(ctx, |ui| {
+            ui.set_max_width(560.0);
+            ui.heading(t!("queue.saved_title"));
+            ui.label(t!("queue.saved_text", n = saved.item_count(), tabs = saved.tabs.len()));
+            ui.add_space(6.0);
+            for (i, (tab, tick)) in saved.tabs.iter().zip(ticks.iter_mut()).enumerate() {
+                ui.push_id(("saved-tab", i), |ui| {
+                    let failed = tab.items.len() - tab.waiting();
+                    let label = if failed > 0 {
+                        t!("queue.saved_tab_failed", title = tab.title, n = tab.waiting(), failed = failed)
+                    } else {
+                        t!("queue.saved_tab", title = tab.title, n = tab.waiting())
+                    };
+                    ui.checkbox(tick, label);
+                    let first = tab.items.first().map(|i| i.src_path.as_str()).unwrap_or_default();
+                    ui.indent("detail", |ui| {
+                        ui.label(RichText::new(t!("queue.saved_detail", sites = tab.sites().join(", "), first = first)).weak());
+                    });
+                });
+            }
+            ui.add_space(8.0);
+            let any = ticks.iter().any(|t| *t);
+            ui.horizontal(|ui| {
+                let load = ui.add_enabled(any, egui::Button::new(t!("queue.load_selected")));
+                if any && !ui.ctx().memory(|m| m.focused().is_some()) {
+                    load.request_focus();
+                }
+                if load.clicked() {
+                    answer = Some(true);
+                }
+                if ui.button(t!("queue.discard_all")).clicked() {
+                    answer = Some(false);
+                }
+            });
+            ui.label(RichText::new(t!("queue.saved_note")).weak());
+        });
+        match answer {
+            Some(true) => {
+                if let Some((mut saved, ticks)) = self.saved_queue.take() {
+                    let mut keep = ticks.into_iter();
+                    saved.tabs.retain(|_| keep.next().unwrap_or(false));
+                    self.restore_queue(saved);
+                }
+            }
+            Some(false) => {
+                self.saved_queue = None;
+                self.queue_written = None;
+                self.save_queue();
+            }
+            None => {}
+        }
+    }
+
+    /// Window class of the mIRC link: restarts the window when the option changed.
+    fn sync_ipc_class(&mut self) {
+        let wanted = self.options.settings.ftprush_dll_window;
+        if self.ipc_compat_applied == Some(wanted) {
+            return;
+        }
+        let first = self.ipc_compat_applied.is_none();
+        self.ipc_compat_applied = Some(wanted);
+        urftp_sys::set_ftprush_compatible(wanted);
+        if !first {
+            self.ipc = None;
+            self.ipc_rx = None;
+        }
     }
 
     /// Theme to apply at startup.
@@ -1737,6 +1887,12 @@ fn focus_once(ui: &egui::Ui, r: &egui::Response) {
     }
 }
 
+impl Drop for UltraRushApp {
+    fn drop(&mut self) {
+        self.save_queue();
+    }
+}
+
 impl eframe::App for UltraRushApp {
     // Called on every frame, and also while the window is minimised: transfers, statistics
     // and mIRC requests keep being processed.
@@ -1745,7 +1901,13 @@ impl eframe::App for UltraRushApp {
         self.stats.record(&traffic);
         self.forward_raw_replies();
         if self.ipc_enabled {
+            self.sync_ipc_class();
             self.serve_ipc(ctx);
+        }
+        // The unfinished queue on disk: every two seconds when it changed, and at closing.
+        if self.queue_checked.elapsed() >= Duration::from_secs(2) || ctx.input(|i| i.viewport().close_requested()) {
+            self.queue_checked = std::time::Instant::now();
+            self.save_queue();
         }
         // `-rx`: close when no queue runs and nothing is left to transfer.
         if self.exit_when_done
@@ -1808,6 +1970,7 @@ impl eframe::App for UltraRushApp {
         });
         self.apply(actions, &ctx);
         self.prompt_dialog(&ctx);
+        self.saved_queue_dialog(&ctx);
         self.trust_dialog(&ctx);
         self.shortcuts_window(&ctx);
         self.sites.show(&ctx, &self.options.settings);

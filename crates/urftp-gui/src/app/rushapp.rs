@@ -154,6 +154,14 @@ impl UltraRushApp {
     /// Starts the `TfmRush` window (once), then handles the requests of `rushmirc.dll`.
     pub(super) fn serve_ipc(&mut self, ctx: &egui::Context) {
         if self.ipc_rx.is_none() {
+            let class = urftp_sys::window_class();
+            if urftp_sys::server::window_exists(&class) {
+                // FTPRush (or another UltraRushFTP) already holds the window: leave it alone.
+                self.tabs[self.active].push_log(0, LogKind::Error, t!("log.mirc_taken", class = class));
+                let (_, rx) = std::sync::mpsc::channel();
+                self.ipc_rx = Some(rx);
+                return;
+            }
             let (tx, rx) = std::sync::mpsc::channel();
             let wake = ctx.clone();
             match urftp_sys::server::Server::start(move |req| {

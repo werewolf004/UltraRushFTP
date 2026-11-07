@@ -1,5 +1,6 @@
-//! Application side: a hidden `TfmRush` window, like FTPRush, so that `rushmirc.dll`
-//! (the original one or ours) can drive UltraRushFTP.
+//! Application side: a hidden window, so that `rushmirc.dll` can drive UltraRushFTP. Its
+//! class is `TfmUltraRush`, or `TfmRush` like FTPRush in compatibility mode (needed by the
+//! original DLL of FTPRush, but FTPRush v2 then refuses to start).
 //!
 //! - `WM_EXCHANGE`: the DLL wrote an expression into the `FTPRush` shared memory; the
 //!   answer is written back there before returning (synchronous request).
@@ -14,9 +15,9 @@ use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::DataExchange::COPYDATASTRUCT;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CREATESTRUCTW, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetMessageW, GetWindowLongPtrW, MSG,
-    PostMessageW, PostQuitMessage, RegisterClassExW, SMTO_ABORTIFHUNG, SendMessageTimeoutW, SetWindowLongPtrW, TranslateMessage, WM_CLOSE,
-    WM_COPYDATA, WM_DESTROY, WM_NCCREATE, WNDCLASSEXW, WS_OVERLAPPED,
+    CREATESTRUCTW, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, FindWindowW, GWLP_USERDATA, GetMessageW,
+    GetWindowLongPtrW, MSG, PostMessageW, PostQuitMessage, RegisterClassExW, SMTO_ABORTIFHUNG, SendMessageTimeoutW, SetWindowLongPtrW,
+    TranslateMessage, WM_CLOSE, WM_COPYDATA, WM_DESTROY, WM_NCCREATE, WNDCLASSEXW, WS_OVERLAPPED,
 };
 
 use crate::win::{SharedMem, decode_ansi, wide};
@@ -57,13 +58,13 @@ pub enum Request {
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
     /// The window thread could not be spawned.
-    #[error("TfmRush window thread: {0}")]
+    #[error("mIRC link window thread: {0}")]
     Thread(#[source] std::io::Error),
     /// `CreateWindowExW` failed.
-    #[error("TfmRush window: {0}")]
+    #[error("mIRC link window: {0}")]
     Window(#[source] std::io::Error),
     /// The window thread stopped before reporting.
-    #[error("TfmRush window: the thread stopped unexpectedly")]
+    #[error("mIRC link window: the thread stopped unexpectedly")]
     ThreadStopped,
 }
 
@@ -73,6 +74,14 @@ type Handler = Box<dyn Fn(Request) + Send>;
 pub struct Server {
     hwnd: isize,
     thread: Option<std::thread::JoinHandle<()>>,
+}
+
+/// Is a top-level window of this class open (FTPRush, another UltraRushFTP...)?
+pub fn window_exists(class: &str) -> bool {
+    let class = wide(class);
+    // SAFETY: `class` is a valid NUL-terminated UTF-16 string; a null title matches any.
+    let h = unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) };
+    !h.is_null()
 }
 
 /// Creates the window on the current thread, with `handler` stored in its user data.

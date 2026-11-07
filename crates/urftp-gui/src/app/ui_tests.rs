@@ -14,6 +14,7 @@ use urftp_i18n::{Lang, t};
 
 use super::{Side, UltraRushApp};
 use crate::cmdline::StartupOptions;
+use urftp_core::queue::{Endpoint, ItemState, Queue};
 
 /// Local panels start here (see `home_dir`).
 pub(crate) static HOME: OnceLock<PathBuf> = OnceLock::new();
@@ -48,6 +49,8 @@ impl Ui {
     fn start(lang: Lang, dark: bool) -> Self {
         let lock = crate::TEST_LOCK.lock();
         scratch();
+        // A queue saved by a previous test would be offered at startup.
+        let _ = std::fs::remove_file(urftp_core::queuestore::SavedQueues::default_path());
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
         let mut app = UltraRushApp::new(rt.handle().clone(), StartupOptions::default());
         app.ipc_enabled = false;
@@ -549,4 +552,59 @@ fn sftp_record_with_several_keys_is_named() {
     ui.run();
     assert!(ui.harness.query_by_label(&t!("site.more_key", n = 2)).is_some());
     assert_all_named(&ui, "site manager, SFTP keys");
+}
+
+#[test]
+fn unfinished_queues_of_several_tabs_are_offered_one_by_one() {
+    use urftp_core::queuestore::SavedQueues;
+    let mut ui = Ui::start(Lang::Fr, true);
+    let mut first = Queue::new();
+    first.push(Endpoint::remote("Demo", "/pub/a.bin"), Endpoint::local(r"C:\dl\a.bin"), false, Some(5), None);
+    let id = first.push(Endpoint::remote("Demo", "/pub/b.bin"), Endpoint::local(r"C:\dl\b.bin"), false, Some(7), None);
+    first.set_state(id, ItemState::Stopped);
+    let mut second = Queue::new();
+    second.push(Endpoint::local(r"C:\up\c.zip"), Endpoint::remote("Mirror", "/in/c.zip"), false, Some(9), None);
+    let mut third = Queue::new();
+    third.push(Endpoint::remote("Other", "/x.rar"), Endpoint::remote("Mirror", "/x.rar"), false, None, None);
+    let path = SavedQueues::default_path();
+    let three = [("demo.example.com".to_string(), &first), ("mirror.example.net".to_string(), &second), ("Onglet 3".to_string(), &third)];
+    SavedQueues::snapshot(three.clone()).save(&path).unwrap();
+
+    ui.app().load_saved_queue();
+    ui.run();
+    assert!(ui.has_label(&t!("queue.saved_title")), "the dialog is shown");
+    // While the question is open, the file is left alone.
+    ui.harness.step();
+    assert!(path.exists());
+    // Every queue is ticked: untick the second one, then load.
+    ui.harness.get_by_label_contains("mirror.example.net").click();
+    ui.run();
+    ui.harness.get_by_label(&t!("queue.load_selected")).click();
+    ui.run();
+    let paths = |ui: &mut Ui, tab: usize| -> Vec<(String, ItemState)> {
+        ui.app().tabs[tab].queue.lock().items().iter().map(|i| (i.src.path.clone(), i.state.clone())).collect()
+    };
+    assert_eq!(ui.app().tabs.len(), 2, "one tab per loaded queue");
+    assert_eq!(paths(&mut ui, 0), [("/pub/a.bin".to_string(), ItemState::Waiting), ("/pub/b.bin".to_string(), ItemState::Waiting)]);
+    assert_eq!(paths(&mut ui, 1), [("/x.rar".to_string(), ItemState::Waiting)]);
+    // The file now holds the loaded queues only.
+    ui.app().save_queue();
+    let kept = SavedQueues::load(&path).unwrap().expect("saved");
+    assert_eq!(kept.tabs.len(), 2);
+
+    // Emptied queues: the file goes away at the next save.
+    for t in &ui.app().tabs {
+        t.queue.lock().remove_where(|_| true);
+    }
+    ui.app().save_queue();
+    assert!(!path.exists());
+
+    // "Discard everything": nothing is loaded and the file is removed.
+    SavedQueues::snapshot(three).save(&path).unwrap();
+    ui.app().load_saved_queue();
+    ui.run();
+    ui.harness.get_by_label(&t!("queue.discard_all")).click();
+    ui.run();
+    assert!(ui.app().tabs.iter().all(|t| t.queue.lock().items().is_empty()));
+    assert!(!path.exists());
 }

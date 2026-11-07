@@ -295,6 +295,17 @@ fn parse_ip(s: &str) -> Option<std::net::IpAddr> {
 /// Password sent by the anonymous logins (an e-mail address by tradition).
 pub const DEFAULT_ANONYMOUS_EMAIL: &str = "urftp@";
 
+/// What to do at startup with a queue left unfinished ("Load unfinished queue" of v2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueueAtStart {
+    /// Ask whether to load it.
+    #[default]
+    Ask,
+    Load,
+    Discard,
+}
+
 /// Interface language chosen in the options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum LanguageSetting {
@@ -331,6 +342,11 @@ pub struct Settings {
     pub download_dir: String,
     /// Model of the new sites (protocol, login, limits, folders, listing...).
     pub new_site: Site,
+    /// Queue left unfinished when the application was closed.
+    pub queue_at_start: QueueAtStart,
+    /// The mIRC link window takes the FTPRush class (`TfmRush`), for the original DLL of
+    /// FTPRush; FTPRush v2 then cannot start while UltraRushFTP runs.
+    pub ftprush_dll_window: bool,
 }
 
 impl Default for Settings {
@@ -354,6 +370,8 @@ impl Default for Settings {
             anonymous_email: DEFAULT_ANONYMOUS_EMAIL.into(),
             download_dir: String::new(),
             new_site: Site::default(),
+            queue_at_start: QueueAtStart::Ask,
+            ftprush_dll_window: false,
         }
     }
 }

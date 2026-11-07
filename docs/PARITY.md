@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17.
+Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 
 ## Main window and menus
 
@@ -83,7 +83,7 @@ Summary (284 topics): ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17.
 | Clear all failed | ⬜ | |
 | Mark selected / all as failed | ⬜ | |
 | Queue information | ⬜ | Counts, sizes, times |
-| Restore queue, load / save queue file | ⬜ | |
+| Restore queue, load / save queue file | 🟡 | The unfinished queue is restored at startup; no queue file to load or save by hand |
 | Schedule queue to task | ⬜ | |
 | Limit upload / download speed toggles | 🟡 | Limits in the options; no one-click toggle |
 
@@ -281,7 +281,7 @@ Summary (284 topics): ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17.
 | Skip list: colour of skipped items | ⬜ | |
 | Skip list: mode auto / manual / both | ⬜ | Applied to every item today |
 | File-exists rules (resume, skip, rename, overwrite, ask) | ✅ | Plus overwrite when resume fails |
-| Queue: reload unfinished queue at startup, auto save | ⬜ | |
+| Queue: reload unfinished queue at startup, auto save | ✅ | Ask, load or discard (Options › General) |
 | Queue: keep failed items | ✅ | |
 | Queue: cycle retry (failed item goes to the bottom) | ⬜ | |
 | Queue: retry all failed after the queue ends | ⬜ | |

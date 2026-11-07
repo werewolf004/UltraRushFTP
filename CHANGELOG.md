@@ -11,6 +11,10 @@ GitHub release with the same tag.
 
 ### Added
 
+- **Unfinished queue kept across restarts**: saved automatically (`queue.json`) and offered
+  at the next start (Options › General: ask, load or discard).
+- **Compatibility with the original mIRC DLL of FTPRush** (Options › General), off by
+  default.
 - **Named proxies** (Options › Proxy), chosen by name in the site records.
 - **`NOOP` during the transfers** (Options › Connection), for proxies and routers that drop
   an idle control connection.
@@ -56,6 +60,10 @@ GitHub release with the same tag.
 
 ### Fixed
 
+- FTPRush v2 can be started while UltraRushFTP runs: the mIRC link window is now
+  `TfmUltraRush` (FTPRush v2 refused to open as long as a `TfmRush` window existed). Our
+  `rushmirc.dll` finds both applications.
+- A queue stopped before the end was lost when the application was closed.
 - The quick-connection bar now follows the network, listing and anonymous-login options.
 
 ## [0.2.0] - 2026-11-06

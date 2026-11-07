@@ -12,6 +12,11 @@ la traduction.
 
 ### Ajouté
 
+- **File non terminée gardée d'un lancement à l'autre** : enregistrée automatiquement
+  (`queue.json`) et proposée au démarrage suivant (Options › Général : demander, charger ou
+  abandonner).
+- **Compatibilité avec la DLL mIRC d'origine de FTPRush** (Options › Général), désactivée
+  par défaut.
 - **Proxys nommés** (Options › Proxy), choisis par leur nom dans les fiches de site.
 - **`NOOP` pendant les transferts** (Options › Connexion), pour les proxys et routeurs qui
   coupent une connexion de contrôle inactive.
@@ -63,6 +68,10 @@ la traduction.
 
 ### Corrigé
 
+- FTPRush v2 peut être lancé pendant qu'UltraRushFTP tourne : la fenêtre de la liaison mIRC
+  s'appelle maintenant `TfmUltraRush` (FTPRush v2 refusait de s'ouvrir tant qu'une fenêtre
+  `TfmRush` existait). Notre `rushmirc.dll` trouve les deux applications.
+- Une file arrêtée avant la fin était perdue à la fermeture de l'application.
 - La barre de connexion rapide suit maintenant les options réseau, de listing et de
   connexion anonyme.
 

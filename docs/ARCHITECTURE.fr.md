@@ -14,7 +14,7 @@ pour les types de connexion.
 | `urftp-proto` | Client FTP, FTPS explicite/implicite, SFTP, FXP, proxys, serveur Ident, moteur de file, limitation de débit, conversion fiche de site → profil de connexion | interdit |
 | `urftp-script` | Interpréteur du sous-ensemble Pascal Script de FTPRush (`RushApp.*`, drapeaux `RS_*`) | interdit |
 | `urftp-i18n` | Catalogues anglais et français (`locales/*.json`), macro `t!`, détection de la langue de Windows | interdit |
-| `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : fenêtre `TfmRush` et mémoire partagée (côté application du protocole mIRC), DPAPI, exports de `rushmirc.dll` (fonctionnalité `mirc-dll`) | autorisé, audité |
+| `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : fenêtre de la liaison mIRC (`TfmUltraRush`, ou `TfmRush` en mode compatibilité) et mémoire partagée (côté application du protocole mIRC), DPAPI, exports de `rushmirc.dll` (fonctionnalité `mirc-dll`) | autorisé, audité |
 | `rushmirc` | DLL mIRC (`cdylib`) : réexporte `urftp_sys::mirc`, sans code propre | interdit |
 | `urftp-cli` | Outil en ligne de commande `urftp` | interdit |
 | `urftp-gui` | Interface `UltraRushFTP.exe` (egui / eframe, egui_dock) | interdit |
@@ -106,7 +106,7 @@ Notes tirées de la source Delphi d'origine (non redistribuée dans ce dépôt) 
 
 | Élément | Valeur |
 |---|---|
-| Classe de la fenêtre principale cherchée par la DLL | `TfmRush` (`URUSHFTP_IPC_CLASS` la remplace pour les tests) |
+| Classe de la fenêtre principale cherchée par la DLL | `TfmUltraRush`, puis `TfmRush` (FTPRush, ou UltraRushFTP en mode compatibilité) ; `URUSHFTP_IPC_CLASS` remplace les deux pour les tests |
 | Mémoire partagée application ↔ DLL | `FTPRush`, 4096 octets |
 | Mémoire partagée DLL → mIRC | `mIRC`, 4096 octets, puis `WM_USER + 200` |
 | `Invoke` | copie la requête dans `FTPRush`, envoie `WM_USER + 300` (`WM_EXCHANGE`), relit la réponse |

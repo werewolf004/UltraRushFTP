@@ -63,6 +63,17 @@ Buttons: **Start**, **Stop all**, **Retry failed**, **Remove finished**. Right-c
 item: stop, retry, move to top / up / down / to bottom, remove from the queue. States:
 waiting, running, done, skipped (with the reason), needs confirmation, stopped, failed.
 
+![Unfinished queue](images/queue-restore.en.png)
+
+The items left to do are saved in `queue.json` (every two seconds when the queue changes,
+and when the application closes), tab by tab. At the next start they are offered again (see
+*Unfinished queue at startup*): one line per tab, with its title, the number of items left,
+the sites and the first item; untick the queues you do not want, the others each come back
+in a tab of their own. Running, stopped and to-confirm items come back waiting, failed ones stay
+failed, done and skipped ones are dropped. **Start** resumes the queue; a partial file is
+resumed according to the *Existing file* rules. The items must use sites of the site
+manager: a quick connection is not kept.
+
 ## Options window
 
 Saved automatically in `settings.json` one second after a change.
@@ -78,6 +89,8 @@ Saved automatically in `settings.json` one second after a change.
 | Open a new tab when the right panel is already connected | on | Otherwise the new connection replaces the current one |
 | E-mail for anonymous logins | `urftp@` | Password sent by the sites set to *anonymous* |
 | Default download folder | user folder | Folder the local panels start in, and come back to on disconnection; the user folder when it does not exist |
+| Unfinished queue at startup | Ask | Ask, Load it or Discard it (see *Queue*) |
+| Compatibility with the mIRC DLL of FTPRush (TfmRush window) | off | See *mIRC DLL*; while it is on, FTPRush v2 cannot start next to UltraRushFTP |
 
 ### Transfers
 
@@ -358,6 +371,14 @@ says so).
 
 Use `mirc/x86/rushmirc.dll` for 32-bit mIRC and `mirc/x64/rushmirc.dll` for 64-bit mIRC.
 
+The DLL finds the application through a hidden window. UltraRushFTP names it `TfmUltraRush`,
+and its DLL looks for `TfmUltraRush` first, then `TfmRush` (FTPRush). FTPRush v2 can
+therefore run at the same time. The **original** `rushmirc.dll` of FTPRush only knows
+`TfmRush`: to drive UltraRushFTP with it, tick *Compatibility with the mIRC DLL of FTPRush*
+(Options › General). FTPRush v2 looks for that same window when it starts and does not open
+while it exists. When a `TfmRush` window is already open (FTPRush running), UltraRushFTP
+does not create a second one and says so in the log.
+
 ## Environment variables
 
 | Variable | Effect |
@@ -367,7 +388,7 @@ Use `mirc/x86/rushmirc.dll` for 32-bit mIRC and `mirc/x64/rushmirc.dll` for 64-b
 | `URUSHFTP_THEME` | `light` (or `clair`) / anything else: forces the theme at startup |
 | `URUSHFTP_CONNECT` | URL connected at startup (like `-c`) |
 | `URUSHFTP_SCRIPT` | Script source run at startup |
-| `URUSHFTP_IPC_CLASS` | Window class used for the mIRC link instead of `TfmRush` (tests next to a running FTPRush) |
+| `URUSHFTP_IPC_CLASS` | Window class used for the mIRC link instead of `TfmUltraRush` / `TfmRush`, by the application and by the DLL (tests) |
 | `URUSHFTP_OPEN_SITES` | Development: opens the site manager on this site id |
 | `URUSHFTP_SITE_SETTINGS` | Development: keeps the site form scrolled to the settings of the site |
 | `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 8) |
@@ -382,3 +403,4 @@ In the data folder (`%APPDATA%\UltraRushFTP` by default):
 | `sites.json` | Site book (passwords `dpapi:…`); written atomically, previous version kept as `sites.json.bak` |
 | `settings.json` | Options above (proxy password `dpapi:…`); missing keys take their default value |
 | `stats.json` | Transfer totals and first-use date (`RushApp.Total*`, `StartDate`) |
+| `queue.json` | Unfinished queue of every tab (removed when nothing is left to do) |

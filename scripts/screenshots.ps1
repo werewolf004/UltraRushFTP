@@ -82,7 +82,9 @@ $script = Join-Path $demo 'transfer.pas'
     Set-Content -Encoding utf8NoBOM $script
 
 # ------------------------------------------------------------------ capture
-function Shot([string] $out, [string] $arguments, [hashtable] $envs, [double] $wait) {
+function Shot([string] $out, [string] $arguments, [hashtable] $envs, [double] $wait, [switch] $KeepQueue) {
+    # The queue left by the previous shot would be offered at startup.
+    if (-not $KeepQueue) { Remove-Item -Force "$data/queue.json" -ErrorAction SilentlyContinue }
     foreach ($k in $envs.Keys) { Set-Item "env:$k" $envs[$k] }
     $p = Start-Process -FilePath target/release/UltraRushFTP.exe -ArgumentList $arguments -PassThru
     try {
@@ -120,6 +122,14 @@ try {
         Shot "$images/main.$lang.png" "$base -s`"$script`"" $common 3
         Remove-Item -Recurse -Force "$local/Downloads/*" -ErrorAction SilentlyContinue
         Shot "$images/main-light.$lang.png" "$base -s`"$script`"" ($common + @{ URUSHFTP_THEME = 'light' }) 3
+        # Queues of two tabs left unfinished: they are offered one by one.
+        $item = { param($ss, $sp, $ds, $dp, $size) @{ src_site = $ss; src_path = $sp; dst_site = $ds; dst_path = $dp; is_dir = $false; size = $size; priority = $null; state = 'waiting' } }
+        @{ version = 1; tabs = @(
+                @{ title = '127.0.0.1'; items = @((& $item 'Local demo' '/pub/Releases/UltraRush.Demo-2026/demo.r00' $null "$local\Downloads\demo.r00" 1048576),
+                        (& $item 'Local demo' '/pub/Releases/UltraRush.Demo-2026/demo.r01' $null "$local\Downloads\demo.r01" 1048576)) },
+                @{ title = 'ftp.example.com'; items = @((& $item $null "$local\Uploads\report-1.txt" 'Example FTPS' '/incoming/report-1.txt' 14)) }) } |
+            ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8NoBOM "$data/queue.json"
+        Shot "$images/queue-restore.$lang.png" $base $common 3 -KeepQueue
         Shot "$images/site-manager.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SITES = '1' }) 3
         Shot "$images/site-settings.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SITES = '1'; URUSHFTP_SITE_SETTINGS = '1' }) 3
         Shot "$images/shortcuts.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SHORTCUTS = '1' }) 3

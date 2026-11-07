@@ -4,7 +4,7 @@
 //! It wraps, behind safe APIs:
 //! - [`dpapi`]: Windows DPAPI (`CryptProtectData` / `CryptUnprotectData`) for stored passwords;
 //! - [`win`]: UTF-16 strings and named shared memory;
-//! - [`server`]: the hidden `TfmRush` window the mIRC DLL talks to (application side);
+//! - [`server`]: the hidden window the mIRC DLL talks to (application side);
 //! - `mirc` (feature `mirc-dll`): the `rushmirc.dll` exports called by mIRC.
 //!
 //! Rules for this crate: every `unsafe` block carries a `// SAFETY:` comment
@@ -13,15 +13,20 @@
 //!
 //! # rushmirc protocol
 //!
-//! The application creates a hidden top-level window of class [`WINDOW_CLASS`] (the DLL
-//! finds it with `FindWindow`) and handles:
+//! The application creates a hidden top-level window (the DLL finds it with `FindWindow`)
+//! of class [`OWN_WINDOW_CLASS`], or [`WINDOW_CLASS`] in FTPRush compatibility mode, and
+//! handles:
 //! - `WM_EXCHANGE`: an `Invoke` request read from / answered in the shared memory
 //!   [`SHARED_MAP_NAME`];
 //! - `WM_COPYDATA` with [`COPYDATA_SCRIPT`] or [`COPYDATA_COMMAND`];
 //! - in return, `WM_COPYDATA` to the DLL callback window with `wParam` = [`CALLBACK_RAWCOMMAND`].
 
-/// Window class looked up by `rushmirc.dll`.
+/// Class of the main window of FTPRush, looked up by its `rushmirc.dll`. FTPRush itself
+/// looks for it when it starts and does not open when it finds one: UltraRushFTP only
+/// uses it in compatibility mode ([`set_ftprush_compatible`]).
 pub const WINDOW_CLASS: &str = "TfmRush";
+/// Class of the UltraRushFTP window, looked up first by our `rushmirc.dll`.
+pub const OWN_WINDOW_CLASS: &str = "TfmUltraRush";
 /// Name of the application ↔ DLL shared memory.
 pub const SHARED_MAP_NAME: &str = "FTPRush";
 /// Name of the DLL → mIRC shared memory.
@@ -47,10 +52,34 @@ pub const CALLBACK_SUCCESS: usize = 1;
 /// Callback `dwData`: failure.
 pub const CALLBACK_FAILED: usize = 0;
 
-/// Window class actually used: [`WINDOW_CLASS`], or the value of `URUSHFTP_IPC_CLASS`
-/// (tests: avoids talking to a real FTPRush that is already running).
+static FTPRUSH_COMPATIBLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Compatibility mode: the window takes the FTPRush class, so that the original
+/// `rushmirc.dll` of FTPRush finds UltraRushFTP. FTPRush v2 then cannot start.
+pub fn set_ftprush_compatible(on: bool) {
+    FTPRUSH_COMPATIBLE.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Value of `URUSHFTP_IPC_CLASS` (tests: avoids talking to a real FTPRush or UltraRushFTP).
+fn class_override() -> Option<String> {
+    std::env::var("URUSHFTP_IPC_CLASS").ok().filter(|c| !c.is_empty())
+}
+
+/// Window class created by the application: `URUSHFTP_IPC_CLASS`, else [`WINDOW_CLASS`] in
+/// compatibility mode, else [`OWN_WINDOW_CLASS`].
 pub fn window_class() -> String {
-    std::env::var("URUSHFTP_IPC_CLASS").ok().filter(|c| !c.is_empty()).unwrap_or_else(|| WINDOW_CLASS.to_string())
+    class_override().unwrap_or_else(|| {
+        (if FTPRUSH_COMPATIBLE.load(std::sync::atomic::Ordering::SeqCst) { WINDOW_CLASS } else { OWN_WINDOW_CLASS }).to_string()
+    })
+}
+
+/// Classes looked up by our DLL, in order: `URUSHFTP_IPC_CLASS` alone, else UltraRushFTP
+/// then FTPRush.
+pub fn dll_target_classes() -> Vec<String> {
+    match class_override() {
+        Some(c) => vec![c],
+        None => vec![OWN_WINDOW_CLASS.to_string(), WINDOW_CLASS.to_string()],
+    }
 }
 
 /// Text received as bytes ("ANSI" from mIRC / Delphi), cut at the first NUL: UTF-8 when
@@ -74,7 +103,19 @@ pub mod win;
 
 #[cfg(test)]
 mod tests {
-    use super::decode_ansi;
+    use super::*;
+
+    #[test]
+    fn the_ftprush_class_is_only_taken_in_compatibility_mode() {
+        if class_override().is_some() {
+            return;
+        }
+        assert_eq!(window_class(), OWN_WINDOW_CLASS, "FTPRush v2 can start next to UltraRushFTP");
+        set_ftprush_compatible(true);
+        assert_eq!(window_class(), WINDOW_CLASS);
+        set_ftprush_compatible(false);
+        assert_eq!(dll_target_classes(), [OWN_WINDOW_CLASS, WINDOW_CLASS], "our DLL finds both applications");
+    }
 
     #[test]
     fn ansi_decoding() {

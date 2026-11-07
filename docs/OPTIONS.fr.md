@@ -65,6 +65,19 @@ terminés**. Clic droit sur un élément : arrêter, relancer, tout en haut / mo
 descendre / tout en bas, retirer de la file. États : en attente, en cours, terminé, ignoré
 (avec la raison), à confirmer, arrêté, échec.
 
+![File non terminée](images/queue-restore.fr.png)
+
+Les éléments restant à faire sont enregistrés dans `queue.json` (toutes les deux secondes
+quand la file change, et à la fermeture de l'application), onglet par onglet. Au démarrage
+suivant, ils sont proposés à nouveau (voir *File non terminée au démarrage*) : une ligne
+par onglet, avec son titre, le nombre d'éléments restants, les sites et le premier élément ;
+décochez les files dont vous ne voulez pas, les autres reviennent chacune dans son propre
+onglet. Les éléments en cours, arrêtés
+ou à confirmer reviennent en attente, ceux en échec restent en échec, les terminés et
+ignorés disparaissent. **Démarrer** reprend la file ; un fichier partiel est repris selon les
+règles *Fichier existant*. Les éléments doivent utiliser des sites du gestionnaire de
+sites : une connexion rapide n'est pas gardée.
+
 ## Fenêtre Options
 
 Enregistrée automatiquement dans `settings.json` une seconde après une modification.
@@ -80,6 +93,8 @@ Enregistrée automatiquement dans `settings.json` une seconde après une modific
 | Ouvrir un nouvel onglet quand le panneau droit est déjà connecté | oui | Sinon la nouvelle connexion remplace la connexion en cours |
 | E-mail des connexions anonymes | `urftp@` | Mot de passe envoyé par les sites réglés en *anonyme* |
 | Dossier de téléchargement par défaut | dossier de l'utilisateur | Dossier où démarrent les panneaux locaux, et où ils reviennent à la déconnexion ; le dossier de l'utilisateur quand il n'existe pas |
+| File non terminée au démarrage | Demander | Demander, La charger ou L'abandonner (voir *File d'attente*) |
+| Compatibilité avec la DLL mIRC de FTPRush (fenêtre TfmRush) | non | Voir *DLL mIRC* ; tant que c'est coché, FTPRush v2 ne peut pas démarrer à côté d'UltraRushFTP |
 
 ### Transferts
 
@@ -363,6 +378,14 @@ message l'indique).
 Utiliser `mirc/x86/rushmirc.dll` pour mIRC 32 bits et `mirc/x64/rushmirc.dll` pour mIRC 64
 bits.
 
+La DLL trouve l'application par une fenêtre cachée. UltraRushFTP la nomme `TfmUltraRush`,
+et sa DLL cherche d'abord `TfmUltraRush`, puis `TfmRush` (FTPRush). FTPRush v2 peut donc
+tourner en même temps. Le `rushmirc.dll` **d'origine** de FTPRush ne connaît que `TfmRush` :
+pour piloter UltraRushFTP avec lui, cocher *Compatibilité avec la DLL mIRC de FTPRush*
+(Options › Général). FTPRush v2 cherche cette même fenêtre à son démarrage et ne s'ouvre pas
+tant qu'elle existe. Quand une fenêtre `TfmRush` est déjà ouverte (FTPRush lancé),
+UltraRushFTP n'en crée pas une seconde et le signale dans le journal.
+
 ## Variables d'environnement
 
 | Variable | Effet |
@@ -372,7 +395,7 @@ bits.
 | `URUSHFTP_THEME` | `light` (ou `clair`) / autre valeur : impose le thème au démarrage |
 | `URUSHFTP_CONNECT` | URL connectée au démarrage (comme `-c`) |
 | `URUSHFTP_SCRIPT` | Source d'un script exécuté au démarrage |
-| `URUSHFTP_IPC_CLASS` | Classe de fenêtre de la liaison mIRC à la place de `TfmRush` (tests à côté d'un FTPRush ouvert) |
+| `URUSHFTP_IPC_CLASS` | Classe de fenêtre de la liaison mIRC à la place de `TfmUltraRush` / `TfmRush`, pour l'application et pour la DLL (tests) |
 | `URUSHFTP_OPEN_SITES` | Développement : ouvre le gestionnaire de sites sur ce numéro de site |
 | `URUSHFTP_SITE_SETTINGS` | Développement : garde la fiche du site défilée sur les réglages du site |
 | `URUSHFTP_OPEN_OPTIONS` | Développement : ouvre la fenêtre Options sur cette page (0 à 8) |
@@ -387,3 +410,4 @@ Dans le dossier des données (`%APPDATA%\UltraRushFTP` par défaut) :
 | `sites.json` | Carnet de sites (mots de passe `dpapi:…`) ; écriture atomique, version précédente gardée dans `sites.json.bak` |
 | `settings.json` | Options ci-dessus (mot de passe du proxy `dpapi:…`) ; les clés absentes prennent leur valeur par défaut |
 | `stats.json` | Totaux des transferts et date de première utilisation (`RushApp.Total*`, `StartDate`) |
+| `queue.json` | File non terminée de chaque onglet (supprimé quand il ne reste rien à faire) |
