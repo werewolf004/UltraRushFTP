@@ -9,11 +9,13 @@ compatible with FTPRush's `rushmirc.dll`.
 
 ![Main window](docs/images/main.en.png)
 
-> **Status — 0.2.0 (pre-release).** The protocol engine (FTP, FTPS, SFTP, FXP, proxies,
+> **Status — 0.3.0 (pre-release).** The protocol engine (FTP, FTPS, SFTP, FXP, proxies,
 > Ident, queue), the tabbed interface, the site manager, the options, Pascal scripting,
 > the mIRC link and the command line are in place and covered by automated tests against
-> local test servers. They have **not yet been validated against real-world servers**;
-> see [ROADMAP.md](ROADMAP.md) for what is still missing compared with FTPRush v2.
+> local test servers. They have been checked against **glftpd**; the other servers
+> (vsftpd, ProFTPD, FileZilla Server, IIS, OpenSSH) are not validated yet, see
+> [docs/VALIDATION.md](docs/VALIDATION.md). See [ROADMAP.md](ROADMAP.md) for what is still
+> missing compared with FTPRush v2.
 
 ## Features
 
@@ -52,6 +54,9 @@ Windows SmartScreen may ask for confirmation on first start.
 - **Site manager** (`☰ Sites`): create sites and folders, or import your existing site
   books (*Import*). Passwords are not imported from FTPRush v1/v2 and FlashFXP files:
   enter them again. Select a site and press **Connect**.
+- **Connection bar of each panel**: `🔌 Connect ▾` opens a site in that panel;
+  `💻 Local` / `🌐 site` switches the panel between its local folder and its connection,
+  which stays open.
 - **Transfer**: select files and press `Space`, drag them onto the other panel, or use
   the right-click menu. Transfers run in the queue at the bottom of the tab.
 - **New tab**: `+` next to the tabs; each tab has its own panels, queue and log.

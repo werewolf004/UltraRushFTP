@@ -130,7 +130,8 @@ Cochez ce qui fonctionne, notez ce qui ne fonctionne pas, avec le journal du pro
 
 | Serveur et version | Protocole | Script | À la main | Notes |
 |---|---|---|---|---|
-| | | | | |
+| glftpd | | ok | ok | Validé le 2026-11-07. |
+| vsftpd, ProFTPD, FileZilla Server, IIS, OpenSSH | | pas lancé | pas lancé | |
 
 Envoyez `report.md`, `log.txt` et ce tableau (après les avoir relus). Chaque problème trouvé
 donne lieu à une correction, avec un test qui le reproduit sur les serveurs de test.

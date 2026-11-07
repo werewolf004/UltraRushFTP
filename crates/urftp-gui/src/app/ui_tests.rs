@@ -608,3 +608,94 @@ fn unfinished_queues_of_several_tabs_are_offered_one_by_one() {
     assert!(ui.app().tabs.iter().all(|t| t.queue.lock().items().is_empty()));
     assert!(!path.exists());
 }
+
+#[test]
+fn about_window_shows_the_version() {
+    let mut ui = Ui::start(Lang::Fr, false);
+    ui.harness.get_by_label(&t!("menu.help")).click();
+    ui.run();
+    ui.harness.get_by_label(&t!("menu.about")).click();
+    ui.run();
+    assert!(ui.has_label(&t!("about.version", version = env!("CARGO_PKG_VERSION"))));
+    ui.key(Key::Escape);
+    assert!(!ui.has_label(&t!("about.version", version = env!("CARGO_PKG_VERSION"))));
+}
+
+/// Clicks the only enabled control with this name (each panel has the same buttons).
+fn click_enabled(ui: &mut Ui, label: &str) {
+    {
+        let nodes: Vec<_> = ui.harness.get_all_by_label(label).filter(|n| !n.accesskit_node().is_disabled()).collect();
+        assert_eq!(nodes.len(), 1, "enabled controls named {label}");
+        nodes[0].click();
+    }
+    ui.run();
+}
+
+/// Remote panel of the first tab, from the connection bar of the left panel.
+fn connect_left_panel(ui: &mut Ui, name: &str) -> u64 {
+    // A local port nobody listens on: no network access.
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let site = urftp_core::site::Site { name: name.into(), host: "127.0.0.1".into(), port, ..Default::default() };
+    let book = &mut ui.app().sites.book;
+    book.root.groups.push(urftp_core::site::SiteGroup::new("Lab"));
+    let g = book.root.groups.len() - 1;
+    let id = book.add_site(&[g], site);
+    ui.harness.get_all_by_label(&t!("conn.connect")).next().unwrap().click();
+    ui.run();
+    // A group opens its sub-menu when the pointer is over it.
+    ui.harness.get_by_label_contains("📁 Lab").hover();
+    ui.run();
+    ui.harness.get_by_label(&format!("🌐 {name}")).click();
+    ui.run();
+    id
+}
+
+#[test]
+fn connection_bar_connects_the_panel_and_switches_to_local_and_back() {
+    let mut ui = Ui::start(Lang::En, true);
+    let id = connect_left_panel(&mut ui, "Bar site");
+    let tab = &ui.app().tabs[0];
+    assert!(matches!(&tab.sides[0], Side::Remote(r) if r.site_id == Some(id)), "left panel connected");
+    assert!(matches!(tab.parked[0], Some(Side::Local(_))), "its local folder kept behind");
+    assert!(matches!(tab.sides[1], Side::Local(_)), "right panel untouched");
+
+    // To the local folder: the connection stays open behind it.
+    click_enabled(&mut ui, &t!("conn.to_local"));
+    let tab = &ui.app().tabs[0];
+    assert!(matches!(tab.sides[0], Side::Local(_)));
+    assert!(matches!(&tab.parked[0], Some(Side::Remote(r)) if r.site_id == Some(id)));
+    assert_eq!(tab.title(1), "127.0.0.1", "the tab keeps the name of its connection");
+
+    // And back to the connection.
+    ui.harness.get_by_label(&t!("conn.to_remote", site = "Bar site")).click();
+    ui.run();
+    assert!(matches!(&ui.app().tabs[0].sides[0], Side::Remote(r) if r.site_id == Some(id)));
+}
+
+#[test]
+fn disconnect_behind_the_local_folder_forgets_the_connection() {
+    let mut ui = Ui::start(Lang::Fr, false);
+    connect_left_panel(&mut ui, "Parked site");
+    click_enabled(&mut ui, &t!("conn.to_local"));
+    click_enabled(&mut ui, &t!("files.disconnect"));
+    let tab = &ui.app().tabs[0];
+    assert!(matches!(tab.sides[0], Side::Local(_)));
+    assert!(tab.parked[0].is_none());
+    assert!(tab.switch_label(0).is_none(), "nothing left to switch to");
+}
+
+#[test]
+fn connection_menu_acts_on_the_active_panel() {
+    let mut ui = Ui::start(Lang::En, true);
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let site = urftp_core::site::Site { name: "Menu site".into(), host: "127.0.0.1".into(), port, ..Default::default() };
+    ui.app().sites.book.add_site(&[], site);
+    ui.app().tabs[0].focus = 1;
+    ui.harness.get_by_label(&t!("menu.connection")).click();
+    ui.run();
+    ui.harness.get_by_label("🌐 Menu site").click();
+    ui.run();
+    let tab = &ui.app().tabs[0];
+    assert!(matches!(tab.sides[1], Side::Remote(_)), "right panel, the active one, connected");
+    assert!(matches!(tab.sides[0], Side::Local(_)));
+}

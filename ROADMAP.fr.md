@@ -78,9 +78,9 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
   par site ; description du site, format du listing, adresse web et « Copier l'adresse
   HTTP » (G5).
 - ✅ FXP entre adresses IPv6 (`EPSV` / `EPRT`), connexion IPv4/IPv6 « happy eyeballs » (G2).
-- 🟡 Validation sur des serveurs réels (glftpd, vsftpd, ProFTPD, FileZilla Server, IIS,
-  OpenSSH) : script et liste de contrôle prêts ([docs/VALIDATION.fr.md](docs/VALIDATION.fr.md)),
-  résultats à recueillir (G6).
+- ✅ Validation sur un serveur réel : glftpd validé ; script et liste de contrôle
+  ([docs/VALIDATION.fr.md](docs/VALIDATION.fr.md)) pour vsftpd, ProFTPD, FileZilla Server,
+  IIS et OpenSSH, pas encore lancés (G6).
 
 ### H — File et transferts
 - ⬜ Pause, modification d'un élément (source, cible, mode, inversion FXP), marquer en

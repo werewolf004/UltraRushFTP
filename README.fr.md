@@ -9,12 +9,13 @@ DLL compatible avec la `rushmirc.dll` de FTPRush.
 
 ![Fenêtre principale](docs/images/main.fr.png)
 
-> **État — 0.2.0 (pré-version).** Le moteur (FTP, FTPS, SFTP, FXP, proxys, Ident, file
+> **État — 0.3.0 (pré-version).** Le moteur (FTP, FTPS, SFTP, FXP, proxys, Ident, file
 > d'attente), l'interface à onglets, le gestionnaire de sites, les options, les scripts
 > Pascal, la liaison mIRC et la ligne de commande sont en place et couverts par des tests
-> automatiques contre des serveurs de test locaux. Ils **n'ont pas encore été validés sur
-> des serveurs réels** ; voir [ROADMAP.fr.md](ROADMAP.fr.md) pour ce qui manque encore par
-> rapport à FTPRush v2.
+> automatiques contre des serveurs de test locaux. Ils ont été vérifiés sur **glftpd** ;
+> les autres serveurs (vsftpd, ProFTPD, FileZilla Server, IIS, OpenSSH) ne sont pas encore
+> validés, voir [docs/VALIDATION.fr.md](docs/VALIDATION.fr.md). Voir
+> [ROADMAP.fr.md](ROADMAP.fr.md) pour ce qui manque encore par rapport à FTPRush v2.
 
 ## Fonctionnalités
 
@@ -56,6 +57,9 @@ encore signés : Windows SmartScreen peut demander une confirmation au premier l
   carnets existants (*Importer*). Les mots de passe ne sont pas importés depuis les fichiers
   FTPRush v1/v2 et FlashFXP : il faut les ressaisir. Sélectionner un site puis
   **Connecter**.
+- **Barre de connexion de chaque panneau** : `🔌 Connexion ▾` ouvre un site dans ce
+  panneau ; `💻 Local` / `🌐 site` bascule le panneau entre son dossier local et sa
+  connexion, qui reste ouverte.
 - **Transférer** : sélectionner des fichiers puis `Espace`, les glisser sur l'autre panneau,
   ou passer par le clic droit. Les transferts passent par la file en bas de l'onglet.
 - **Nouvel onglet** : `+` à côté des onglets ; chaque onglet a ses panneaux, sa file et son

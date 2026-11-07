@@ -240,6 +240,8 @@ struct RemoteView {
     profile: SiteProfile,
     handle: BrowserHandle,
     dir: String,
+    /// Text of the path field (Enter goes there).
+    path_edit: String,
     rows: Vec<FileRow>,
     selected: BTreeSet<usize>,
     cursor: Cursor,
@@ -432,6 +434,9 @@ struct Container {
     id: u32,
     dock: DockState<Pane>,
     sides: [Side; 2],
+    /// The other view of each panel, kept while the panel shows the first one: the local
+    /// folder behind a connection, or the connection (still open) behind the local folder.
+    parked: [Option<Side>; 2],
     queue: Arc<Mutex<Queue>>,
     progress: HashMap<ItemId, (u64, Option<u64>)>,
     engine_events: Option<UnboundedReceiver<EngineEvent>>,
@@ -487,6 +492,7 @@ impl Container {
             id,
             dock: default_dock(),
             sides: [Side::Local(LocalView::new(home_dir())), Side::Local(LocalView::new(home_dir()))],
+            parked: [None, None],
             queue: Arc::new(Mutex::new(Queue::new())),
             progress: HashMap::new(),
             engine_events: None,
@@ -505,10 +511,11 @@ impl Container {
 
     /// Displayed title; `pos` = position of the tab (1, 2, 3...), renumbered on close.
     fn title(&self, pos: usize) -> String {
-        match (&self.sides[0], &self.sides[1]) {
-            (_, Side::Remote(r)) | (Side::Remote(r), _) => r.profile.host.clone(),
-            _ => t!("tabs.default_title", n = pos),
-        }
+        let remote = [&self.sides[1], &self.sides[0]]
+            .into_iter()
+            .chain(self.parked[1].iter().chain(self.parked[0].iter()))
+            .find_map(|s| if let Side::Remote(r) = s { Some(r.profile.host.clone()) } else { None });
+        remote.unwrap_or_else(|| t!("tabs.default_title", n = pos))
     }
 
     fn push_log(&mut self, side: usize, kind: LogKind, text: impl Into<String>) {
@@ -574,6 +581,7 @@ impl Container {
         match e {
             BrowserEvent::Listing { dir, entries } => {
                 if let Side::Remote(r) = &mut self.sides[side] {
+                    r.path_edit.clone_from(&dir);
                     r.dir = dir;
                     r.rows = entries.iter().map(FileRow::from_remote).collect();
                     sort_rows(&mut r.rows, r.sort);
@@ -639,6 +647,44 @@ impl Container {
         }
     }
 
+    /// Shows the other view of panel `side`: the local folder behind a connection, or the
+    /// connection behind the local folder. The connection stays open meanwhile.
+    fn switch_side(&mut self, side: usize) {
+        let remote = matches!(self.sides[side], Side::Remote(_));
+        if !remote && self.parked[side].is_none() {
+            return;
+        }
+        let next = self.parked[side].take().unwrap_or_else(|| Side::Local(LocalView::new(home_dir())));
+        let shown = std::mem::replace(&mut self.sides[side], next);
+        self.parked[side] = Some(shown);
+        if let Side::Local(l) = &mut self.sides[side] {
+            l.reload();
+        }
+    }
+
+    /// Closes the connection of panel `side` (shown or kept behind the local folder); the
+    /// panel shows its local folder.
+    fn disconnect_side(&mut self, side: usize) {
+        if let Some(Side::Remote(r)) = &self.parked[side] {
+            r.handle.send(BrowserCmd::Disconnect);
+            self.parked[side] = None;
+        }
+        if let Side::Remote(r) = &self.sides[side] {
+            r.handle.send(BrowserCmd::Disconnect);
+            let back = self.parked[side].take().unwrap_or_else(|| Side::Local(LocalView::new(home_dir())));
+            self.sides[side] = back;
+        }
+    }
+
+    /// Text of the switch button of panel `side`, when there is something to switch to.
+    fn switch_label(&self, side: usize) -> Option<String> {
+        match (&self.sides[side], &self.parked[side]) {
+            (Side::Remote(_), _) => Some(t!("conn.to_local")),
+            (Side::Local(_), Some(Side::Remote(r))) => Some(t!("conn.to_remote", site = r.profile.name)),
+            _ => None,
+        }
+    }
+
     fn refresh_both(&mut self) {
         for s in &mut self.sides {
             match s {
@@ -676,7 +722,7 @@ impl Container {
             return;
         }
         let mut sites: Vec<SiteProfile> = Vec::new();
-        for p in self.sides.iter().filter_map(Side::profile).chain(extra) {
+        for p in self.sides.iter().chain(self.parked.iter().flatten()).filter_map(Side::profile).chain(extra) {
             if !sites.iter().any(|s| s.name == p.name) {
                 sites.push(p.clone());
             }
@@ -891,6 +937,8 @@ pub struct UltraRushApp {
     exit_when_done: bool,
     /// "Keyboard shortcuts" window (F1).
     shortcuts_open: bool,
+    /// "About" window (Help menu).
+    about_open: bool,
     /// mIRC link (`TfmRush` window); off in the interface tests.
     ipc_enabled: bool,
 }
@@ -941,6 +989,14 @@ enum Action {
     Up(usize),
     Refresh(usize),
     Disconnect(usize),
+    /// Connects a panel to a site manager record, with the login asked by the modifiers.
+    ConnectSite(usize, u64, sites::LoginVariant),
+    Reconnect(usize),
+    /// Local folder ⇄ connection of a panel.
+    SwitchSide(usize),
+    /// Path typed in the field of a remote panel.
+    RemoteCwd(usize, String),
+    OpenSiteManager,
     Transfer(usize),
     StartQueue,
     ClearFinished,
@@ -1010,6 +1066,7 @@ impl UltraRushApp {
             startup: Some(startup),
             // Development (screenshots): `URUSHFTP_OPEN_SHORTCUTS=1` opens the shortcuts window.
             shortcuts_open: std::env::var_os("URUSHFTP_OPEN_SHORTCUTS").is_some(),
+            about_open: std::env::var_os("URUSHFTP_OPEN_ABOUT").is_some(),
             ipc_enabled: true,
         };
         // The URUSHFTP_THEME variable wins over the stored option.
@@ -1279,8 +1336,9 @@ impl UltraRushApp {
         start_dir: Option<String>,
         ctx: &egui::Context,
     ) {
-        if let Side::Remote(r) = &self.tabs[tab].sides[side] {
-            r.handle.send(BrowserCmd::Disconnect);
+        match (&self.tabs[tab].sides[side], &self.tabs[tab].parked[side]) {
+            (Side::Remote(r), _) | (Side::Local(_), Some(Side::Remote(r))) => r.handle.send(BrowserCmd::Disconnect),
+            _ => {}
         }
         let http = site_id.and_then(|id| self.sites.book.find(id)).map(|s| s.http.clone()).unwrap_or_default();
         let handle = browser::spawn(&self.rt, ctx.clone());
@@ -1290,10 +1348,17 @@ impl UltraRushApp {
         }
         let t = &mut self.tabs[tab];
         t.push_log(side, LogKind::Status, t!("log.connecting", site = profile.name));
+        let shown = std::mem::replace(&mut t.sides[side], Side::Local(LocalView::new(PathBuf::new())));
+        // The local folder stays behind the connection (switch button of the panel).
+        t.parked[side] = match shown {
+            Side::Local(l) => Some(Side::Local(l)),
+            Side::Remote(_) => t.parked[side].take().filter(|p| matches!(p, Side::Local(_))),
+        };
         t.sides[side] = Side::Remote(Box::new(RemoteView {
             profile,
             handle,
             dir: "/".into(),
+            path_edit: "/".into(),
             rows: Vec::new(),
             selected: BTreeSet::new(),
             cursor: Cursor::default(),
@@ -1348,6 +1413,21 @@ impl UltraRushApp {
         self.connect_profile(profile, Some(site.id), remote, ctx);
         if !site.local_dir.trim().is_empty()
             && let Side::Local(l) = &mut self.tabs[self.active].sides[0]
+        {
+            l.path = PathBuf::from(site.local_dir.trim());
+            l.reload();
+        }
+    }
+
+    /// Connects panel `side` of the active tab to a site record (connection bar and menu of
+    /// the panel); the local folder of the site goes to the other panel when it is local.
+    fn connect_site_in(&mut self, site: Site, variant: sites::LoginVariant, side: usize, ctx: &egui::Context) {
+        let profile = self.site_profile(&site).with_login_variant(variant.ghost, variant.quiet);
+        let remote = (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone());
+        let tab = self.active;
+        self.open_remote(tab, side, profile, Some(site.id), remote, ctx);
+        if !site.local_dir.trim().is_empty()
+            && let Side::Local(l) = &mut self.tabs[tab].sides[1 - side]
         {
             l.path = PathBuf::from(site.local_dir.trim());
             l.reload();
@@ -1415,7 +1495,9 @@ impl UltraRushApp {
         self.tabs[t].script_out.extend(notes);
     }
 
-    fn top_bar(&mut self, ui: &mut egui::Ui) {
+    fn top_bar(&mut self, ui: &mut egui::Ui) -> Vec<Action> {
+        let mut actions = Vec::new();
+        let entries = self.site_entries();
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button(t!("menu.file"), |ui| {
                 if ui.button(t!("menu.site_manager")).clicked() {
@@ -1434,6 +1516,27 @@ impl UltraRushApp {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
+            // Acts on the panel that has the keyboard, like the bar of that panel.
+            ui.menu_button(t!("menu.connection"), |ui| {
+                let tab = &self.tabs[self.active];
+                let side = tab.focus;
+                connection_menu(ui, &entries, side, &mut actions);
+                let remote = matches!(tab.sides[side], Side::Remote(_));
+                if ui.add_enabled(remote, egui::Button::new(t!("conn.reconnect"))).clicked() {
+                    actions.push(Action::Reconnect(side));
+                    ui.close();
+                }
+                let connected = remote || matches!(tab.parked[side], Some(Side::Remote(_)));
+                if ui.add_enabled(connected, egui::Button::new(t!("files.disconnect"))).clicked() {
+                    actions.push(Action::Disconnect(side));
+                    ui.close();
+                }
+                let label = tab.switch_label(side);
+                if ui.add_enabled(label.is_some(), egui::Button::new(label.unwrap_or_else(|| t!("conn.to_local")))).clicked() {
+                    actions.push(Action::SwitchSide(side));
+                    ui.close();
+                }
+            });
             ui.menu_button(t!("menu.view"), |ui| {
                 if ui.button(if self.dark { t!("menu.light_theme") } else { t!("menu.dark_theme") }).clicked() {
                     self.dark = !self.dark;
@@ -1446,6 +1549,11 @@ impl UltraRushApp {
             ui.menu_button(t!("menu.help"), |ui| {
                 if ui.button(t!("menu.shortcuts")).clicked() {
                     self.shortcuts_open = true;
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button(t!("menu.about")).clicked() {
+                    self.about_open = true;
                     ui.close();
                 }
             });
@@ -1491,6 +1599,50 @@ impl UltraRushApp {
             }
         });
         ui.add_space(4.0);
+        actions
+    }
+
+    /// Sites of the site manager for the connection menus.
+    fn site_entries(&self) -> Vec<SiteEntry> {
+        self.sites
+            .book
+            .all_sites()
+            .into_iter()
+            .map(|(groups, s)| SiteEntry { groups, id: s.id, name: s.name.clone(), enabled: s.enabled })
+            .collect()
+    }
+
+    /// "About" window: version, licence.
+    fn about_window(&mut self, ctx: &egui::Context) {
+        if !self.about_open {
+            return;
+        }
+        let mut open = true;
+        let mut close = false;
+        egui::Window::new(t!("about.title"))
+            .id(egui::Id::new("about-window"))
+            .default_pos([380.0, 160.0])
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.label(RichText::new("UltraRushFTP").heading().strong().color(theme::colors(ui).accent_text));
+                    ui.label(RichText::new(t!("about.version", version = env!("CARGO_PKG_VERSION"))).strong());
+                    ui.label(t!("about.tagline"));
+                    ui.add_space(6.0);
+                    ui.label(t!("about.build", arch = std::env::consts::ARCH));
+                    ui.label("© 2026 werewolf004");
+                    ui.label(t!("about.licence"));
+                    ui.add_space(6.0);
+                    if theme::primary_button(ui, t!("about.close")).clicked() {
+                        close = true;
+                    }
+                });
+            });
+        if !open || close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.about_open = false;
+        }
     }
 
     fn tab_strip(&mut self, ui: &mut egui::Ui) {
@@ -1553,6 +1705,7 @@ impl UltraRushApp {
         let opts = self.engine_options();
         let extra = self.queue_site_profiles(self.active);
         let mut scripts = Vec::new();
+        let (mut connects, mut reconnects, mut open_sites) = (Vec::new(), Vec::new(), false);
         let tab = &mut self.tabs[self.active];
         for a in actions {
             match a {
@@ -1570,12 +1723,18 @@ impl UltraRushApp {
                     Side::Local(l) => l.reload(),
                     Side::Remote(r) => r.handle.send(BrowserCmd::Refresh),
                 },
-                Action::Disconnect(side) => {
-                    if let Side::Remote(r) = &tab.sides[side] {
-                        r.handle.send(BrowserCmd::Disconnect);
+                Action::Disconnect(side) => tab.disconnect_side(side),
+                Action::SwitchSide(side) => tab.switch_side(side),
+                Action::RemoteCwd(side, dir) => {
+                    if let Side::Remote(r) = &tab.sides[side]
+                        && !dir.trim().is_empty()
+                    {
+                        r.handle.send(BrowserCmd::Cwd(rpath::join(&r.dir, dir.trim())));
                     }
-                    tab.sides[side] = Side::Local(LocalView::new(home_dir()));
                 }
+                Action::ConnectSite(side, id, variant) => connects.push((side, id, variant)),
+                Action::Reconnect(side) => reconnects.push(side),
+                Action::OpenSiteManager => open_sites = true,
                 Action::Transfer(side) => {
                     tab.enqueue_selection(side);
                     tab.start_queue(&rt, ctx, opts.clone(), &extra);
@@ -1624,6 +1783,22 @@ impl UltraRushApp {
                     tab.queue.lock().reset_failed();
                     tab.start_queue(&rt, ctx, opts.clone(), &extra);
                 }
+            }
+        }
+        if open_sites {
+            self.sites.open = true;
+        }
+        // Connections need the site manager: after the actions of the tab.
+        for (side, id, variant) in connects {
+            if let Some(site) = self.sites.book.find(id).cloned() {
+                self.connect_site_in(site, variant, side, ctx);
+            }
+        }
+        for side in reconnects {
+            let tab = self.active;
+            if let Side::Remote(r) = &self.tabs[tab].sides[side] {
+                let (profile, id, dir) = (r.profile.clone(), r.site_id, r.dir.clone());
+                self.open_remote(tab, side, profile, id, Some(dir), ctx);
             }
         }
         // Script console: run after the other actions (it acts on the whole application).
@@ -1684,7 +1859,7 @@ impl UltraRushApp {
         }
         let tab = &self.tabs[self.active];
         let busy = ctx.egui_wants_keyboard_input() || ctx.memory(|m| m.focused().is_some());
-        if busy || self.sites.open || self.options.open || self.shortcuts_open {
+        if busy || self.sites.open || self.options.open || self.shortcuts_open || self.about_open {
             return Vec::new();
         }
         let side = tab.focus;
@@ -1949,17 +2124,35 @@ impl eframe::App for UltraRushApp {
             ctx.request_repaint_after(Duration::from_millis(150));
         }
 
-        egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
+        let mut menu_actions = Vec::new();
+        egui::Panel::top("top").show(ui, |ui| menu_actions = self.top_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::top("tabs").show(ui, |ui| self.tab_strip(ui));
 
         let mut actions = self.keyboard(&ctx);
+        actions.append(&mut menu_actions);
+        let entries = self.site_entries();
         egui::CentralPanel::default().show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
             let running = tab.engine.is_some();
+            let switch = [tab.switch_label(0), tab.switch_label(1)];
+            let parked_remote = [0, 1].map(|s| matches!(tab.parked[s], Some(Side::Remote(_))));
             let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, .. } = tab;
-            let mut viewer =
-                PaneViewer { sides, queue, progress, log, actions: &mut actions, focus: *focus, running, script, invoke, script_out };
+            let mut viewer = PaneViewer {
+                sides,
+                queue,
+                progress,
+                log,
+                actions: &mut actions,
+                focus: *focus,
+                running,
+                script,
+                invoke,
+                script_out,
+                sites: &entries,
+                switch,
+                parked_remote,
+            };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
                 .id(egui::Id::new(("dock", *id)))
@@ -1973,6 +2166,7 @@ impl eframe::App for UltraRushApp {
         self.saved_queue_dialog(&ctx);
         self.trust_dialog(&ctx);
         self.shortcuts_window(&ctx);
+        self.about_window(&ctx);
         self.sites.show(&ctx, &self.options.settings);
         if self.options.show(&ctx) {
             self.apply_settings(&ctx);
@@ -1999,6 +2193,58 @@ struct PaneViewer<'a> {
     script: &'a mut String,
     invoke: &'a mut String,
     script_out: &'a [(bool, String)],
+    /// Sites of the site manager (connection button of the panels).
+    sites: &'a [SiteEntry],
+    /// Text of the local ⇄ remote button of each panel (`None`: nothing to switch to).
+    switch: [Option<String>; 2],
+    /// A connection is kept behind the local folder of the panel.
+    parked_remote: [bool; 2],
+}
+
+/// A site of the site manager, for the connection menus.
+struct SiteEntry {
+    groups: Vec<String>,
+    id: u64,
+    name: String,
+    enabled: bool,
+}
+
+/// Sites of the site manager as a menu (one sub-menu per group); a click connects panel
+/// `side`, `Shift` asks for a ghost login and `Ctrl` for `-password`.
+fn connection_menu(ui: &mut egui::Ui, entries: &[SiteEntry], side: usize, actions: &mut Vec<Action>) {
+    let all: Vec<&SiteEntry> = entries.iter().collect();
+    if all.is_empty() {
+        ui.label(RichText::new(t!("conn.no_sites")).italics());
+    }
+    site_menu_level(ui, &all, 0, side, actions);
+    ui.separator();
+    if ui.button(t!("menu.site_manager")).clicked() {
+        actions.push(Action::OpenSiteManager);
+        ui.close();
+    }
+}
+
+fn site_menu_level(ui: &mut egui::Ui, entries: &[&SiteEntry], depth: usize, side: usize, actions: &mut Vec<Action>) {
+    let mut groups: Vec<&str> = Vec::new();
+    for e in entries {
+        if let Some(g) = e.groups.get(depth)
+            && !groups.contains(&g.as_str())
+        {
+            groups.push(g);
+        }
+    }
+    for g in groups {
+        let inner: Vec<&SiteEntry> = entries.iter().copied().filter(|e| e.groups.get(depth).map(String::as_str) == Some(g)).collect();
+        ui.menu_button(format!("📁 {g}"), |ui| site_menu_level(ui, &inner, depth + 1, side, actions));
+    }
+    for e in entries.iter().filter(|e| e.groups.len() == depth) {
+        let r = ui.add_enabled(e.enabled, egui::Button::new(format!("🌐 {}", e.name)));
+        if r.clicked() {
+            let variant = sites::LoginVariant::from_modifiers(ui.input(|i| i.modifiers));
+            actions.push(Action::ConnectSite(side, e.id, variant));
+            ui.close();
+        }
+    }
 }
 
 impl TabViewer for PaneViewer<'_> {
@@ -2034,6 +2280,29 @@ impl PaneViewer<'_> {
     fn file_pane(&mut self, ui: &mut egui::Ui, side: usize) {
         let arrow = if side == 0 { t!("files.transfer_right") } else { t!("files.transfer_left") };
         let p = theme::colors(ui);
+        // Connection bar of the panel (FTPRush: toolbar of each window).
+        ui.horizontal(|ui| {
+            let sites = self.sites;
+            let actions = &mut *self.actions;
+            ui.menu_button(t!("conn.connect"), |ui| connection_menu(ui, sites, side, actions))
+                .response
+                .on_hover_text(t!("conn.connect_hint"));
+            let remote = matches!(self.sides[side], Side::Remote(_));
+            if ui.add_enabled(remote, egui::Button::new(t!("conn.reconnect"))).clicked() {
+                self.actions.push(Action::Reconnect(side));
+            }
+            if ui.add_enabled(remote || self.parked_remote[side], egui::Button::new(t!("files.disconnect"))).clicked() {
+                self.actions.push(Action::Disconnect(side));
+            }
+            let label = self.switch[side].clone();
+            let r = ui
+                .add_enabled(label.is_some(), egui::Button::new(label.unwrap_or_else(|| t!("conn.to_local"))))
+                .on_hover_text(t!("conn.switch_hint"))
+                .on_disabled_hover_text(t!("conn.switch_hint"));
+            if r.clicked() {
+                self.actions.push(Action::SwitchSide(side));
+            }
+        });
         ui.horizontal(|ui| {
             if theme::icon_button(ui, "⬆", t!("files.parent")).clicked() {
                 self.actions.push(Action::Up(side));
@@ -2062,9 +2331,12 @@ impl PaneViewer<'_> {
                     };
                     let d = ui.label(RichText::new(dot).color(color)).on_hover_text(&state);
                     theme::name(&d, state);
-                    ui.label(RichText::new(&r.dir).monospace());
-                    if ui.button(t!("files.disconnect")).clicked() {
-                        self.actions.push(Action::Disconnect(side));
+                    let field =
+                        theme::single_line(&mut r.path_edit).font(egui::TextStyle::Monospace).desired_width(ui.available_width() - 120.0);
+                    let f = ui.add(field);
+                    theme::name(&f, t!("files.remote_path"));
+                    if f.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        self.actions.push(Action::RemoteCwd(side, r.path_edit.clone()));
                     }
                 }
             }

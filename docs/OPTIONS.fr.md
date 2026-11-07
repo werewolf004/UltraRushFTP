@@ -18,12 +18,29 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | Fichier → Nouvel onglet | Nouvel onglet vide (aussi `+` à côté des onglets) |
 | Fichier → Options… | Ouvre la fenêtre Options (aussi `⚙`) |
 | Fichier → Quitter | Quitte |
+| Connexion → *site* | Connecte le panneau actif (marqué `▸`) à un site du gestionnaire ; les dossiers sont des sous-menus ; `Maj` : connexion fantôme, `Ctrl` : `-password` |
+| Connexion → Gestionnaire de sites | Ouvre le gestionnaire de sites |
+| Connexion → Reconnecter / Déconnecter | Agit sur la connexion du panneau actif |
+| Connexion → Local / *site* | Bascule le panneau actif entre son dossier local et sa connexion |
 | Affichage → Thème clair / Thème sombre | Change le thème (enregistré aussi dans les options) |
 | Aide → Raccourcis clavier | Liste les raccourcis ci-dessous (aussi `F1`) |
+| Aide → À propos d'UltraRushFTP | Version, compilation et licence |
 | Connexion rapide | Protocole (FTP, FTPS explicite, FTPS implicite, SFTP), hôte, port, utilisateur, mot de passe, **Connexion** : ouvre le site dans le panneau droit de l'onglet courant (ou dans un nouvel onglet, voir *Général*) |
 | Onglets | Un onglet par conteneur de sites ; `✕` le ferme, le titre est l'hôte ou « Onglet n » ; `Ctrl+T` nouveau, `Ctrl+W` fermer, `Ctrl+Tab` / `Ctrl+Maj+Tab` suivant / précédent |
 
 ### Panneaux de fichiers
+
+Chaque panneau a sa propre barre de connexion, au-dessus de son dossier :
+
+| Bouton | Effet |
+|---|---|
+| `🔌 Connexion ▾` | Menu des sites du gestionnaire (les dossiers en sous-menus) et *Gestionnaire de sites* : connecte **ce** panneau ; `Maj` : connexion fantôme, `Ctrl` : `-password`. Le dossier local du site, s'il est rempli, va dans l'autre panneau quand celui-ci est local. |
+| `⟲ Reconnecter` | Rouvre la connexion du panneau, dans le même dossier |
+| `Déconnecter` | Ferme la connexion du panneau (affichée, ou gardée derrière le dossier local) |
+| `💻 Local` / `🌐 site` | Bascule le panneau entre son dossier local et sa connexion ; la connexion reste ouverte pendant ce temps, et l'onglet garde son nom |
+
+Dans un panneau distant, le champ du chemin accepte un dossier (absolu, ou relatif au
+dossier courant) : `Entrée` y va.
 
 | Action | Souris | Clavier |
 |---|---|---|
@@ -400,6 +417,7 @@ UltraRushFTP n'en crée pas une seconde et le signale dans le journal.
 | `URUSHFTP_SITE_SETTINGS` | Développement : garde la fiche du site défilée sur les réglages du site |
 | `URUSHFTP_OPEN_OPTIONS` | Développement : ouvre la fenêtre Options sur cette page (0 à 8) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Développement : ouvre la fenêtre des raccourcis clavier |
+| `URUSHFTP_OPEN_ABOUT` | Développement : ouvre la fenêtre À propos |
 
 ## Fichiers
 

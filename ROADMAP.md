@@ -70,9 +70,9 @@ planned work is grouped below into blocks, each ending with a release.
   Ident only while connecting; several SSH keys per site, FXP roles per site; site
   description, listing format, web address and "Copy HTTP address" (G5).
 - ✅ FXP between IPv6 addresses (`EPSV` / `EPRT`), IPv4/IPv6 "happy eyeballs" connection (G2).
-- 🟡 Validation against real servers (glftpd, vsftpd, ProFTPD, FileZilla Server, IIS,
-  OpenSSH): script and checklist ready ([docs/VALIDATION.md](docs/VALIDATION.md)), results
-  to collect (G6).
+- ✅ Validation against a real server: glftpd passed; script and checklist
+  ([docs/VALIDATION.md](docs/VALIDATION.md)) for vsftpd, ProFTPD, FileZilla Server, IIS and
+  OpenSSH, not run yet (G6).
 
 ### H — Queue and transfers
 - ⬜ Pause, edit an item (source, target, mode, invert FXP), mark as failed, clear failed,

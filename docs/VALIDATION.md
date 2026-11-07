@@ -125,7 +125,8 @@ Tick what works, note what does not, with the protocol log (select the lines of 
 
 | Server and version | Protocol | Script | By hand | Notes |
 |---|---|---|---|---|
-| | | | | |
+| glftpd | | ok | ok | Validated 2026-11-07. |
+| vsftpd, ProFTPD, FileZilla Server, IIS, OpenSSH | | not run | not run | |
 
 Send `report.md`, `log.txt` and this table (after reading them). Each problem found becomes
 a fix with a test that reproduces it on the test servers.

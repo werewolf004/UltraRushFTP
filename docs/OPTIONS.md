@@ -18,12 +18,29 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | File → New tab | New empty tab (also `+` next to the tabs) |
 | File → Options… | Opens the Options window (also `⚙`) |
 | File → Quit | Quits |
+| Connection → *site* | Connects the active panel (marked `▸`) to a site of the site manager; groups are sub-menus; `Shift`: ghost login, `Ctrl`: `-password` |
+| Connection → Site manager | Opens the site manager |
+| Connection → Reconnect / Disconnect | Acts on the connection of the active panel |
+| Connection → Local / *site* | Switches the active panel between its local folder and its connection |
 | View → Light theme / Dark theme | Switches the theme (also stored in the options) |
 | Help → Keyboard shortcuts | Lists the shortcuts below (also `F1`) |
+| Help → About UltraRushFTP | Version, build and licence |
 | Quick connect | Protocol (FTP, FTPS explicit, FTPS implicit, SFTP), host, port, user, password, **Connect**: opens the site in the right panel of the current tab (or in a new tab, see *General*) |
 | Tabs | One tab per site container; `✕` closes it, the title is the host or "Tab n"; `Ctrl+T` new, `Ctrl+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` next / previous |
 
 ### File panels
+
+Each panel has its own connection bar, above its folder:
+
+| Button | Effect |
+|---|---|
+| `🔌 Connect ▾` | Menu of the sites of the site manager (groups as sub-menus) and *Site manager*: connects **this** panel; `Shift`: ghost login, `Ctrl`: `-password`. The local folder of the site, when set, goes to the other panel if it is local. |
+| `⟲ Reconnect` | Opens the connection of the panel again, in the same folder |
+| `Disconnect` | Closes the connection of the panel (shown, or kept behind the local folder) |
+| `💻 Local` / `🌐 site` | Switches the panel between its local folder and its connection; the connection stays open meanwhile, and the tab keeps its name |
+
+In a remote panel, the path field takes a folder (absolute, or relative to the current
+one): `Enter` goes there.
 
 | Action | Mouse | Keyboard |
 |---|---|---|
@@ -393,6 +410,7 @@ does not create a second one and says so in the log.
 | `URUSHFTP_SITE_SETTINGS` | Development: keeps the site form scrolled to the settings of the site |
 | `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 8) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Development: opens the keyboard shortcuts window |
+| `URUSHFTP_OPEN_ABOUT` | Development: opens the About window |
 
 ## Files
 

@@ -538,5 +538,21 @@
   "queue.saved_detail": "Sites : {sites} — premier : {first}",
   "queue.load_selected": "Charger les files cochées",
   "queue.discard_all": "Tout abandonner",
-  "queue.saved_note": "Les files non cochées sont abandonnées. Chaque file revient dans son propre onglet."
+  "queue.saved_note": "Les files non cochées sont abandonnées. Chaque file revient dans son propre onglet.",
+  "menu.connection": "Connexion",
+  "menu.about": "À propos d'UltraRushFTP",
+  "about.title": "À propos",
+  "about.version": "Version {version}",
+  "about.tagline": "Client FTP, FTPS, SFTP et FXP pour Windows",
+  "about.build": "Version Windows, {arch}",
+  "about.licence": "Licence propriétaire : tous droits réservés.",
+  "about.close": "Fermer",
+  "conn.connect": "🔌 Connexion ▾",
+  "conn.connect_hint": "Connecter ce panneau à un site du gestionnaire (Maj : connexion fantôme, Ctrl : -password)",
+  "conn.reconnect": "⟲ Reconnecter",
+  "conn.to_local": "💻 Local",
+  "conn.to_remote": "🌐 {site}",
+  "conn.switch_hint": "Basculer ce panneau entre son dossier local et sa connexion (la connexion reste ouverte)",
+  "conn.no_sites": "Aucun site dans le gestionnaire",
+  "files.remote_path": "Dossier distant"
 }

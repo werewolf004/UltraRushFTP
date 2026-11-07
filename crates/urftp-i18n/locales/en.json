@@ -538,5 +538,21 @@
   "queue.saved_detail": "Sites: {sites} — first: {first}",
   "queue.load_selected": "Load the ticked queues",
   "queue.discard_all": "Discard everything",
-  "queue.saved_note": "The queues not ticked are discarded. Each queue goes back in a tab of its own."
+  "queue.saved_note": "The queues not ticked are discarded. Each queue goes back in a tab of its own.",
+  "menu.connection": "Connection",
+  "menu.about": "About UltraRushFTP",
+  "about.title": "About",
+  "about.version": "Version {version}",
+  "about.tagline": "FTP, FTPS, SFTP and FXP client for Windows",
+  "about.build": "Windows build, {arch}",
+  "about.licence": "Proprietary licence: all rights reserved.",
+  "about.close": "Close",
+  "conn.connect": "🔌 Connect ▾",
+  "conn.connect_hint": "Connect this panel to a site of the site manager (Shift: ghost login, Ctrl: -password)",
+  "conn.reconnect": "⟲ Reconnect",
+  "conn.to_local": "💻 Local",
+  "conn.to_remote": "🌐 {site}",
+  "conn.switch_hint": "Switch this panel between its local folder and its connection (the connection stays open)",
+  "conn.no_sites": "No site in the site manager",
+  "files.remote_path": "Remote folder"
 }

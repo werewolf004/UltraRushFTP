@@ -9,8 +9,21 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
+Connections and sites (block G): keep alive and reconnection, several hosts per site,
+per-site settings, listing and active-mode settings, named proxies, FXP roles, unfinished
+queue kept across restarts, connection bar on each panel, validation script; checked
+against glftpd.
+
 ### Added
 
+- **Connection bar on each file panel**, like FTPRush: *Connect* (sites of the site
+  manager, groups as sub-menus, `Shift` ghost login, `Ctrl` `-password`), *Reconnect*,
+  *Disconnect*, and a **Local ⇄ site switch** that keeps the connection open behind the
+  local folder. Editable path field in the remote panels.
+- **Connection menu** in the menu bar, acting on the active panel.
+- **Help → About UltraRushFTP**: version, build and licence.
 - **Validation against real servers**: `scripts/validate-server.ps1` runs a fixed scenario
   with `urftp` (listing, folder upload and download with several transfers, resume both
   ways, overwrite, FXP, removal), compares every file by SHA-256 and writes an anonymised
@@ -168,6 +181,7 @@ link and command line. Not yet validated against real-world servers.
 - Known advisory accepted: `RUSTSEC-2023-0071` in `rsa` (used for SSH RSA keys); see
   [SECURITY.md](SECURITY.md).
 
-[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/werewolf004/UltraRushFTP/releases/tag/v0.1.0
