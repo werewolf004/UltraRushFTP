@@ -11,6 +11,15 @@ GitHub release with the same tag.
 
 ### Added
 
+- **Listing settings** (Options › Connection, and per site): hidden files (`LIST -a`),
+  `MLSD` on or off, custom listing command, `STAT -l` on the control channel, removal of
+  the leading spaces, switch to active mode when the passive mode fails.
+- **Time zone offset and character set per site**: dates of the listings moved by the
+  offset; names, paths and replies converted for the servers that do not use UTF-8.
+- **Active mode and network** (Options › Connection): external address announced with
+  `PORT`, local port range, local address the connections leave from.
+- **E-mail for anonymous logins** and **default download folder** (Options › General).
+- **Model of the new sites** (Options › New site).
 - **Settings of a site** replacing the global options: retries and timeouts, keep alive and
   reconnection, resume on or off, `FEAT` on or off, `CLNT` client name, skip list,
   priorities, "existing file" rules, separate accounts for uploads and downloads.

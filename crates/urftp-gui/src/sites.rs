@@ -11,7 +11,8 @@ use eframe::egui::{self, RichText};
 use urftp_core::import::{self, ImportResult, ImportWarning};
 use urftp_core::settings::Settings;
 use urftp_core::site::{
-    Account, Bookmark, CertPolicy, IdentChoice, ProxyChoice, ProxyType, Site, SiteBook, SiteGroup, SiteProtocol, SiteProxy, TransferMode,
+    Account, Bookmark, CHARSETS, CertPolicy, IdentChoice, ListCommand, ProxyChoice, ProxyType, Site, SiteBook, SiteGroup, SiteListing,
+    SiteProtocol, SiteProxy, TransferMode,
 };
 use urftp_core::sitestore;
 
@@ -212,7 +213,7 @@ impl SiteManager {
             .min_width(720.0)
             .collapsible(false)
             .show(ctx, |ui| {
-                self.toolbar(ui);
+                self.toolbar(ui, settings);
                 ui.separator();
                 ui.horizontal_top(|ui| {
                     ui.vertical(|ui| {
@@ -248,11 +249,11 @@ impl SiteManager {
         self.dialogs(ctx);
     }
 
-    fn toolbar(&mut self, ui: &mut egui::Ui) {
+    fn toolbar(&mut self, ui: &mut egui::Ui, settings: &Settings) {
         ui.horizontal_wrapped(|ui| {
             if ui.button(t!("sites.new_site")).clicked() {
                 let group = self.current_group_path();
-                let id = self.book.add_site(&group, Site { name: t!("sites.new_site_default"), ..Site::default() });
+                let id = self.book.add_site(&group, settings.make_site(t!("sites.new_site_default")));
                 self.selection = Selection::Site(id);
                 self.mark_dirty(ui);
             }
@@ -690,6 +691,10 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
         });
     });
 
+    if s.protocol != SiteProtocol::Sftp {
+        section(ui, &t!("site.listing"), |ui| listing_ui(ui, &mut s.listing));
+    }
+
     section(ui, &t!("site.proxy_ident"), |ui| {
         let label = match &s.proxy {
             ProxyChoice::Global => t!("site.proxy_global"),
@@ -881,6 +886,131 @@ fn own_settings(ui: &mut egui::Ui, s: &mut Site, global: &Settings, show_passwor
         account_ui(ui, &mut o.upload_account, t!("site.upload_account"), *show_password);
         account_ui(ui, &mut o.download_account, t!("site.download_account"), *show_password);
     });
+}
+
+/// Listing settings of a site (FTP): command, spaces, time zone, character set.
+pub(crate) fn listing_ui(ui: &mut egui::Ui, l: &mut SiteListing) {
+    let command_label = |c: &ListCommand| match c {
+        ListCommand::Global => t!("site.list_global"),
+        ListCommand::Stat => "STAT -l".to_string(),
+        ListCommand::Custom(_) => t!("site.list_custom"),
+    };
+    egui::Grid::new("site-listing").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+        row(ui, &t!("site.list_command"), |ui, lid| {
+            ui.horizontal(|ui| {
+                egui::ComboBox::from_id_salt("site-list-cmd")
+                    .selected_text(command_label(&l.command))
+                    .show_ui(ui, |ui| {
+                        for c in [ListCommand::Global, ListCommand::Stat] {
+                            let label = command_label(&c);
+                            ui.selectable_value(&mut l.command, c, label);
+                        }
+                        if ui.selectable_label(matches!(l.command, ListCommand::Custom(_)), t!("site.list_custom")).clicked()
+                            && !matches!(l.command, ListCommand::Custom(_))
+                        {
+                            l.command = ListCommand::Custom("LIST -al".into());
+                        }
+                    })
+                    .response
+                    .labelled_by(lid);
+                if let ListCommand::Custom(c) = &mut l.command {
+                    let r = ui.add(theme::single_line(c).hint_text("LIST -al").desired_width(140.0));
+                    theme::name(&r, t!("site.list_custom"));
+                }
+            });
+        });
+        row(ui, &t!("site.time_offset"), |ui, lid| {
+            let mut hours = f64::from(l.time_offset_mins) / 60.0;
+            let r = ui.add(egui::DragValue::new(&mut hours).range(-24.0..=24.0).speed(0.25).max_decimals(2).suffix(" h")).labelled_by(lid);
+            if r.changed() {
+                l.time_offset_mins = (hours * 60.0).round() as i32;
+            }
+        });
+        row(ui, &t!("site.charset"), |ui, lid| {
+            let auto = t!("site.charset_utf8");
+            let shown = if l.charset.trim().is_empty() { auto.clone() } else { l.charset.clone() };
+            egui::ComboBox::from_id_salt("site-charset")
+                .selected_text(shown)
+                .show_ui(ui, |ui| {
+                    if ui.selectable_label(l.charset.trim().is_empty(), auto).clicked() {
+                        l.charset.clear();
+                    }
+                    for c in CHARSETS {
+                        if ui.selectable_label(l.charset == c, c).clicked() {
+                            l.charset = c.to_string();
+                        }
+                    }
+                })
+                .response
+                .labelled_by(lid);
+        });
+    });
+    ui.checkbox(&mut l.trim_spaces, t!("site.trim_spaces"));
+}
+
+/// Model of the new sites (Options › New site).
+pub(crate) fn new_site_ui(ui: &mut egui::Ui, s: &mut Site) {
+    egui::Grid::new("new-site").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+        row(ui, &t!("site.protocol"), |ui, l| {
+            ui.horizontal(|ui| {
+                let before = s.protocol;
+                egui::ComboBox::from_id_salt("new-site-proto")
+                    .selected_text(proto_label(s.protocol))
+                    .show_ui(ui, |ui| {
+                        for p in SiteProtocol::ALL {
+                            ui.selectable_value(&mut s.protocol, p, proto_label(p));
+                        }
+                    })
+                    .response
+                    .labelled_by(l);
+                if s.protocol != before && s.port == before.default_port() {
+                    s.port = s.protocol.default_port();
+                }
+                theme::labelled(ui, t!("common.port"), egui::DragValue::new(&mut s.port).range(1..=65535));
+            });
+        });
+        row(ui, &t!("common.user"), |ui, l| {
+            ui.horizontal(|ui| {
+                ui.add_enabled(!s.anonymous, theme::single_line(&mut s.user).desired_width(200.0)).labelled_by(l);
+                ui.checkbox(&mut s.anonymous, t!("site.anonymous"));
+            });
+        });
+        row(ui, &t!("common.password"), |ui, l| {
+            ui.add_enabled(!s.anonymous, theme::single_line(&mut s.password).password(true).desired_width(200.0)).labelled_by(l);
+        });
+        if s.protocol != SiteProtocol::Sftp {
+            row(ui, &t!("site.mode"), |ui, _| {
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut s.transfer_mode, TransferMode::Passive, t!("site.passive"));
+                    ui.radio_value(&mut s.transfer_mode, TransferMode::Active, t!("site.active_mode"));
+                });
+            });
+        }
+        if s.protocol.is_tls() {
+            row(ui, &t!("site.tls"), |ui, _| {
+                ui.checkbox(&mut s.protect_data, t!("site.protect_data"));
+            });
+        }
+        row(ui, &t!("site.parallel"), |ui, l| {
+            ui.add(egui::DragValue::new(&mut s.max_transfers).range(0..=50)).labelled_by(l);
+        });
+        row(ui, &t!("site.max_downloads"), |ui, l| optional_limit(ui, &mut s.max_downloads, l, &t!("site.max_downloads")));
+        row(ui, &t!("site.max_uploads"), |ui, l| optional_limit(ui, &mut s.max_uploads, l, &t!("site.max_uploads")));
+        row(ui, &t!("site.remote_dir"), |ui, l| {
+            ui.add(theme::single_line(&mut s.remote_dir).hint_text("/").desired_width(300.0)).labelled_by(l);
+        });
+        row(ui, &t!("site.local_dir"), |ui, l| {
+            ui.add(theme::single_line(&mut s.local_dir).desired_width(300.0)).labelled_by(l);
+        });
+    });
+    if s.protocol != SiteProtocol::Sftp {
+        ui.add_space(6.0);
+        ui.strong(t!("site.listing"));
+        listing_ui(ui, &mut s.listing);
+    }
+    if ui.button(t!("common.defaults")).clicked() {
+        *s = Site::default();
+    }
 }
 
 fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {

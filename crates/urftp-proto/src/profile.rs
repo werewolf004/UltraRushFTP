@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use urftp_core::settings::{GlobalProxy, KeepAliveSettings, Settings};
-use urftp_core::site::{CertPolicy, ProxyChoice, ProxyType, Site, SiteProtocol, SiteProxy, TransferMode};
+use urftp_core::site::{CertPolicy, ListCommand, ProxyChoice, ProxyType, Site, SiteProtocol, SiteProxy, TransferMode};
 
 use crate::engine::EngineOptions;
 use crate::ftp::{FtpConfig, Security, TlsOptions, TlsVerify};
@@ -88,6 +88,23 @@ pub fn parse_address(s: &str, default_port: u16) -> Option<(String, u16)> {
     }
 }
 
+/// Listing command of a site and whether `MLSD` may replace it.
+pub fn list_command(site: &Site, settings: &Settings) -> (String, bool) {
+    let g = &settings.listing;
+    match &site.listing.command {
+        ListCommand::Stat => ("STAT -l".into(), false),
+        ListCommand::Custom(c) if !c.trim().is_empty() => (c.trim().to_string(), false),
+        _ if !g.custom_command.trim().is_empty() => (g.custom_command.trim().to_string(), false),
+        _ => ((if g.show_hidden { "LIST -a" } else { "LIST" }).into(), g.use_mlsd),
+    }
+}
+
+/// Character set of a site (`None`: UTF-8, or a name `encoding_rs` does not know).
+pub fn charset(site: &Site) -> Option<&'static encoding_rs::Encoding> {
+    let label = site.listing.charset.trim();
+    (!label.is_empty()).then(|| encoding_rs::Encoding::for_label(label.as_bytes())).flatten()
+}
+
 /// Connection profile of a site record, with the global proxy and the option timeouts.
 pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
     let proxy = match &site.proxy {
@@ -110,10 +127,21 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
         protect_data: site.protect_data,
         auth_ssl_fallback: true,
     };
+    let net = &settings.network;
+    let (list_command, use_mlsd) = list_command(site, settings);
     let ftp = |security| {
         ProfileProtocol::Ftp(FtpConfig {
             security,
             active_mode: site.transfer_mode == TransferMode::Active,
+            active_external_ip: net.external(),
+            active_port_range: net.port_range(),
+            bind_ip: net.bind(),
+            list_command: list_command.clone(),
+            use_mlsd,
+            trim_list_spaces: site.listing.trim_spaces,
+            port_fallback: settings.listing.port_fallback,
+            time_offset_mins: site.listing.time_offset_mins,
+            charset: charset(site),
             proxy: proxy.clone(),
             connect_timeout,
             io_timeout,
@@ -132,6 +160,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
                 proxy,
                 connect_timeout,
                 io_timeout,
+                bind_ip: net.bind(),
                 ..SftpConfig::default()
             },
             key: site.ssh_key_file.as_ref().map(|p| SftpAuth::KeyFile {
@@ -145,7 +174,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
         host: site.host.trim().to_string(),
         port: site.port,
         user: site.login_user().to_string(),
-        password: if site.anonymous { "anonymous@".into() } else { site.password.clone() },
+        password: if site.anonymous { settings.anonymous_password().to_string() } else { site.password.clone() },
         protocol,
         limits: site.limits(),
         session: policy(own.keep_alive.as_ref().unwrap_or(&settings.keep_alive), retries, retry_delay_secs),
@@ -187,6 +216,40 @@ pub fn engine_options(s: &Settings, download: &Arc<RateLimiter>, upload: &Arc<Ra
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listing_and_network_settings() {
+        use urftp_core::site::SiteListing;
+        let mut settings = Settings::default();
+        let site = Site::default();
+        assert_eq!(list_command(&site, &settings), ("LIST".into(), true));
+        settings.listing.show_hidden = true;
+        assert_eq!(list_command(&site, &settings), ("LIST -a".into(), true));
+        settings.listing.custom_command = "LIST -al".into();
+        assert_eq!(list_command(&site, &settings), ("LIST -al".into(), false), "a custom command replaces MLSD");
+        let stat = Site { listing: SiteListing { command: ListCommand::Stat, ..SiteListing::default() }, ..Site::default() };
+        assert_eq!(list_command(&stat, &settings), ("STAT -l".into(), false));
+        let blank = Site { listing: SiteListing { command: ListCommand::Custom(" ".into()), ..SiteListing::default() }, ..Site::default() };
+        assert_eq!(list_command(&blank, &settings).0, "LIST -al", "an empty site command follows the global one");
+
+        settings.network.external_ip = "203.0.113.9".into();
+        settings.network.port_min = 50000;
+        settings.network.port_max = 50010;
+        settings.anonymous_email = "me@example.org".into();
+        let site = Site {
+            anonymous: true,
+            listing: SiteListing { charset: "windows-1251".into(), time_offset_mins: -120, trim_spaces: true, ..SiteListing::default() },
+            ..Site::default()
+        };
+        let p = site_profile(&site, &settings);
+        assert_eq!(p.password, "me@example.org");
+        let ProfileProtocol::Ftp(cfg) = &p.protocol else { panic!() };
+        assert_eq!(cfg.active_external_ip.map(|i| i.to_string()).as_deref(), Some("203.0.113.9"));
+        assert_eq!(cfg.active_port_range, Some((50000, 50010)));
+        assert_eq!(cfg.charset, Some(encoding_rs::WINDOWS_1251));
+        assert_eq!((cfg.time_offset_mins, cfg.trim_list_spaces), (-120, true));
+        assert!(charset(&Site { listing: SiteListing { charset: "nope".into(), ..SiteListing::default() }, ..Site::default() }).is_none());
+    }
 
     #[test]
     fn site_to_profile() {

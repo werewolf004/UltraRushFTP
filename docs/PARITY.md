@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
+Summary (284 topics): ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
 
 ## Main window and menus
 
@@ -162,7 +162,7 @@ Summary (284 topics): ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Import UltraFXP sites and settings | ⬜ | |
 | Import FTPRush XML | ✅ | Plus FTPRush v1/v3, FileZilla, FlashFXP; passwords are not imported |
 | Export plain text / CSV / HTML / FTPRush XML | ⬜ | Without passwords |
-| Default site setting | ⬜ | User, password and limits of a new site |
+| Default site setting | ✅ | Options › New site: protocol, login, mode, limits, folders, listing |
 | Security setting (password on the site book, show passwords) | 🟡 | Passwords protected by Windows DPAPI; no master password or lock |
 | Test availability of sites | ✅ | One site or a whole folder, in parallel |
 
@@ -173,9 +173,9 @@ Summary (284 topics): ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Protocol: plain FTP, `AUTH TLS`, implicit SSL, `AUTH SSL`, SFTP | ✅ | `AUTH SSL` as fallback of explicit FTPS |
 | Several host:port entries | ✅ | Rotation on failure, the address that worked is used first |
 | Port, user, password, anonymous | ✅ | |
-| Passive mode, active fallback when `PASV` fails | 🟡 | Passive / active per site; no automatic fallback |
+| Passive mode, active fallback when `PASV` fails | ✅ | Fallback enabled on the Connection page |
 | Server behind NAT (use the host address for `PASV`) | ✅ | Automatic when `PASV` returns a private address |
-| Time zone | ⬜ | |
+| Time zone | ✅ | Offset added to the listing dates (FTP) |
 | Maximum simultaneous transfers (0 = browsing connection) | ✅ | |
 | Remote and local paths | ✅ | |
 | Description (short text for menus, notes) | 🟡 | Notes; no short description |
@@ -196,12 +196,12 @@ Summary (284 topics): ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Account: different logins for uploads and downloads | ✅ | Browsing keeps the main login |
 | Ident: global or custom name | ✅ | Answered while the site connects |
 | Proxy: global, bypass, custom; data channel | ✅ | |
-| List mode: `STAT -l` | 🟡 | Supported by the protocol layer (`list_command`); no setting |
-| List mode: trim leading spaces | ⬜ | |
-| List mode: custom list command | 🟡 | Same as `STAT -l` |
+| List mode: `STAT -l` | ✅ | Read on the control channel |
+| List mode: trim leading spaces | ✅ | Always done for `STAT` |
+| List mode: custom list command | ✅ | |
 | List mode: UPnP | ⬜ | |
 | Directory cache per site | ⬜ | |
-| Directory charset (non-UTF-8 servers) | ⬜ | |
+| Directory charset (non-UTF-8 servers) | ✅ | Commands, replies and listings; 14 character sets |
 | Listing parser choice | 🟡 | Automatic detection (Unix, DOS/IIS, `MLSD`); no manual choice |
 | SSL: `PBSZ 0` | ✅ | |
 | SSL: encrypt listings / transfers separately | 🟡 | One "protect data" setting for both |
@@ -222,8 +222,8 @@ Summary (284 topics): ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 
 | Topic | Status | Notes |
 |---|---|---|
-| E-mail address for anonymous login | ⬜ | |
-| Default download path | ⬜ | Local panels start in the user folder |
+| E-mail address for anonymous login | ✅ | |
+| Default download path | ✅ | Local panels start there |
 | Data folder path | ✅ | `-f`, `URUSHFTP_DATA` |
 | Daily backup of the configuration | ⬜ | |
 | Cache FTP directories, update cache of transferring folder | ⬜ | |
@@ -240,15 +240,15 @@ Summary (284 topics): ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 
 | Topic | Status | Notes |
 |---|---|---|
-| Send `FEAT` | 🟡 | Always sent |
+| Send `FEAT` | ✅ | Per site (site record) |
 | Connect timeout, reply timeout | ✅ | |
 | Max retries, retry delay | ✅ | |
-| Cycle the server IP list on login failure | ⬜ | |
+| Cycle the server IP list on login failure | ✅ | Other addresses of the site record |
 | Auto reconnect on matching server replies | ✅ | Wildcard masks, Keep alive page |
 | Smart handling of servers behind NAT | ✅ | |
-| Bind sockets to an external address (active mode) | 🟡 | Supported by the protocol layer; no setting |
-| Bind to a local IP address | ⬜ | |
-| Limit local port range | 🟡 | Supported by the protocol layer; no setting |
+| Bind sockets to an external address (active mode) | ✅ | |
+| Bind to a local IP address | ✅ | Direct connections (not the proxy one) |
+| Limit local port range | ✅ | |
 | Ident: enable, name, system, port | ✅ | |
 | Ident: only while connecting | ⬜ | |
 | Keep alive: command, interval, stop after, log out, reconnect when kicked, random command | ✅ | Global or per site |
@@ -256,9 +256,9 @@ Summary (284 topics): ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Proxy: `NOOP` during transfers, passive with proxy | ⬜ | |
 | Proxy: bypass for local addresses, exceptions | ✅ | |
 | Proxy editor | ✅ | Inline in the options and the site record |
-| List mode: show hidden files (`LIST -a`) | 🟡 | Supported by the protocol layer; no setting |
-| List mode: custom command | 🟡 | Same |
-| List mode: switch to `PORT` when `PASV` fails | ⬜ | |
+| List mode: show hidden files (`LIST -a`) | ✅ | |
+| List mode: custom command | ✅ | Global or per site |
+| List mode: switch to `PORT` when `PASV` fails | ✅ | For the listings and the transfers |
 | List mode: use `MLSD` if available | ✅ | |
 
 ### Transfer
@@ -382,7 +382,7 @@ Summary (284 topics): ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Command line `-b` (beta licence) | ➖ | No licence in UltraRushFTP; accepted and ignored |
 | Wildcards `*` `?` (case-insensitive) | ✅ | |
 | Regular expressions | 🟡 | Rust `regex` syntax, close to but not identical with TRegExpr |
-| FAQ: cannot delete a folder (hidden files) | 🟡 | Needs the "show hidden files" setting (`LIST -a`) |
+| FAQ: cannot delete a folder (hidden files) | ✅ | Connection page › Show the hidden files |
 | FAQ: "Protocol not supported (10043)" | ➖ | No OpenSSL DLL: TLS is built in (rustls) |
 | FAQ: multi-language file names | ✅ | UTF-8 |
 | FAQ: limit connections for a site | ✅ | |

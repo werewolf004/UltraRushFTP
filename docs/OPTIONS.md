@@ -75,6 +75,8 @@ Saved automatically in `settings.json` one second after a change.
 | Dark theme | on | Dark or light theme |
 | Language | Windows language | Windows language, English or Français; applied immediately |
 | Open a new tab when the right panel is already connected | on | Otherwise the new connection replaces the current one |
+| E-mail for anonymous logins | `urftp@` | Password sent by the sites set to *anonymous* |
+| Default download folder | user folder | Folder the local panels start in, and come back to on disconnection; the user folder when it does not exist |
 
 ### Transfers
 
@@ -171,6 +173,33 @@ Reconnection makes as many attempts as *Retries* of the Transfers page, waiting 
 between retries* before each one. The queue engine also checks a connection that stayed
 idle before reusing it, and opens a new one when the server has dropped it.
 
+### Connection
+
+![Connection](images/options-connection.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Use MLSD when the server offers it | on | `MLSD` gives exact dates and sizes; off: the listing command below |
+| Show the hidden files (LIST -a) | off | `LIST -a` instead of `LIST` (files starting with `.`; needed to delete a folder that holds some) |
+| Listing command | empty (`LIST`) | Any command (`LIST -al`...); a command starting with `STAT` is read on the control channel. Replaces `MLSD` |
+| Switch to active mode (PORT) when the passive mode fails | off | `PASV`/`EPSV` refused or data connection impossible: the connection goes on in active mode |
+| External address (sent with PORT) | empty | Public IP announced in active mode, behind a router; empty: the local address |
+| Local ports of the active mode | 0 – 0 (any) | Range forwarded by the router to this computer |
+| Local address of the connections | empty | IP of the network card the FTP and SFTP connections leave from (not used through a proxy) |
+
+The listing settings of a site (site record › Listing) win over the first three options.
+An invalid address is shown in red and ignored.
+
+### New site
+
+![New site](images/options-new-site.en.png)
+
+Model of the sites created with *New site* in the site manager: protocol and port, user,
+password or anonymous, transfer mode, *Also encrypt transfers*, simultaneous transfers and
+limits per direction, remote and local folders, listing settings (same fields as the site
+record). The host, the other addresses, the bookmarks and the trusted keys are always empty.
+*Default values* resets the model.
+
 ## Site record
 
 ![Site manager](images/site-manager.en.png)
@@ -187,7 +216,7 @@ idle before reusing it, and opens a new one when the server has dropped it.
 | Certificate | Verify with the Windows authorities | or Accept any certificate (not recommended), or Trusted certificate (SHA-256 fingerprint, filled in when you trust a server) |
 | Private key | none | SFTP: OpenSSH, PEM or PuTTY `.ppk` key file |
 | Trusted server keys | none | SFTP host key fingerprints (`SHA256:…`) added when you trust a server |
-| Mode | Passive | Passive or Active (`PORT`/`EPRT`) |
+| Mode | Passive | Passive or Active (`PORT`/`EPRT`); see also the `PORT` fallback of the Connection page |
 | Simultaneous transfers | 2 | 0 = single connection |
 | Max. downloads / Max. uploads | not set | Extra limits per direction |
 | Remote folder, local folder | empty | Opened on connection |
@@ -195,6 +224,15 @@ idle before reusing it, and opens a new one when the server has dropped it.
 | Ident name specific to this site | off | Answered by the Ident server while the site connects (the server must be enabled) |
 | Bookmarks | none | Name, remote folder, local folder; used by `RS_BOOKMARK` in scripts |
 | Notes | empty | Free text |
+
+**Listing** (FTP and FTPS):
+
+| Field | Default | Notes |
+|---|---|---|
+| Listing command | Global setting | Global setting (Connection page), `STAT -l` (on the control channel, no data connection) or a custom command |
+| Time zone offset | 0 h | Hours (quarters allowed) added to the dates of the listings, for a server in another time zone |
+| Character set | UTF-8 (automatic) | For the servers that do not use UTF-8: windows-1252, ISO-8859-1/2/15, windows-1250/1251, KOI8-R, Shift_JIS, EUC-JP, GBK, gb18030, Big5, EUC-KR, IBM866. Names, paths and replies are converted; `OPTS UTF8 ON` is then not sent, and a name the set cannot write is refused |
+| Remove the spaces at the start of the listing lines | off | For servers whose `LIST` lines start with spaces (always done for `STAT`) |
 
 ![Settings of a site](images/site-settings.en.png)
 

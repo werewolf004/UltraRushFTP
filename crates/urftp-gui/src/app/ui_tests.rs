@@ -451,3 +451,54 @@ fn shift_on_connect_asks_for_a_ghost_login() {
     });
     assert_eq!(user.as_deref(), Some("!anonymous"));
 }
+
+#[test]
+fn new_sites_start_from_the_model_of_the_options() {
+    let mut ui = Ui::start(Lang::En, true);
+    let model = &mut ui.app().options.settings.new_site;
+    model.user = "model-user".into();
+    model.max_transfers = 7;
+    model.listing.charset = "windows-1251".into();
+    ui.app().sites.open = true;
+    ui.run();
+    ui.harness.get_by_label(&t!("sites.new_site")).click();
+    ui.run();
+    let app = ui.app();
+    let sites = app.sites.book.root.sites_recursive();
+    let s = sites.iter().find(|s| s.name == t!("sites.new_site_default")).expect("new site");
+    assert_eq!((s.user.as_str(), s.max_transfers, s.listing.charset.as_str()), ("model-user", 7, "windows-1251"));
+    assert!(s.host.is_empty());
+}
+
+#[test]
+fn listing_section_is_shown_for_ftp_only() {
+    let mut ui = Ui::start(Lang::Fr, true);
+    let ftp = urftp_core::site::Site { name: "Plain".into(), host: "ftp.example.com".into(), ..Default::default() };
+    let sftp = urftp_core::site::Site {
+        name: "Secure".into(),
+        host: "ssh.example.com".into(),
+        protocol: urftp_core::site::SiteProtocol::Sftp,
+        ..Default::default()
+    };
+    ui.app().sites.book.add_site(&[], ftp);
+    ui.app().sites.book.add_site(&[], sftp);
+    ui.app().sites.open = true;
+    ui.run();
+    ui.harness.get_by_label_contains("Plain").click();
+    ui.run();
+    assert!(ui.has_label(&t!("site.charset")), "FTP: listing settings shown");
+    ui.harness.get_by_label_contains("Secure").click();
+    ui.run();
+    assert!(!ui.has_label(&t!("site.charset")), "SFTP: no listing settings");
+}
+
+#[test]
+fn an_invalid_address_is_flagged_on_the_connection_page() {
+    let mut ui = Ui::start(Lang::En, false);
+    ui.app().options.settings.network.external_ip = "not-an-ip".into();
+    ui.app().options.open = true;
+    ui.run();
+    ui.harness.get_by_role_and_label(Role::Button, &crate::options::Page::Connection.label()).click();
+    ui.run();
+    assert!(ui.harness.query_by_label_contains(&t!("options.invalid_ip")).is_some(), "warning shown");
+}

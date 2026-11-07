@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::exists::ExistsRules;
 use crate::pattern::Pattern;
 use crate::priority::PriorityList;
-use crate::site::SiteProxy;
+use crate::site::{Site, SiteProxy};
 use crate::skiplist::{Directions, RuleAction, RuleTarget, SkipList, SkipRule};
 
 pub const FILE_NAME: &str = "settings.json";
@@ -199,6 +199,69 @@ impl Default for KeepAliveSettings {
     }
 }
 
+/// Listing options (Connection page).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ListingSettings {
+    /// Use `MLSD` when the server announces it.
+    pub use_mlsd: bool,
+    /// Show the hidden files (`LIST -a`).
+    pub show_hidden: bool,
+    /// Listing command replacing `LIST` (empty: `LIST` or `LIST -a`).
+    pub custom_command: String,
+    /// Switch to active mode (`PORT`) when the passive mode fails.
+    pub port_fallback: bool,
+}
+
+impl Default for ListingSettings {
+    fn default() -> Self {
+        Self { use_mlsd: true, show_hidden: false, custom_command: String::new(), port_fallback: false }
+    }
+}
+
+/// Network options of the active mode and of the outgoing connections (Connection page).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct NetworkSettings {
+    /// Address announced with `PORT` / `EPRT` (public IP behind a router); empty: the local one.
+    pub external_ip: String,
+    /// First and last local port of the active mode (0: any port).
+    pub port_min: u16,
+    pub port_max: u16,
+    /// Local address the connections leave from (several network cards); empty: the system's choice.
+    pub bind_ip: String,
+}
+
+impl NetworkSettings {
+    /// External address, when it is a valid IP address.
+    pub fn external(&self) -> Option<std::net::IpAddr> {
+        parse_ip(&self.external_ip)
+    }
+
+    /// Local address, when it is a valid IP address.
+    pub fn bind(&self) -> Option<std::net::IpAddr> {
+        parse_ip(&self.bind_ip)
+    }
+
+    /// Port range, when both ends are set and in order.
+    pub fn port_range(&self) -> Option<(u16, u16)> {
+        (self.port_min > 0 && self.port_max >= self.port_min).then_some((self.port_min, self.port_max))
+    }
+}
+
+/// `None` for an empty text; `Some(Err)` for an invalid one (shown in red in the options).
+pub fn check_ip(s: &str) -> Option<Result<std::net::IpAddr, std::net::AddrParseError>> {
+    let s = s.trim();
+    (!s.is_empty()).then(|| s.parse())
+}
+
+fn parse_ip(s: &str) -> Option<std::net::IpAddr> {
+    check_ip(s).and_then(Result::ok)
+}
+
+/// Password sent by the anonymous logins (an e-mail address by tradition).
+pub const DEFAULT_ANONYMOUS_EMAIL: &str = "urftp@";
+
 /// Interface language chosen in the options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum LanguageSetting {
@@ -225,6 +288,14 @@ pub struct Settings {
     pub proxy: GlobalProxy,
     pub ident: IdentSettings,
     pub keep_alive: KeepAliveSettings,
+    pub listing: ListingSettings,
+    pub network: NetworkSettings,
+    /// Password of the anonymous logins.
+    pub anonymous_email: String,
+    /// Folder the local panels start in (empty: the user folder).
+    pub download_dir: String,
+    /// Model of the new sites (protocol, login, limits, folders, listing...).
+    pub new_site: Site,
 }
 
 impl Default for Settings {
@@ -242,11 +313,37 @@ impl Default for Settings {
             proxy: GlobalProxy::default(),
             ident: IdentSettings::default(),
             keep_alive: KeepAliveSettings::default(),
+            listing: ListingSettings::default(),
+            network: NetworkSettings::default(),
+            anonymous_email: DEFAULT_ANONYMOUS_EMAIL.into(),
+            download_dir: String::new(),
+            new_site: Site::default(),
         }
     }
 }
 
 impl Settings {
+    /// New site made from the model: its name, everything else from the model except the
+    /// host, the alternate addresses, the bookmarks and the trusted keys.
+    pub fn make_site(&self, name: impl Into<String>) -> Site {
+        Site {
+            id: 0,
+            name: name.into(),
+            host: String::new(),
+            alt_hosts: Vec::new(),
+            bookmarks: Vec::new(),
+            ssh_host_keys: Vec::new(),
+            enabled: true,
+            ..self.new_site.clone()
+        }
+    }
+
+    /// Password of the anonymous logins (the default one when the field is empty).
+    pub fn anonymous_password(&self) -> &str {
+        let e = self.anonymous_email.trim();
+        if e.is_empty() { DEFAULT_ANONYMOUS_EMAIL } else { e }
+    }
+
     pub fn priority_list(&self) -> PriorityList {
         Self::priorities_of(&self.priorities)
     }
@@ -309,6 +406,33 @@ mod tests {
         // Old or partial file: default values for the rest.
         let partial: Settings = serde_json::from_str(r#"{"dark_theme":false}"#).unwrap();
         assert!(!partial.dark_theme && partial.transfer.retries == 3);
+    }
+
+    #[test]
+    fn new_sites_follow_the_model() {
+        let mut s = Settings::default();
+        s.new_site.user = "me".into();
+        s.new_site.max_transfers = 5;
+        s.new_site.host = "kept.out".into();
+        s.new_site.listing.time_offset_mins = 60;
+        let site = s.make_site("Fresh");
+        assert_eq!((site.name.as_str(), site.user.as_str(), site.max_transfers), ("Fresh", "me", 5));
+        assert!(site.host.is_empty(), "the host of the model is not copied");
+        assert_eq!(site.listing.time_offset_mins, 60);
+        assert_eq!(Settings::default().anonymous_password(), DEFAULT_ANONYMOUS_EMAIL);
+        s.anonymous_email = " me@example.com ".into();
+        assert_eq!(s.anonymous_password(), "me@example.com");
+    }
+
+    #[test]
+    fn network_values_are_checked() {
+        let n = NetworkSettings { external_ip: "203.0.113.7".into(), port_min: 50000, port_max: 50100, bind_ip: "nope".into() };
+        assert_eq!(n.external().map(|i| i.to_string()).as_deref(), Some("203.0.113.7"));
+        assert_eq!(n.port_range(), Some((50000, 50100)));
+        assert!(n.bind().is_none());
+        assert!(matches!(check_ip("nope"), Some(Err(_))));
+        assert!(check_ip(" ").is_none());
+        assert!(NetworkSettings { port_min: 10, port_max: 5, ..NetworkSettings::default() }.port_range().is_none());
     }
 
     #[test]

@@ -47,6 +47,16 @@ pub struct FtpConfig {
     pub send_feat: bool,
     /// Client name announced with `CLNT` after the login (glftpd, DrFTPD...).
     pub client_name: Option<String>,
+    /// Removes the spaces at the start of the `LIST` lines (always done for `STAT`).
+    pub trim_list_spaces: bool,
+    /// Switches to active mode for the rest of the connection when the passive mode fails.
+    pub port_fallback: bool,
+    /// Minutes added to the dates of the listings (server in another time zone).
+    pub time_offset_mins: i32,
+    /// Character set of the commands, replies and listings (`None`: UTF-8).
+    pub charset: Option<&'static encoding_rs::Encoding>,
+    /// Local address the control and data connections leave from.
+    pub bind_ip: Option<IpAddr>,
 }
 
 impl Default for FtpConfig {
@@ -66,6 +76,11 @@ impl Default for FtpConfig {
             max_line_len: 64 * 1024,
             send_feat: true,
             client_name: None,
+            trim_list_spaces: false,
+            port_fallback: false,
+            time_offset_mins: 0,
+            charset: None,
+            bind_ip: None,
         }
     }
 }
@@ -114,6 +129,8 @@ pub struct FtpClient {
     cwd: Option<String>,
     current_type: Option<TransferType>,
     epsv_refused: bool,
+    /// The passive mode failed and the connection switched to active mode.
+    passive_failed: bool,
     log: Option<LogSink>,
 }
 
@@ -143,7 +160,7 @@ impl FtpClient {
                 (tcp, ip)
             }
             None => {
-                let tcp = timeout(ct, crate::net::connect(host, port)).await?;
+                let tcp = timeout(ct, crate::net::connect_from(host, port, config.bind_ip)).await?;
                 let ip = tcp.peer_addr()?.ip();
                 (tcp, Some(ip))
             }
@@ -200,6 +217,7 @@ impl FtpClient {
             cwd: None,
             current_type: None,
             epsv_refused: false,
+            passive_failed: false,
             log,
         };
         let mut welcome = c.read_reply().await?;
@@ -300,12 +318,13 @@ impl FtpClient {
     /// Reads a reply with a given timeout (`None`: no limit, for the end of an FXP).
     pub(super) async fn read_reply_within(&mut self, limit: Option<Duration>) -> Result<Reply> {
         let max = self.config.max_line_len;
+        let enc = self.encoding();
         let reply = match limit {
-            Some(d) => match tokio::time::timeout(d, read_reply(&mut self.ctrl, max)).await {
+            Some(d) => match tokio::time::timeout(d, read_reply(&mut self.ctrl, max, enc)).await {
                 Ok(r) => r?,
                 Err(_) => return Err(FtpError::Timeout),
             },
-            None => read_reply(&mut self.ctrl, max).await?,
+            None => read_reply(&mut self.ctrl, max, enc).await?,
         };
         self.emit(LogLine::Reply(reply.clone()));
         Ok(reply)
@@ -320,9 +339,8 @@ impl FtpClient {
             if r.is_completion() {
                 // A server that had just finished replies 226 (transfer) then 226 (ABOR):
                 // absorb the second reply when it arrives quickly.
-                if let Ok(Ok(extra)) =
-                    tokio::time::timeout(Duration::from_millis(500), read_reply(&mut self.ctrl, self.config.max_line_len)).await
-                {
+                let (max, enc) = (self.config.max_line_len, self.encoding());
+                if let Ok(Ok(extra)) = tokio::time::timeout(Duration::from_millis(500), read_reply(&mut self.ctrl, max, enc)).await {
                     self.emit(LogLine::Reply(extra));
                 }
                 return Ok(());
@@ -351,10 +369,17 @@ impl FtpClient {
         if cmd.contains(['\r', '\n']) {
             return Err(FtpError::InvalidArgument("line break not allowed in an FTP command".into()));
         }
+        let (bytes, _, unmappable) = self.encoding().encode(cmd);
+        if unmappable {
+            return Err(FtpError::InvalidArgument(format!(
+                "the command contains characters the {} character set cannot write",
+                self.encoding().name()
+            )));
+        }
         self.emit(LogLine::Command(mask(cmd)));
         let io = self.config.io_timeout;
         timeout(io, async {
-            self.ctrl.write_all(cmd.as_bytes()).await?;
+            self.ctrl.write_all(&bytes).await?;
             self.ctrl.write_all(b"\r\n").await?;
             self.ctrl.flush().await
         })
@@ -375,6 +400,15 @@ impl FtpClient {
     pub(super) async fn expect(&mut self, cmd: &str, accept: impl Fn(&Reply) -> bool) -> Result<Reply> {
         let reply = self.raw(cmd).await?;
         if accept(&reply) { Ok(reply) } else { Err(FtpError::Unexpected { command: mask(cmd), reply }) }
+    }
+
+    /// Character set of the control channel and of the listings.
+    pub(super) fn encoding(&self) -> &'static encoding_rs::Encoding {
+        self.config.charset.unwrap_or(encoding_rs::UTF_8)
+    }
+
+    fn decode(&self, bytes: &[u8]) -> String {
+        self.encoding().decode_without_bom_handling(bytes).0.into_owned()
     }
 
     // ---------------------------------------------------------------- session
@@ -403,7 +437,8 @@ impl FtpClient {
             // Informative only: a refusal does not matter.
             let _ = self.raw(&format!("CLNT {}", name.trim())).await?;
         }
-        if self.features.has("UTF8") {
+        // A forced character set: the server must not switch to UTF-8.
+        if self.features.has("UTF8") && self.config.charset.is_none_or(|c| c == encoding_rs::UTF_8) {
             // Failure does not matter: some servers are already in UTF-8.
             let _ = self.raw("OPTS UTF8 ON").await?;
         }
@@ -547,15 +582,23 @@ impl FtpClient {
     /// Prepares the data channel before the transfer command: passive connection, or local
     /// listener announced with `PORT`/`EPRT` in active mode.
     async fn prepare_data(&mut self, transfer_cmd: &str) -> Result<PendingData> {
-        let active = self.config.active_mode && self.data_via_proxy().is_none();
-        if self.config.active_mode && !active && !self.proxy_active_warned {
+        let wanted = self.config.active_mode || self.passive_failed;
+        let active = wanted && self.data_via_proxy().is_none();
+        if wanted && !active && !self.proxy_active_warned {
             self.proxy_active_warned = true;
             self.status("Active mode impossible through the proxy: using passive mode");
         }
         if active {
-            self.open_active().await.map(PendingData::Listening)
-        } else {
-            self.open_passive(transfer_cmd).await.map(PendingData::Connected)
+            return self.open_active().await.map(PendingData::Listening);
+        }
+        match self.open_passive(transfer_cmd).await {
+            Ok(s) => Ok(PendingData::Connected(s)),
+            Err(e) if self.config.port_fallback && self.data_via_proxy().is_none() && passive_failure(&e) => {
+                self.passive_failed = true;
+                self.status(format!("Passive mode failed ({e}): switching to active mode (PORT)"));
+                self.open_active().await.map(PendingData::Listening)
+            }
+            Err(e) => Err(e),
         }
     }
 
@@ -666,6 +709,7 @@ impl FtpClient {
         let ct = self.config.connect_timeout;
         let proxy = self.data_via_proxy().cloned();
         let host = self.host.clone();
+        let bind = self.config.bind_ip;
         async move {
             if let Some(p) = proxy {
                 let (h, port) = match target {
@@ -675,8 +719,8 @@ impl FtpClient {
                 return timeout_ftp(ct, async { Ok(proxy::connect(&p, &h, port).await?) }).await;
             }
             match target {
-                DataTarget::Addr(a) => timeout(ct, TcpStream::connect(a)).await,
-                DataTarget::Host(port) => timeout(ct, crate::net::connect(&host, port)).await,
+                DataTarget::Addr(a) => timeout(ct, crate::net::connect_addr(a, bind)).await,
+                DataTarget::Host(port) => timeout(ct, crate::net::connect_from(&host, port, bind)).await,
             }
         }
     }
@@ -702,7 +746,34 @@ impl FtpClient {
     /// Lists a directory (the current one when `dir` is `None`).
     pub async fn list(&mut self, dir: Option<&str>) -> Result<Vec<RemoteEntry>> {
         let (raw, mlsd) = self.list_raw(dir).await?;
-        Ok(if mlsd { listing::parse_mlsd(&raw) } else { listing::parse_list(&raw) })
+        let mut entries = if mlsd { listing::parse_mlsd(&raw) } else { listing::parse_list(&raw) };
+        let offset = self.config.time_offset_mins;
+        if offset != 0 {
+            for e in &mut entries {
+                e.modified = e.modified.map(|t| t.shifted(offset));
+            }
+        }
+        Ok(entries)
+    }
+
+    /// `STAT -l` style listing: the lines of the multi-line reply, on the control channel.
+    async fn list_on_control(&mut self, cmd: &str) -> Result<String> {
+        let r = self.expect(cmd, |r| matches!(r.code, 211..=213)).await?;
+        let code = r.code;
+        let inner = r.lines.get(1..r.lines.len().saturating_sub(1)).unwrap_or(&[]);
+        let text = inner
+            .iter()
+            .map(|l| {
+                // Some servers repeat the code at the start of every line (`213-drwx...`).
+                let l = match l.get(..4) {
+                    Some(p) if p.ends_with('-') && p[..3].parse() == Ok(code) => &l[4..],
+                    _ => l.as_str(),
+                };
+                l.trim_start()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        Ok(text)
     }
 
     /// Raw listing and "MLSD format" flag.
@@ -711,7 +782,10 @@ impl FtpClient {
             self.cwd(d).await?;
         }
         let mlsd = self.config.use_mlsd && self.features.has("MLST");
-        let cmd = if mlsd { "MLSD".to_string() } else { self.config.list_command.clone() };
+        let cmd = if mlsd { "MLSD".to_string() } else { self.config.list_command.trim().to_string() };
+        if !mlsd && cmd.get(..4).is_some_and(|v| v.eq_ignore_ascii_case("STAT")) {
+            return Ok((self.list_on_control(&cmd).await?, false));
+        }
         self.set_type(TransferType::Ascii).await?;
         let pending = self.prepare_data(&cmd).await?;
         if !self.start_transfer(&cmd).await? {
@@ -730,7 +804,11 @@ impl FtpClient {
         }
         drop(data);
         self.finish_transfer(&cmd).await?;
-        Ok((String::from_utf8_lossy(&buf).into_owned(), mlsd))
+        let mut text = self.decode(&buf);
+        if self.config.trim_list_spaces && !mlsd {
+            text = text.lines().map(str::trim_start).collect::<Vec<_>>().join("\n");
+        }
+        Ok((text, mlsd))
     }
 
     /// Downloads `remote` into `out`, from byte `offset` (resume through `REST`).
@@ -841,6 +919,19 @@ async fn read_data(data: &mut BoxStream, buf: &mut [u8]) -> std::io::Result<usiz
     match data.read(buf).await {
         Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => Ok(0),
         r => r,
+    }
+}
+
+/// Failure of the passive mode that the active mode can work around: refusal of
+/// `PASV`/`EPSV`, unreadable reply, or data connection impossible.
+fn passive_failure(e: &FtpError) -> bool {
+    match e {
+        FtpError::Unexpected { command, reply } => {
+            matches!(command.as_str(), "PASV" | "EPSV") && (reply.is_permanent_negative() || reply.is_transient_negative())
+        }
+        FtpError::Io(_) | FtpError::Timeout => true,
+        FtpError::Protocol(m) => m.starts_with("unreadable"),
+        _ => false,
     }
 }
 

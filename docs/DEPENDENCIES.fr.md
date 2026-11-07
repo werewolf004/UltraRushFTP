@@ -39,6 +39,7 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `ring` | 0.17 | Apache-2.0 AND ISC | proto | Empreintes SHA-256, fournisseur cryptographique de rustls et russh |
 | `russh` | 0.65 | Apache-2.0 | proto | Client SSH (transport de SFTP) |
 | `russh-sftp` | 3.0 | Apache-2.0 | proto | Protocole SFTP |
+| `encoding_rs` | 0.8 | (Apache-2.0 / MIT) AND BSD-3-Clause | proto | Jeux de caractères des serveurs non UTF-8 |
 | `thiserror` | 2.0 | MIT / Apache-2.0 | core, proto, script, sys, cli, gui | Erreurs typées |
 | `parking_lot` | 0.12 | MIT / Apache-2.0 | proto, cli, gui | Verrous sans empoisonnement (pas d'`unwrap` sur les verrous) |
 | `serde` | 1.0 | MIT / Apache-2.0 | core, gui | Sérialisation des sites et des options |

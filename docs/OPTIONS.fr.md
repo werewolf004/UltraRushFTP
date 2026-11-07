@@ -77,6 +77,8 @@ Enregistrée automatiquement dans `settings.json` une seconde après une modific
 | Thème sombre | oui | Thème sombre ou clair |
 | Langue | Langue de Windows | Langue de Windows, English ou Français ; appliquée tout de suite |
 | Ouvrir un nouvel onglet quand le panneau droit est déjà connecté | oui | Sinon la nouvelle connexion remplace la connexion en cours |
+| E-mail des connexions anonymes | `urftp@` | Mot de passe envoyé par les sites réglés en *anonyme* |
+| Dossier de téléchargement par défaut | dossier de l'utilisateur | Dossier où démarrent les panneaux locaux, et où ils reviennent à la déconnexion ; le dossier de l'utilisateur quand il n'existe pas |
 
 ### Transferts
 
@@ -174,6 +176,33 @@ attendant *Délai entre deux essais* avant chacun. Le moteur de file vérifie au
 connexion restée inactive avant de la réutiliser, et en ouvre une nouvelle quand le
 serveur l'a coupée.
 
+### Connexion
+
+![Connexion](images/options-connection.fr.png)
+
+| Option | Défaut | Effet |
+|---|---|---|
+| Utiliser MLSD quand le serveur le propose | oui | `MLSD` donne des dates et tailles exactes ; désactivé : la commande de listing ci-dessous |
+| Afficher les fichiers cachés (LIST -a) | non | `LIST -a` au lieu de `LIST` (fichiers commençant par `.` ; nécessaire pour supprimer un dossier qui en contient) |
+| Commande de listing | vide (`LIST`) | N'importe quelle commande (`LIST -al`...) ; une commande commençant par `STAT` est lue sur le canal de contrôle. Remplace `MLSD` |
+| Passer en mode actif (PORT) quand le mode passif échoue | non | `PASV`/`EPSV` refusé ou connexion de données impossible : la connexion continue en mode actif |
+| Adresse externe (envoyée par PORT) | vide | IP publique annoncée en mode actif, derrière un routeur ; vide : l'adresse locale |
+| Ports locaux du mode actif | 0 – 0 (tous) | Plage redirigée par le routeur vers cet ordinateur |
+| Adresse locale des connexions | vide | IP de la carte réseau d'où partent les connexions FTP et SFTP (pas utilisée à travers un proxy) |
+
+Les réglages de listing d'un site (fiche du site › Listing) l'emportent sur les trois
+premières options. Une adresse invalide est affichée en rouge et ignorée.
+
+### Nouveau site
+
+![Nouveau site](images/options-new-site.fr.png)
+
+Modèle des sites créés par *Nouveau site* dans le gestionnaire de sites : protocole et
+port, utilisateur, mot de passe ou anonyme, mode de transfert, *Chiffrer aussi les
+transferts*, transferts simultanés et limites par sens, dossiers distant et local, réglages
+de listing (mêmes champs que la fiche du site). L'hôte, les autres adresses, les signets et
+les clés de confiance restent toujours vides. *Valeurs par défaut* remet le modèle à zéro.
+
 ## Fiche de site
 
 ![Gestionnaire de sites](images/site-manager.fr.png)
@@ -190,7 +219,7 @@ serveur l'a coupée.
 | Certificat | Vérifier avec les autorités Windows | ou Accepter tout certificat (déconseillé), ou Certificat approuvé (empreinte SHA-256, remplie quand on approuve un serveur) |
 | Clé privée | aucune | SFTP : fichier de clé OpenSSH, PEM ou PuTTY `.ppk` |
 | Clés de serveur approuvées | aucune | Empreintes de clés d'hôte SFTP (`SHA256:…`) ajoutées quand on approuve un serveur |
-| Mode | Passif | Passif ou Actif (`PORT`/`EPRT`) |
+| Mode | Passif | Passif ou Actif (`PORT`/`EPRT`) ; voir aussi le repli `PORT` de la page Connexion |
 | Transferts simultanés | 2 | 0 = connexion unique |
 | Max. téléchargements / Max. envois | non fixé | Limites supplémentaires par sens |
 | Dossier distant, dossier local | vides | Ouverts à la connexion |
@@ -198,6 +227,15 @@ serveur l'a coupée.
 | Nom Ident propre à ce site | non | Répondu par le serveur Ident pendant la connexion du site (le serveur doit être activé) |
 | Signets | aucun | Nom, dossier distant, dossier local ; utilisés par `RS_BOOKMARK` dans les scripts |
 | Notes | vide | Texte libre |
+
+**Listing** (FTP et FTPS) :
+
+| Champ | Défaut | Remarques |
+|---|---|---|
+| Commande de listing | Réglage global | Réglage global (page Connexion), `STAT -l` (sur le canal de contrôle, sans connexion de données) ou une commande personnalisée |
+| Décalage horaire | 0 h | Heures (quarts d'heure possibles) ajoutées aux dates des listings, pour un serveur dans un autre fuseau horaire |
+| Jeu de caractères | UTF-8 (automatique) | Pour les serveurs qui n'utilisent pas UTF-8 : windows-1252, ISO-8859-1/2/15, windows-1250/1251, KOI8-R, Shift_JIS, EUC-JP, GBK, gb18030, Big5, EUC-KR, IBM866. Noms, chemins et réponses sont convertis ; `OPTS UTF8 ON` n'est alors pas envoyé, et un nom que le jeu ne sait pas écrire est refusé |
+| Retirer les espaces en début de ligne du listing | non | Pour les serveurs dont les lignes de `LIST` commencent par des espaces (toujours fait pour `STAT`) |
 
 ![Réglages d'un site](images/site-settings.fr.png)
 

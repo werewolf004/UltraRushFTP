@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
+Résumé (284 sujets) : ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
 
 ## Fenêtre principale et menus
 
@@ -162,7 +162,7 @@ Résumé (284 sujets) : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Import des sites et réglages UltraFXP | ⬜ | |
 | Import FTPRush XML | ✅ | Plus FTPRush v1/v3, FileZilla, FlashFXP ; les mots de passe ne sont pas importés |
 | Export texte brut / CSV / HTML / FTPRush XML | ⬜ | Sans les mots de passe |
-| Réglages par défaut d'un site | ⬜ | Utilisateur, mot de passe et limites d'un nouveau site |
+| Réglages par défaut d'un site | ✅ | Options › Nouveau site : protocole, connexion, mode, limites, dossiers, listing |
 | Réglages de sécurité (mot de passe du carnet, afficher les mots de passe) | 🟡 | Mots de passe protégés par DPAPI de Windows ; pas de mot de passe maître ni de verrouillage |
 | Tester la disponibilité des sites | ✅ | Un site ou tout un dossier, en parallèle |
 
@@ -173,9 +173,9 @@ Résumé (284 sujets) : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Protocole : FTP simple, `AUTH TLS`, SSL implicite, `AUTH SSL`, SFTP | ✅ | `AUTH SSL` en repli du FTPS explicite |
 | Plusieurs entrées hôte:port | ✅ | Rotation en cas d'échec, l'adresse qui a marché sert en premier |
 | Port, utilisateur, mot de passe, anonyme | ✅ | |
-| Mode passif, repli actif quand `PASV` échoue | 🟡 | Passif / actif par site ; pas de repli automatique |
+| Mode passif, repli actif quand `PASV` échoue | ✅ | Repli activé dans la page Connexion |
 | Serveur derrière un NAT (adresse de l'hôte pour `PASV`) | ✅ | Automatique quand `PASV` renvoie une adresse privée |
-| Fuseau horaire | ⬜ | |
+| Fuseau horaire | ✅ | Décalage ajouté aux dates des listings (FTP) |
 | Transferts simultanés maximum (0 = connexion de navigation) | ✅ | |
 | Chemins distant et local | ✅ | |
 | Description (texte court pour les menus, notes) | 🟡 | Notes ; pas de description courte |
@@ -196,12 +196,12 @@ Résumé (284 sujets) : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Comptes : identifiants différents pour envois et téléchargements | ✅ | La navigation garde le compte principal |
 | Ident : nom global ou propre au site | ✅ | Répondu pendant la connexion du site |
 | Proxy : global, contourné, personnalisé ; canal de données | ✅ | |
-| Mode de listing : `STAT -l` | 🟡 | Géré par la couche protocole (`list_command`) ; pas de réglage |
-| Mode de listing : retirer les espaces de tête | ⬜ | |
-| Mode de listing : commande personnalisée | 🟡 | Comme `STAT -l` |
+| Mode de listing : `STAT -l` | ✅ | Lu sur le canal de contrôle |
+| Mode de listing : retirer les espaces de tête | ✅ | Toujours fait pour `STAT` |
+| Mode de listing : commande personnalisée | ✅ | |
 | Mode de listing : UPnP | ⬜ | |
 | Cache des dossiers par site | ⬜ | |
-| Jeu de caractères des dossiers (serveurs non UTF-8) | ⬜ | |
+| Jeu de caractères des dossiers (serveurs non UTF-8) | ✅ | Commandes, réponses et listings ; 14 jeux de caractères |
 | Choix de l'analyseur de listing | 🟡 | Détection automatique (Unix, DOS/IIS, `MLSD`) ; pas de choix manuel |
 | SSL : `PBSZ 0` | ✅ | |
 | SSL : chiffrer listings / transferts séparément | 🟡 | Un seul réglage « protéger les données » pour les deux |
@@ -222,8 +222,8 @@ Résumé (284 sujets) : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Adresse e-mail pour la connexion anonyme | ⬜ | |
-| Dossier de téléchargement par défaut | ⬜ | Les panneaux locaux démarrent dans le dossier utilisateur |
+| Adresse e-mail pour la connexion anonyme | ✅ | |
+| Dossier de téléchargement par défaut | ✅ | Les panneaux locaux y démarrent |
 | Dossier des données | ✅ | `-f`, `URUSHFTP_DATA` |
 | Sauvegarde quotidienne de la configuration | ⬜ | |
 | Cache des dossiers FTP, mise à jour du cache du dossier transféré | ⬜ | |
@@ -240,15 +240,15 @@ Résumé (284 sujets) : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Envoyer `FEAT` | 🟡 | Toujours envoyé |
+| Envoyer `FEAT` | ✅ | Par site (fiche du site) |
 | Délai de connexion, délai de réponse | ✅ | |
 | Essais maximum, délai entre essais | ✅ | |
-| Alterner les IP du serveur en cas d'échec de connexion | ⬜ | |
+| Alterner les IP du serveur en cas d'échec de connexion | ✅ | Autres adresses de la fiche du site |
 | Reconnexion automatique sur certaines réponses du serveur | ✅ | Masques à jokers, page Maintien de connexion |
 | Gestion des serveurs derrière un NAT | ✅ | |
-| Adresse externe annoncée (mode actif) | 🟡 | Gérée par la couche protocole ; pas de réglage |
-| Lier à une adresse IP locale | ⬜ | |
-| Plage de ports locaux | 🟡 | Gérée par la couche protocole ; pas de réglage |
+| Adresse externe annoncée (mode actif) | ✅ | |
+| Lier à une adresse IP locale | ✅ | Connexions directes (pas celle du proxy) |
+| Plage de ports locaux | ✅ | |
 | Ident : activer, nom, système, port | ✅ | |
 | Ident : seulement pendant la connexion | ⬜ | |
 | Maintien de connexion : commande, intervalle, arrêt, déconnexion, reconnexion après expulsion, commande aléatoire | ✅ | Global ou par site |
@@ -256,9 +256,9 @@ Résumé (284 sujets) : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Proxy : `NOOP` pendant les transferts, passif avec proxy | ⬜ | |
 | Proxy : contourner pour les adresses locales, exceptions | ✅ | |
 | Éditeur de proxy | ✅ | Intégré aux options et à la fiche du site |
-| Mode de listing : afficher les fichiers cachés (`LIST -a`) | 🟡 | Géré par la couche protocole ; pas de réglage |
-| Mode de listing : commande personnalisée | 🟡 | Idem |
-| Mode de listing : passer en `PORT` quand `PASV` échoue | ⬜ | |
+| Mode de listing : afficher les fichiers cachés (`LIST -a`) | ✅ | |
+| Mode de listing : commande personnalisée | ✅ | Globale ou par site |
+| Mode de listing : passer en `PORT` quand `PASV` échoue | ✅ | Pour les listings et les transferts |
 | Mode de listing : utiliser `MLSD` si disponible | ✅ | |
 
 ### Transfert
@@ -382,7 +382,7 @@ Résumé (284 sujets) : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 | Ligne de commande `-b` (licence bêta) | ➖ | Pas de licence dans UltraRushFTP ; accepté et ignoré |
 | Jokers `*` `?` (sans casse) | ✅ | |
 | Expressions régulières | 🟡 | Syntaxe de `regex` (Rust), proche mais pas identique à TRegExpr |
-| FAQ : impossible de supprimer un dossier (fichiers cachés) | 🟡 | Demande le réglage « afficher les fichiers cachés » (`LIST -a`) |
+| FAQ : impossible de supprimer un dossier (fichiers cachés) | ✅ | Page Connexion › Afficher les fichiers cachés |
 | FAQ : « Protocol not supported (10043) » | ➖ | Pas de DLL OpenSSL : le TLS est intégré (rustls) |
 | FAQ : noms de fichiers multilingues | ✅ | UTF-8 |
 | FAQ : limiter les connexions d'un site | ✅ | |

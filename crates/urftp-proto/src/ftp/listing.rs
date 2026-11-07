@@ -20,6 +20,53 @@ pub struct FtpTime {
     pub second: u8,
 }
 
+impl FtpTime {
+    /// Date moved by `minutes` (time zone of the server). A date without a year is moved
+    /// within a leap year, so that 29 February stays valid; a date that is not valid is
+    /// returned unchanged.
+    pub fn shifted(self, minutes: i32) -> FtpTime {
+        if !(1..=12).contains(&self.month) || !(1..=31).contains(&self.day) || self.hour > 23 || self.minute > 59 {
+            return self;
+        }
+        let year = i64::from(self.year.unwrap_or(2000));
+        let day = days_from_civil(year, u32::from(self.month), u32::from(self.day));
+        let total = (day * 24 + i64::from(self.hour)) * 60 + i64::from(self.minute) + i64::from(minutes);
+        let (day, in_day) = (total.div_euclid(1440), total.rem_euclid(1440));
+        let (y, m, d) = civil_from_days(day);
+        FtpTime {
+            year: self.year.map(|_| i32::try_from(y).unwrap_or(i32::MAX)),
+            month: m as u8,
+            day: d as u8,
+            hour: (in_day / 60) as u8,
+            minute: (in_day % 60) as u8,
+            second: self.second,
+        }
+    }
+}
+
+/// Days since 1970-01-01 (proleptic Gregorian calendar, H. Hinnant's algorithm).
+fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = i64::from((m + 9) % 12);
+    let doy = (153 * mp + 2) / 5 + i64::from(d) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (yoe + era * 400 + i64::from(m <= 2), m, d)
+}
+
 /// One entry of a remote listing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteEntry {
@@ -233,6 +280,18 @@ pub fn parse_mlsd_time(v: &str) -> Option<FtpTime> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dates_move_with_the_time_zone() {
+        let t = |year, month, day, hour, minute| FtpTime { year, month, day, hour, minute, second: 0 };
+        assert_eq!(t(Some(2024), 12, 31, 23, 30).shifted(60), t(Some(2025), 1, 1, 0, 30));
+        assert_eq!(t(Some(2024), 3, 1, 0, 15).shifted(-30), t(Some(2024), 2, 29, 23, 45));
+        assert_eq!(t(Some(2023), 3, 1, 0, 15).shifted(-30), t(Some(2023), 2, 28, 23, 45));
+        assert_eq!(t(None, 2, 29, 22, 0).shifted(120), t(None, 3, 1, 0, 0));
+        assert_eq!(t(None, 6, 15, 12, 0).shifted(-9 * 60), t(None, 6, 15, 3, 0));
+        let invalid = t(None, 0, 0, 0, 0);
+        assert_eq!(invalid.shifted(60), invalid);
+    }
 
     #[test]
     fn unix_file_dir_link() {

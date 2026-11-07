@@ -165,6 +165,52 @@ impl Default for SiteSettings {
     }
 }
 
+/// Listing command of a site.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ListCommand {
+    /// The global setting (`MLSD` when announced, otherwise `LIST`, `LIST -a` or the global
+    /// custom command).
+    #[default]
+    Global,
+    /// `STAT -l`: listing on the control channel (no data connection).
+    Stat,
+    /// Any command (`LIST -al`, `NLST`...); a command starting with `STAT` is read on the
+    /// control channel.
+    Custom(String),
+}
+
+/// Character sets offered for the servers that do not use UTF-8 (WHATWG labels).
+pub const CHARSETS: [&str; 14] = [
+    "windows-1252",
+    "ISO-8859-1",
+    "ISO-8859-2",
+    "ISO-8859-15",
+    "windows-1250",
+    "windows-1251",
+    "KOI8-R",
+    "Shift_JIS",
+    "EUC-JP",
+    "GBK",
+    "gb18030",
+    "Big5",
+    "EUC-KR",
+    "IBM866",
+];
+
+/// Listing settings of a site.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct SiteListing {
+    pub command: ListCommand,
+    /// Removes the spaces at the start of the listing lines (some `STAT -l` replies).
+    pub trim_spaces: bool,
+    /// Minutes added to the dates of the listings (server in another time zone).
+    pub time_offset_mins: i32,
+    /// Character set of the names and paths (empty: UTF-8).
+    pub charset: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Bookmark {
@@ -208,6 +254,8 @@ pub struct Site {
     pub bookmarks: Vec<Bookmark>,
     /// Settings replacing the global options for this site.
     pub settings: SiteSettings,
+    /// Listing command, time zone and character set (FTP).
+    pub listing: SiteListing,
 }
 
 impl Default for Site {
@@ -238,6 +286,7 @@ impl Default for Site {
             ssh_host_keys: Vec::new(),
             bookmarks: Vec::new(),
             settings: SiteSettings::default(),
+            listing: SiteListing::default(),
         }
     }
 }

@@ -8,7 +8,7 @@ use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
-use tokio::net::{TcpStream, lookup_host};
+use tokio::net::{TcpSocket, TcpStream, lookup_host};
 use tokio::task::JoinSet;
 
 /// Wait before starting the next attempt ("Connection Attempt Delay" of RFC 8305).
@@ -16,12 +16,38 @@ pub const ATTEMPT_DELAY: Duration = Duration::from_millis(250);
 
 /// Connects to `host:port` (name or IP address).
 pub async fn connect(host: &str, port: u16) -> io::Result<TcpStream> {
+    connect_from(host, port, None).await
+}
+
+/// Connects to `host:port` from the local address `bind` (several network cards); only
+/// the addresses of the same family as `bind` are then tried.
+pub async fn connect_from(host: &str, port: u16, bind: Option<IpAddr>) -> io::Result<TcpStream> {
     let host = host.trim().trim_start_matches('[').trim_end_matches(']');
     if let Ok(ip) = host.parse::<IpAddr>() {
-        return TcpStream::connect((ip, port)).await;
+        return connect_addr(SocketAddr::new(ip, port), bind).await;
     }
-    let addrs: Vec<SocketAddr> = lookup_host((host, port)).await?.collect();
-    connect_any(interleave(addrs), ATTEMPT_DELAY).await
+    let mut addrs: Vec<SocketAddr> = lookup_host((host, port)).await?.collect();
+    if let Some(b) = bind {
+        addrs.retain(|a| a.is_ipv6() == b.is_ipv6());
+        if addrs.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::AddrNotAvailable,
+                format!("the host name has no {} address for the local address {b}", if b.is_ipv6() { "IPv6" } else { "IPv4" }),
+            ));
+        }
+    }
+    connect_any_from(interleave(addrs), ATTEMPT_DELAY, bind).await
+}
+
+/// Connects to one address, from the local address `bind` when given.
+pub async fn connect_addr(addr: SocketAddr, bind: Option<IpAddr>) -> io::Result<TcpStream> {
+    let Some(local) = bind else { return TcpStream::connect(addr).await };
+    if local.is_ipv6() != addr.is_ipv6() {
+        return Err(io::Error::new(io::ErrorKind::AddrNotAvailable, format!("{addr} cannot be reached from the local address {local}")));
+    }
+    let socket = if local.is_ipv6() { TcpSocket::new_v6()? } else { TcpSocket::new_v4()? };
+    socket.bind(SocketAddr::new(local, 0))?;
+    socket.connect(addr).await
 }
 
 /// Orders the addresses by alternating the families, starting with the family of the
@@ -44,11 +70,15 @@ pub fn interleave(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
 /// Tries the addresses in order, starting a new attempt every `delay` or as soon as the
 /// previous one fails; returns the first connection established, or the last error.
 pub async fn connect_any(addrs: Vec<SocketAddr>, delay: Duration) -> io::Result<TcpStream> {
+    connect_any_from(addrs, delay, None).await
+}
+
+async fn connect_any_from(addrs: Vec<SocketAddr>, delay: Duration, bind: Option<IpAddr>) -> io::Result<TcpStream> {
     let mut pending = addrs.into_iter();
     let mut running: JoinSet<io::Result<TcpStream>> = JoinSet::new();
     let mut last_error = io::Error::new(io::ErrorKind::NotFound, "the host name has no address");
     let Some(first) = pending.next() else { return Err(last_error) };
-    running.spawn(TcpStream::connect(first));
+    running.spawn(connect_addr(first, bind));
     loop {
         tokio::select! {
             done = running.join_next() => {
@@ -64,7 +94,7 @@ pub async fn connect_any(addrs: Vec<SocketAddr>, delay: Duration) -> io::Result<
                 // A failure starts the next attempt at once.
                 match pending.next() {
                     Some(next) => {
-                        running.spawn(TcpStream::connect(next));
+                        running.spawn(connect_addr(next, bind));
                     }
                     None if running.is_empty() => return Err(last_error),
                     None => {}
@@ -72,7 +102,7 @@ pub async fn connect_any(addrs: Vec<SocketAddr>, delay: Duration) -> io::Result<
             }
             _ = tokio::time::sleep(delay), if pending.len() > 0 => {
                 if let Some(next) = pending.next() {
-                    running.spawn(TcpStream::connect(next));
+                    running.spawn(connect_addr(next, bind));
                 }
             }
         }

@@ -25,10 +25,12 @@ pub(crate) enum Page {
     Proxy,
     Ident,
     KeepAlive,
+    Connection,
+    NewSite,
 }
 
 impl Page {
-    pub(crate) const ALL: [Page; 9] = [
+    pub(crate) const ALL: [Page; 11] = [
         Page::General,
         Page::Transfers,
         Page::Speed,
@@ -38,6 +40,8 @@ impl Page {
         Page::Proxy,
         Page::Ident,
         Page::KeepAlive,
+        Page::Connection,
+        Page::NewSite,
     ];
 
     pub(crate) fn label(self) -> String {
@@ -51,6 +55,8 @@ impl Page {
             Page::Proxy => t!("options.page_proxy"),
             Page::Ident => t!("options.page_ident"),
             Page::KeepAlive => t!("options.page_keepalive"),
+            Page::Connection => t!("options.page_connection"),
+            Page::NewSite => t!("options.page_new_site"),
         }
     }
 }
@@ -72,7 +78,7 @@ impl OptionsWindow {
             Ok(s) => (s, None),
             Err(e) => (Settings::default(), Some(t!("options.unreadable", error = e))),
         };
-        // Development: `URUSHFTP_OPEN_OPTIONS=<page>` (0 to 8) opens the window on that page.
+        // Development: `URUSHFTP_OPEN_OPTIONS=<page>` (0 to 10) opens the window on that page.
         let open_on = std::env::var("URUSHFTP_OPEN_OPTIONS").ok().and_then(|v| v.parse::<usize>().ok());
         let page = open_on.and_then(|i| Page::ALL.get(i).copied()).unwrap_or(Page::General);
         Self { open: open_on.is_some(), settings, page, dirty: false, last_change: 0.0, ident_status: None, error }
@@ -151,6 +157,27 @@ impl OptionsWindow {
                 ui.checkbox(&mut s.dark_theme, t!("options.dark_theme"));
                 language_combo(ui, &mut s.language);
                 ui.checkbox(&mut s.new_tab_when_busy, t!("options.new_tab_when_busy"));
+                ui.add_space(6.0);
+                egui::Grid::new("opt-general").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+                    theme::grid_row(
+                        ui,
+                        t!("options.anonymous_email"),
+                        theme::single_line(&mut s.anonymous_email)
+                            .hint_text(urftp_core::settings::DEFAULT_ANONYMOUS_EMAIL)
+                            .desired_width(220.0),
+                    );
+                    let l = ui.label(t!("options.download_dir"));
+                    ui.horizontal(|ui| {
+                        ui.add(theme::single_line(&mut s.download_dir).hint_text(t!("options.download_dir_hint")).desired_width(300.0))
+                            .labelled_by(l.id);
+                        if theme::icon_button(ui, "…", t!("options.pick_download_dir")).clicked()
+                            && let Some(p) = rfd::FileDialog::new().pick_folder()
+                        {
+                            s.download_dir = p.to_string_lossy().into_owned();
+                        }
+                    });
+                    ui.end_row();
+                });
                 ui.add_space(8.0);
                 ui.label(RichText::new(t!("options.data_dir", path = urftp_core::sitestore::data_dir().display())).weak());
             }
@@ -189,6 +216,12 @@ impl OptionsWindow {
             Page::Priorities => priorities_ui(ui, &mut s.priorities),
             Page::Proxy => proxy_ui(ui, &mut s.proxy),
             Page::KeepAlive => keep_alive_ui(ui, &mut s.keep_alive),
+            Page::Connection => connection_ui(ui, s),
+            Page::NewSite => {
+                ui.label(RichText::new(t!("options.new_site_note")).weak());
+                ui.add_space(4.0);
+                ui.push_id("opt-new-site", |ui| crate::sites::new_site_ui(ui, &mut s.new_site));
+            }
             Page::Ident => {
                 let id = &mut s.ident;
                 ui.checkbox(&mut id.enabled, t!("options.ident_enable"));
@@ -210,6 +243,51 @@ impl OptionsWindow {
             }
         }
     }
+}
+
+/// IP address field: red with a warning when the text is not an address.
+fn ip_field(ui: &mut egui::Ui, label: String, value: &mut String, hint: &str) {
+    let l = ui.label(&label);
+    ui.horizontal(|ui| {
+        ui.add(theme::single_line(value).hint_text(hint).desired_width(200.0)).labelled_by(l.id);
+        if let Some(Err(_)) = urftp_core::settings::check_ip(value) {
+            ui.colored_label(theme::colors(ui).error, format!("⚠ {}", t!("options.invalid_ip")));
+        }
+    });
+    ui.end_row();
+}
+
+/// Connection page: listing and active mode.
+fn connection_ui(ui: &mut egui::Ui, s: &mut Settings) {
+    let l = &mut s.listing;
+    ui.strong(t!("options.listing"));
+    ui.checkbox(&mut l.use_mlsd, t!("options.use_mlsd"));
+    ui.checkbox(&mut l.show_hidden, t!("options.show_hidden"));
+    ui.horizontal(|ui| {
+        theme::labelled(ui, t!("options.list_command"), theme::single_line(&mut l.custom_command).hint_text("LIST").desired_width(180.0));
+    });
+    ui.checkbox(&mut l.port_fallback, t!("options.port_fallback"));
+    ui.label(RichText::new(t!("options.listing_note")).weak());
+    ui.add_space(10.0);
+
+    let n = &mut s.network;
+    ui.strong(t!("options.active_mode"));
+    egui::Grid::new("opt-network").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        ip_field(ui, t!("options.external_ip"), &mut n.external_ip, &t!("options.automatic"));
+        let l = ui.label(t!("options.port_range"));
+        ui.horizontal(|ui| {
+            ui.add(egui::DragValue::new(&mut n.port_min).range(0..=65535)).labelled_by(l.id);
+            ui.label("–");
+            let r = ui.add(egui::DragValue::new(&mut n.port_max).range(0..=65535));
+            theme::name(&r, t!("options.port_range_last"));
+        });
+        ui.end_row();
+        ip_field(ui, t!("options.bind_ip"), &mut n.bind_ip, &t!("options.automatic"));
+    });
+    if n.port_min > 0 && n.port_range().is_none() {
+        ui.colored_label(theme::colors(ui).error, format!("⚠ {}", t!("options.port_range_invalid")));
+    }
+    ui.label(RichText::new(t!("options.active_note")).weak());
 }
 
 /// Applies the language setting. `URUSHFTP_LANG=en|fr` overrides it (screenshots, tests).

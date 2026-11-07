@@ -68,6 +68,14 @@ pub struct MockConfig {
     /// Listens on `[::1]` instead of `127.0.0.1` (`PASV` is then refused, like real
     /// servers reached over IPv6).
     pub ipv6: bool,
+    /// Refuses `PASV` and `EPSV` (passive mode broken by a firewall).
+    pub refuse_pasv: bool,
+    /// Names in ISO-8859-1 instead of UTF-8 (commands and listings).
+    pub latin1: bool,
+    /// Answers `STAT -l` with the listing, one line per entry, each starting with a space.
+    pub stat_list: bool,
+    /// `LIST` lines start with two spaces (badly formatted listings).
+    pub padded_list: bool,
 }
 
 impl Default for MockConfig {
@@ -92,6 +100,10 @@ impl Default for MockConfig {
             fail_first_list: None,
             max_logins: None,
             ipv6: false,
+            refuse_pasv: false,
+            latin1: false,
+            stat_list: false,
+            padded_list: false,
         }
     }
 }
@@ -335,6 +347,16 @@ struct State {
     cpsv_once: bool,
 }
 
+/// `LIST` lines of a folder (the names starting with `.` only when `all`).
+fn unix_listing(fs: &Fs, dir: &str, all: bool) -> Vec<String> {
+    let (dirs, files) = fs.children(dir);
+    let shown = |n: &str| all || !n.starts_with('.');
+    let mut out: Vec<String> =
+        dirs.into_iter().filter(|d| shown(d)).map(|d| format!("drwxr-xr-x 1 owner group 0 Jan 01 12:00 {d}")).collect();
+    out.extend(files.into_iter().filter(|(f, _)| shown(f)).map(|(f, n)| format!("-rw-r--r-- 1 owner group {n} Jan 01 12:00 {f}")));
+    out
+}
+
 async fn reply(c: &mut Conn, s: &str) -> std::io::Result<()> {
     let w = c.get_mut();
     w.write_all(s.as_bytes()).await?;
@@ -437,9 +459,9 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
     let fs = sh.fs.clone();
 
     loop {
-        let mut line = String::new();
+        let mut raw = Vec::new();
         let read = match sh.cfg.idle_kick {
-            Some(limit) => match tokio::time::timeout(limit, c.read_line(&mut line)).await {
+            Some(limit) => match tokio::time::timeout(limit, c.read_until(b'\n', &mut raw)).await {
                 Ok(r) => r?,
                 Err(_) => {
                     sh.stats.lock().unwrap().kicks += 1;
@@ -447,11 +469,12 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                     break;
                 }
             },
-            None => c.read_line(&mut line).await?,
+            None => c.read_until(b'\n', &mut raw).await?,
         };
         if read == 0 {
             break;
         }
+        let line = if sh.cfg.latin1 { raw.iter().map(|&b| char::from(b)).collect() } else { String::from_utf8_lossy(&raw).into_owned() };
         let line = line.trim_end_matches(['\r', '\n']).to_string();
         sh.stats.lock().unwrap().commands.push(line.clone());
         let (verb, arg) = match line.split_once(' ') {
@@ -551,6 +574,15 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                     reply(&mut c, "550 No such directory").await?;
                 }
             }
+            "PASV" | "EPSV" if sh.cfg.refuse_pasv => reply(&mut c, "500 Passive mode disabled").await?,
+            "STAT" if sh.cfg.stat_list && arg.starts_with('-') => {
+                let mut out = String::from("213-Status of .:\r\n");
+                for line in unix_listing(&fs.lock().unwrap(), &st.cwd, true) {
+                    out += &format!(" {line}\r\n");
+                }
+                out += "213 End of status";
+                reply(&mut c, &out).await?;
+            }
             "EPSV" if sh.cfg.epsv => {
                 let l = TcpListener::bind(if sh.cfg.ipv6 { "[::1]:0" } else { "127.0.0.1:0" }).await?;
                 let port = l.local_addr()?.port();
@@ -599,26 +631,35 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
             }
             "LIST" | "MLSD" => {
                 let dir = if arg.is_empty() || arg.starts_with('-') { st.cwd.clone() } else { target };
-                let (dirs, files) = fs.lock().unwrap().children(&dir);
                 let mut out = String::new();
-                for d in dirs {
-                    if verb == "MLSD" {
+                if verb == "MLSD" {
+                    let (dirs, files) = fs.lock().unwrap().children(&dir);
+                    for d in dirs {
                         out += &format!("type=dir;modify=20240101120000; {d}\r\n");
-                    } else {
-                        out += &format!("drwxr-xr-x 1 owner group 0 Jan 01 12:00 {d}\r\n");
                     }
-                }
-                for (f, n) in files {
-                    if verb == "MLSD" {
+                    for (f, n) in files {
                         out += &format!("type=file;size={n};modify=20240101120000; {f}\r\n");
-                    } else {
-                        out += &format!("-rw-r--r-- 1 owner group {n} Jan 01 12:00 {f}\r\n");
+                    }
+                } else {
+                    // Like most Unix servers: the hidden files only with `-a`.
+                    let all = arg.starts_with('-') && arg.contains('a');
+                    for line in unix_listing(&fs.lock().unwrap(), &dir, all) {
+                        if sh.cfg.padded_list {
+                            out += "  ";
+                        }
+                        out += &line;
+                        out += "\r\n";
                     }
                 }
                 reply(&mut c, "150 Opening data connection").await?;
                 match open_data(&mut st, &sh).await {
                     Ok(mut d) => {
-                        d.write_all(out.as_bytes()).await?;
+                        let bytes: Vec<u8> = if sh.cfg.latin1 {
+                            out.chars().map(|ch| u8::try_from(u32::from(ch)).unwrap_or(b'?')).collect()
+                        } else {
+                            out.into_bytes()
+                        };
+                        d.write_all(&bytes).await?;
                         finish_send(&mut d).await?;
                         reply(&mut c, "226 Transfer complete").await?;
                     }

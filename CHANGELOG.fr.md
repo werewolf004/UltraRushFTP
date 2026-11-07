@@ -12,6 +12,16 @@ la traduction.
 
 ### Ajouté
 
+- **Réglages de listing** (Options › Connexion, et par site) : fichiers cachés (`LIST -a`),
+  `MLSD` activé ou non, commande de listing personnalisée, `STAT -l` sur le canal de
+  contrôle, retrait des espaces de tête, passage en mode actif quand le mode passif échoue.
+- **Décalage horaire et jeu de caractères par site** : dates des listings décalées ; noms,
+  chemins et réponses convertis pour les serveurs qui n'utilisent pas UTF-8.
+- **Mode actif et réseau** (Options › Connexion) : adresse externe annoncée par `PORT`,
+  plage de ports locaux, adresse locale d'où partent les connexions.
+- **E-mail des connexions anonymes** et **dossier de téléchargement par défaut** (Options ›
+  Général).
+- **Modèle des nouveaux sites** (Options › Nouveau site).
 - **Réglages propres à un site** remplaçant les options globales : essais et délais,
   maintien de connexion et reconnexion, reprise activée ou non, `FEAT` activé ou non, nom de
   client `CLNT`, liste d'exclusion, priorités, règles « fichier existant », comptes séparés

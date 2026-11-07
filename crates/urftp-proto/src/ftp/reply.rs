@@ -72,7 +72,7 @@ fn parse_code(line: &str) -> Option<u16> {
 }
 
 /// Reads a line ending with `\n` (at most `max_len` bytes), without `\r\n`.
-pub(crate) async fn read_line<R>(r: &mut R, max_len: usize) -> Result<String, FtpError>
+pub(crate) async fn read_line<R>(r: &mut R, max_len: usize, enc: &'static encoding_rs::Encoding) -> Result<String, FtpError>
 where
     R: AsyncBufRead + Unpin + ?Sized,
 {
@@ -91,22 +91,22 @@ where
     while matches!(buf.last(), Some(b'\n' | b'\r')) {
         buf.pop();
     }
-    Ok(String::from_utf8_lossy(&buf).into_owned())
+    Ok(enc.decode_without_bom_handling(&buf).0.into_owned())
 }
 
 /// Reads a complete reply. A multi-line reply starts with `ddd-` and ends with a
 /// `ddd ` line carrying the same code.
-pub(crate) async fn read_reply<R>(r: &mut R, max_line: usize) -> Result<Reply, FtpError>
+pub(crate) async fn read_reply<R>(r: &mut R, max_line: usize, enc: &'static encoding_rs::Encoding) -> Result<Reply, FtpError>
 where
     R: AsyncBufRead + Unpin + ?Sized,
 {
-    let first = read_line(r, max_line).await?;
+    let first = read_line(r, max_line, enc).await?;
     let code = parse_code(&first).ok_or_else(|| FtpError::Protocol(format!("invalid reply: {first:?}")))?;
     let multi = first.as_bytes().get(3) == Some(&b'-');
     let mut lines = vec![first];
     if multi {
         loop {
-            let line = read_line(r, max_line).await?;
+            let line = read_line(r, max_line, enc).await?;
             let b = line.as_bytes();
             let end = parse_code(&line) == Some(code) && (b.len() == 3 || b[3] == b' ');
             lines.push(line);
@@ -127,7 +127,14 @@ mod tests {
 
     async fn parse(input: &str) -> Result<Reply, FtpError> {
         let mut r = input.as_bytes();
-        read_reply(&mut r, 1024).await
+        read_reply(&mut r, 1024, encoding_rs::UTF_8).await
+    }
+
+    #[tokio::test]
+    async fn other_character_set() {
+        let mut r: &[u8] = b"250 R\xe9pertoire chang\xe9\r\n";
+        let reply = read_reply(&mut r, 1024, encoding_rs::WINDOWS_1252).await.unwrap();
+        assert_eq!(reply.text(), "Répertoire changé");
     }
 
     #[tokio::test]

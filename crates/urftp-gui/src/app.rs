@@ -457,11 +457,24 @@ fn default_dock() -> DockState<Pane> {
     dock
 }
 
-/// Starting folder of the local panels (a scratch folder in the interface tests).
+/// Default download folder chosen in the options (see [`set_download_dir`]).
+static DOWNLOAD_DIR: parking_lot::RwLock<Option<PathBuf>> = parking_lot::const_rwlock(None);
+
+/// Records the default download folder of the options (empty: the user folder).
+fn set_download_dir(dir: &str) {
+    let dir = dir.trim();
+    *DOWNLOAD_DIR.write() = (!dir.is_empty()).then(|| PathBuf::from(dir));
+}
+
+/// Starting folder of the local panels: the default download folder when it exists, else
+/// the user folder (a scratch folder in the interface tests).
 fn home_dir() -> PathBuf {
     #[cfg(test)]
     if let Some(dir) = ui_tests::HOME.get() {
         return dir.clone();
+    }
+    if let Some(d) = DOWNLOAD_DIR.read().clone().filter(|d| d.is_dir()) {
+        return d;
     }
     std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("C:\\"))
 }
@@ -948,6 +961,7 @@ impl UltraRushApp {
         let options = OptionsWindow::load();
         // Before anything is displayed or listed (dates and sizes follow the language).
         options::apply_language(options.settings.language);
+        set_download_dir(&options.settings.download_dir);
         let dl = options.settings.transfer.download_limit_kib * 1024;
         let ul = options.settings.transfer.upload_limit_kib * 1024;
         let mut app = Self {
@@ -1001,6 +1015,7 @@ impl UltraRushApp {
     /// Applies changed options: language, theme, rates (even during transfers), Ident.
     fn apply_settings(&mut self, ctx: &egui::Context) {
         let s = &self.options.settings;
+        set_download_dir(&s.download_dir);
         let before = urftp_i18n::language();
         options::apply_language(s.language);
         if urftp_i18n::language() != before {

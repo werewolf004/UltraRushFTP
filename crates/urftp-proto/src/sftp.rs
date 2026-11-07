@@ -82,6 +82,8 @@ pub struct SftpConfig {
     /// Read/write requests sent without waiting for the reply (pipelining), to keep a
     /// good throughput on high-latency links.
     pub max_in_flight: usize,
+    /// Local address the connection leaves from.
+    pub bind_ip: Option<std::net::IpAddr>,
 }
 
 impl Default for SftpConfig {
@@ -93,6 +95,7 @@ impl Default for SftpConfig {
             keepalive: Some(Duration::from_secs(30)),
             host_key: HostKeyPolicy::default(),
             proxy: None,
+            bind_ip: None,
         }
     }
 }
@@ -198,7 +201,7 @@ impl SftpClient {
                 status(format!("Connecting through proxy {:?} {}:{}", p.kind, p.host, p.port));
                 limit(ct, async { Ok(proxy::connect(p, host, port).await?) }).await?
             }
-            None => limit(ct, async { Ok(crate::net::connect(host, port).await?) }).await?,
+            None => limit(ct, async { Ok(crate::net::connect_from(host, port, config.bind_ip).await?) }).await?,
         };
         tcp.set_nodelay(true)?;
 

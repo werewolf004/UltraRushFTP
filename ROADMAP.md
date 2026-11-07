@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -62,10 +62,10 @@ planned work is grouped below into blocks, each ending with a release.
 - ✅ Per-site settings: Ident name, retries and timeouts, keep alive, resume, `FEAT`,
   `CLNT`, skip list, priorities, "existing file" rules, separate upload/download accounts
   (G3).
-- ⬜ Listing settings exposed: `LIST -a` (hidden files), `STAT -l`, custom command, trim
-  spaces, `PORT` fallback when `PASV` fails, time zone, charset of non-UTF-8 servers.
-- ⬜ Active-mode settings exposed: external address, local port range, local IP binding.
-- ⬜ Anonymous e-mail, default download folder, default site settings.
+- ✅ Listing settings exposed: `LIST -a` (hidden files), `STAT -l`, custom command, trim
+  spaces, `PORT` fallback when `PASV` fails, time zone, charset of non-UTF-8 servers (G4).
+- ✅ Active-mode settings exposed: external address, local port range, local IP binding (G4).
+- ✅ Anonymous e-mail, default download folder, default site settings (G4).
 - ✅ FXP between IPv6 addresses (`EPSV` / `EPRT`), IPv4/IPv6 "happy eyeballs" connection (G2).
 - ⬜ Validation against real servers (glftpd, vsftpd, ProFTPD, FileZilla Server, IIS,
   OpenSSH).

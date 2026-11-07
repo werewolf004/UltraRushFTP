@@ -121,7 +121,7 @@ try {
         Shot "$images/site-manager.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SITES = '1' }) 3
         Shot "$images/site-settings.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SITES = '1'; URUSHFTP_SITE_SETTINGS = '1' }) 3
         Shot "$images/shortcuts.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SHORTCUTS = '1' }) 3
-        $pages = @{ 0 = 'general'; 1 = 'transfers'; 3 = 'existing-file'; 4 = 'skiplist'; 6 = 'proxy'; 7 = 'ident'; 8 = 'keep-alive' }
+        $pages = @{ 0 = 'general'; 1 = 'transfers'; 3 = 'existing-file'; 4 = 'skiplist'; 6 = 'proxy'; 7 = 'ident'; 8 = 'keep-alive'; 9 = 'connection'; 10 = 'new-site' }
         foreach ($page in $pages.Keys | Sort-Object) {
             Shot "$images/options-$($pages[$page]).$lang.png" $base ($common + @{ URUSHFTP_OPEN_OPTIONS = "$page" }) 3
         }
