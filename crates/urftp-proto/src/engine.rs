@@ -28,7 +28,7 @@ use urftp_core::queue::{Endpoint, ItemId, ItemState, Load, Queue, QueueItem, Sit
 use urftp_core::skiplist::{Candidate, SkipList, SkipReason};
 
 use crate::ftp::{EntryKind, FxpOptions, fxp, path as rpath};
-use crate::session::{RemoteSession, SessionError, SiteProfile};
+use crate::session::{Account, RemoteSession, SessionError, SiteProfile, SiteRules};
 use crate::throttle::{RateLimiter, Throttled};
 
 /// Engine settings.
@@ -110,19 +110,20 @@ pub enum EngineEvent {
 /// Idle time after which a pooled connection is checked before being reused.
 const IDLE_CHECK: Duration = Duration::from_secs(30);
 
-/// Connections of a site.
+/// Connections of a site, per login (main, upload and download accounts).
 struct SitePool {
     profile: SiteProfile,
     /// Idle connections and when they were released.
-    idle: Mutex<Vec<(RemoteSession, Instant)>>,
+    idle: Mutex<HashMap<Account, Vec<(RemoteSession, Instant)>>>,
 }
 
 impl SitePool {
-    /// An idle connection, checked with the site's anti-idle command when it waited long
-    /// enough to have been kicked; otherwise a new one.
-    async fn acquire(&self) -> Result<RemoteSession, SessionError> {
+    /// An idle connection of this login, checked with the site's anti-idle command when it
+    /// waited long enough to have been kicked; otherwise a new one.
+    async fn acquire(&self, account: Account) -> Result<RemoteSession, SessionError> {
+        let account = self.profile.account(account);
         loop {
-            let idle = self.idle.lock().pop();
+            let idle = self.idle.lock().get_mut(&account).and_then(Vec::pop);
             let Some((mut s, since)) = idle else { break };
             if since.elapsed() < self.check_after() {
                 return Ok(s);
@@ -133,7 +134,7 @@ impl SitePool {
             }
             // Gone (idle kick...): try the next one, or open a new connection.
         }
-        RemoteSession::open(&self.profile, None).await
+        RemoteSession::open(&self.profile.with_account(account), None).await
     }
 
     fn check_after(&self) -> Duration {
@@ -141,9 +142,9 @@ impl SitePool {
     }
 
     /// Gives the connection back to the pool when it is still healthy.
-    fn release<T>(&self, session: RemoteSession, result: &Result<T, SessionError>) {
+    fn release<T>(&self, account: Account, session: RemoteSession, result: &Result<T, SessionError>) {
         if result.as_ref().err().is_none_or(SessionError::keeps_session) {
-            self.idle.lock().push((session, Instant::now()));
+            self.idle.lock().entry(self.profile.account(account)).or_default().push((session, Instant::now()));
         }
     }
 }
@@ -173,7 +174,7 @@ impl Engine {
         opts: EngineOptions,
         events: Option<UnboundedSender<EngineEvent>>,
     ) -> Arc<Self> {
-        let sites = sites.into_iter().map(|p| (p.name.clone(), Arc::new(SitePool { profile: p, idle: Mutex::new(Vec::new()) }))).collect();
+        let sites = sites.into_iter().map(|p| (p.name.clone(), Arc::new(SitePool { profile: p, idle: Mutex::default() }))).collect();
         Arc::new(Self { queue, sites, opts, events, load: Mutex::default(), running: Mutex::default() })
     }
 
@@ -183,7 +184,7 @@ impl Engine {
 
     /// Idle connections kept for `site` (for display / tests).
     pub fn idle_connections(&self, site: &str) -> usize {
-        self.sites.get(site).map_or(0, |p| p.idle.lock().len())
+        self.sites.get(site).map_or(0, |p| p.idle.lock().values().map(Vec::len).sum())
     }
 
     /// Stops a running item: its connections are closed and it goes to `Stopped`.
@@ -209,6 +210,47 @@ impl Engine {
 
     fn pool(&self, site: &str) -> Res<Arc<SitePool>> {
         self.sites.get(site).cloned().ok_or_else(|| SessionError::UnknownSite(site.to_string()))
+    }
+
+    /// Rules of the site the files come from (skip list, priorities).
+    fn source_rules(&self, item: &QueueItem) -> Option<&SiteRules> {
+        let site = item.src.site.as_deref().or(item.dst.site.as_deref())?;
+        self.sites.get(site).map(|p| &p.profile.rules)
+    }
+
+    /// Rules of the site the files go to (retries, "existing file", resume).
+    fn target_rules(&self, item: &QueueItem) -> Option<&SiteRules> {
+        let site = item.dst.site.as_deref().or(item.src.site.as_deref())?;
+        self.sites.get(site).map(|p| &p.profile.rules)
+    }
+
+    fn skiplist(&self, item: &QueueItem) -> &SkipList {
+        self.source_rules(item).and_then(|r| r.skiplist.as_ref()).unwrap_or(&self.opts.skiplist)
+    }
+
+    fn priorities(&self, item: &QueueItem) -> &PriorityList {
+        self.source_rules(item).and_then(|r| r.priorities.as_ref()).unwrap_or(&self.opts.priorities)
+    }
+
+    fn exists_rules(&self, item: &QueueItem) -> ExistsRules {
+        self.target_rules(item).and_then(|r| r.exists).unwrap_or(self.opts.exists)
+    }
+
+    /// Retries and delay between them.
+    fn retries(&self, item: &QueueItem) -> (u32, Duration) {
+        let r = self.target_rules(item);
+        (r.and_then(|r| r.retries).unwrap_or(self.opts.retries), r.and_then(|r| r.retry_delay).unwrap_or(self.opts.retry_delay))
+    }
+
+    /// Decision for an existing target; without resume on the target site, a partial file
+    /// is transferred again from zero.
+    fn decide(&self, item: &QueueItem, size: Option<u64>, target: Option<u64>) -> ExistsDecision {
+        match self.exists_rules(item).decide(size, target) {
+            ExistsDecision::Transfer { offset } if offset > 0 && !self.target_rules(item).is_none_or(|r| r.resume) => {
+                ExistsDecision::Transfer { offset: 0 }
+            }
+            d => d,
+        }
     }
 
     /// Processes the queue until nothing is left to start.
@@ -271,9 +313,10 @@ impl Engine {
             Err(e) => {
                 let attempt = item.attempts + 1;
                 let error = e.to_string();
-                if attempt <= self.opts.retries {
+                let (retries, delay) = self.retries(&item);
+                if attempt <= retries {
                     self.emit(EngineEvent::Retrying { id, attempt, error });
-                    tokio::time::sleep(self.opts.retry_delay).await;
+                    tokio::time::sleep(delay).await;
                     if let Some(i) = self.queue.lock().get_mut(id) {
                         i.attempts = attempt;
                     }
@@ -291,7 +334,7 @@ impl Engine {
     }
 
     fn skip_reason(&self, item: &QueueItem, name: &str, is_dir: bool, size: Option<u64>) -> Option<SkipReason> {
-        self.opts.skiplist.check(&Candidate { name, full_path: &item.src.path, is_dir, size, kind: item.kind() })
+        self.skiplist(item).check(&Candidate { name, full_path: &item.src.path, is_dir, size, kind: item.kind() })
     }
 
     fn progress(&self, id: ItemId, bytes: u64, total: Option<u64>) {
@@ -310,9 +353,9 @@ impl Engine {
 
     async fn download(&self, item: &QueueItem) -> Res<Outcome> {
         let pool = self.pool(item.src.site.as_deref().unwrap_or_default())?;
-        let mut s = pool.acquire().await?;
+        let mut s = pool.acquire(Account::Download).await?;
         let r = self.download_with(item, &mut s).await;
-        pool.release(s, &r);
+        pool.release(Account::Download, s, &r);
         r
     }
 
@@ -327,7 +370,8 @@ impl Engine {
         }
         let mut local = PathBuf::from(&item.dst.path);
         let target = tokio::fs::metadata(&local).await.ok().map(|m| m.len());
-        let mut offset = match self.opts.exists.decide(size, target) {
+        let overwrite_if_resume_fails = self.exists_rules(item).overwrite_if_resume_fails;
+        let mut offset = match self.decide(item, size, target) {
             ExistsDecision::Transfer { offset } => offset,
             ExistsDecision::Skip => return Ok(Outcome::Skipped(SkipReason::AlreadyPresent)),
             ExistsDecision::Ask => return Ok(Outcome::Ask),
@@ -345,7 +389,7 @@ impl Engine {
             let id = item.id;
             let r = s.retr(src, offset, &mut w, |n| self.progress(id, offset + n, size)).await;
             match r {
-                Err(e) if offset > 0 && e.is_resume_refused() && self.opts.exists.overwrite_if_resume_fails => offset = 0,
+                Err(e) if offset > 0 && e.is_resume_refused() && overwrite_if_resume_fails => offset = 0,
                 Err(e) => return Err(e),
                 Ok(n) => {
                     file.flush().await?;
@@ -357,9 +401,9 @@ impl Engine {
 
     async fn upload(&self, item: &QueueItem) -> Res<Outcome> {
         let pool = self.pool(item.dst.site.as_deref().unwrap_or_default())?;
-        let mut s = pool.acquire().await?;
+        let mut s = pool.acquire(Account::Upload).await?;
         let r = self.upload_with(item, &mut s).await;
-        pool.release(s, &r);
+        pool.release(Account::Upload, s, &r);
         r
     }
 
@@ -372,7 +416,8 @@ impl Engine {
         }
         let mut dst = item.dst.path.clone();
         let target = s.size_if_exists(&dst).await?;
-        let mut offset = match self.opts.exists.decide(Some(size), target) {
+        let overwrite_if_resume_fails = self.exists_rules(item).overwrite_if_resume_fails;
+        let mut offset = match self.decide(item, Some(size), target) {
             ExistsDecision::Transfer { offset } => offset,
             ExistsDecision::Skip => return Ok(Outcome::Skipped(SkipReason::AlreadyPresent)),
             ExistsDecision::Ask => return Ok(Outcome::Ask),
@@ -392,7 +437,7 @@ impl Engine {
             let mut r = Throttled::new(file, vec![self.opts.upload_limit.clone()]);
             let id = item.id;
             match s.stor(&dst, offset, &mut r, |n| self.progress(id, offset + n, Some(size))).await {
-                Err(e) if offset > 0 && e.is_resume_refused() && self.opts.exists.overwrite_if_resume_fails => offset = 0,
+                Err(e) if offset > 0 && e.is_resume_refused() && overwrite_if_resume_fails => offset = 0,
                 Err(e) => return Err(e),
                 Ok(n) => return Ok(Outcome::Done(offset + n)),
             }
@@ -402,17 +447,17 @@ impl Engine {
     async fn fxp_file(&self, item: &QueueItem) -> Res<Outcome> {
         let sp = self.pool(item.src.site.as_deref().unwrap_or_default())?;
         let dp = self.pool(item.dst.site.as_deref().unwrap_or_default())?;
-        let mut a = sp.acquire().await?;
-        let mut b = match dp.acquire().await {
+        let mut a = sp.acquire(Account::Download).await?;
+        let mut b = match dp.acquire(Account::Upload).await {
             Ok(b) => b,
             Err(e) => {
-                sp.release(a, &Ok::<(), SessionError>(()));
+                sp.release(Account::Download, a, &Ok::<(), SessionError>(()));
                 return Err(e);
             }
         };
         let r = self.fxp_with(item, &mut a, &mut b).await;
-        sp.release(a, &r);
-        dp.release(b, &r);
+        sp.release(Account::Download, a, &r);
+        dp.release(Account::Upload, b, &r);
         r
     }
 
@@ -426,7 +471,7 @@ impl Engine {
         }
         let mut dst = item.dst.path.clone();
         let target = b.size_if_exists(&dst).await?;
-        let offset = match self.opts.exists.decide(size, target) {
+        let offset = match self.decide(item, size, target) {
             ExistsDecision::Transfer { offset } => offset,
             ExistsDecision::Skip => return Ok(Outcome::Skipped(SkipReason::AlreadyPresent)),
             ExistsDecision::Ask => return Ok(Outcome::Ask),
@@ -473,9 +518,9 @@ impl Engine {
             }
             Some(site) => {
                 let pool = self.pool(site)?;
-                let mut s = pool.acquire().await?;
+                let mut s = pool.acquire(Account::Download).await?;
                 let r = s.list(&item.src.path).await;
-                pool.release(s, &r);
+                pool.release(Account::Download, s, &r);
                 r?.into_iter()
                     .map(|e| {
                         let dir = e.kind == EntryKind::Dir;
@@ -489,13 +534,13 @@ impl Engine {
         for (name, is_dir, size) in entries {
             let child_src = join_endpoint(&item.src, &name);
             let probe = Candidate { name: &name, full_path: &child_src.path, is_dir, size, kind };
-            if self.opts.skiplist.check(&probe).is_some() {
+            if self.skiplist(item).check(&probe).is_some() {
                 continue;
             }
-            let prio = if is_dir { None } else { self.opts.priorities.rank(&name) };
+            let prio = if is_dir { None } else { self.priorities(item).rank(&name) };
             children.push((child_src, join_endpoint(&item.dst, &name), is_dir, size, prio));
         }
-        if children.is_empty() && self.opts.skiplist.skip_empty_dirs {
+        if children.is_empty() && self.skiplist(item).skip_empty_dirs {
             return Ok(0);
         }
 
@@ -504,9 +549,9 @@ impl Engine {
             None => tokio::fs::create_dir_all(&item.dst.path).await?,
             Some(site) => {
                 let pool = self.pool(site)?;
-                let mut s = pool.acquire().await?;
+                let mut s = pool.acquire(Account::Upload).await?;
                 let r = s.ensure_dir(&item.dst.path).await;
-                pool.release(s, &r);
+                pool.release(Account::Upload, s, &r);
                 r?;
             }
         }

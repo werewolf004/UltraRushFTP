@@ -54,6 +54,8 @@ $sites = @{
             @{ name = 'Demo'; groups = @(); sites = @(
                     @{ id = 1; name = 'Local demo'; host = '127.0.0.1'; port = [int]$port; user = 'test'; password = 'b64:c2VjcmV0'
                         max_transfers = 3; remote_dir = '/pub'; local_dir = $local; alt_hosts = @("localhost:$port")
+                        settings = @{ retries = 5; retry_delay_secs = 10; connect_timeout_secs = 20; io_timeout_secs = 60; client_name = 'UltraRushFTP'
+                            upload_account = @{ user = 'upload'; password = 'b64:dXBsb2Fk' } }
                         bookmarks = @(@{ name = 'releases'; remote_dir = '/pub/Releases'; local_dir = '' })
                         notes = 'Development server: cargo run -p urftp-proto --example dev_server' },
                     @{ id = 2; name = 'Example FTPS'; host = 'ftp.example.com'; port = 21; protocol = 'ftps_explicit'; user = 'demo'; max_transfers = 4 },
@@ -117,6 +119,7 @@ try {
         Remove-Item -Recurse -Force "$local/Downloads/*" -ErrorAction SilentlyContinue
         Shot "$images/main-light.$lang.png" "$base -s`"$script`"" ($common + @{ URUSHFTP_THEME = 'light' }) 3
         Shot "$images/site-manager.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SITES = '1' }) 3
+        Shot "$images/site-settings.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SITES = '1'; URUSHFTP_SITE_SETTINGS = '1' }) 3
         Shot "$images/shortcuts.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SHORTCUTS = '1' }) 3
         $pages = @{ 0 = 'general'; 1 = 'transfers'; 3 = 'existing-file'; 4 = 'skiplist'; 6 = 'proxy'; 7 = 'ident'; 8 = 'keep-alive' }
         foreach ($page in $pages.Keys | Sort-Object) {

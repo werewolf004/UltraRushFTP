@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
+Summary (284 topics): ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 
 ## Main window and menus
 
@@ -182,19 +182,19 @@ Summary (284 topics): ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
 | Bookmarks | ✅ | |
 | HTTP URL mapping, copy HTTP URL | ⬜ | |
 | Display: site name instead of [1]/[2] in the log | ⬜ | The log shows Left / Right |
-| Connection: global or custom retries and timeouts | 🟡 | Global only |
-| Resume support: auto / yes / no | 🟡 | Detected automatically; not forced per site |
-| Keep alive per site | ⬜ | |
-| `FEAT` per site | 🟡 | Always sent; not configurable |
+| Connection: global or custom retries and timeouts | ✅ | |
+| Resume support: auto / yes / no | ✅ | On (the server's refusal is detected) or off per site |
+| Keep alive per site | ✅ | |
+| `FEAT` per site | ✅ | |
 | `PRET` | ✅ | Used when announced |
 | UTF-8 | ✅ | `OPTS UTF8 ON` when announced |
-| `CLNT` | ⬜ | |
+| `CLNT` | ✅ | Client name per site |
 | Compression `MODE Z` | ⬜ | |
 | `XCRC` check after transfer | ⬜ | |
 | `MLSD` | ✅ | |
 | `SSCN` / `CPSV` for encrypted FXP | ✅ | |
-| Account: different logins for uploads and downloads | ⬜ | |
-| Ident: global or custom name | 🟡 | Stored in the record; the Ident server answers the global name |
+| Account: different logins for uploads and downloads | ✅ | Browsing keeps the main login |
+| Ident: global or custom name | ✅ | Answered while the site connects |
 | Proxy: global, bypass, custom; data channel | ✅ | |
 | List mode: `STAT -l` | 🟡 | Supported by the protocol layer (`list_command`); no setting |
 | List mode: trim leading spaces | ⬜ | |
@@ -212,7 +212,7 @@ Summary (284 topics): ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
 | Transfer: FXP method (no `PASV` as source, `PASV` as target) | 🟡 | Automatic reversal when `PORT` is refused; no fixed setting |
 | Transfer: force active mode | ⬜ | |
 | Transfer: TCP buffer size | ⬜ | |
-| Skip list, priority, file-exists rules per site | ⬜ | Global only |
+| Skip list, priority, file-exists rules per site | ✅ | |
 | Event notification: monitor folders for new items | ⬜ | Needs keep alive |
 | Statistics of this server | ⬜ | Global and session statistics exist |
 
@@ -251,7 +251,7 @@ Summary (284 topics): ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
 | Limit local port range | 🟡 | Supported by the protocol layer; no setting |
 | Ident: enable, name, system, port | ✅ | |
 | Ident: only while connecting | ⬜ | |
-| Keep alive: command, interval, stop after, log out, reconnect when kicked, random command | ✅ | Global; per site in block G3 |
+| Keep alive: command, interval, stop after, log out, reconnect when kicked, random command | ✅ | Global or per site |
 | Proxy: list of named proxies | 🟡 | One global proxy and one custom proxy per site |
 | Proxy: `NOOP` during transfers, passive with proxy | ⬜ | |
 | Proxy: bypass for local addresses, exceptions | ✅ | |

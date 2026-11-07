@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::exists::ExistsRules;
 use crate::queue::SiteLimits;
+use crate::settings::{KeepAliveSettings, MaskSetting, SkipSettings};
 
 /// Protocol of a site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -109,6 +111,60 @@ pub enum IdentChoice {
     Custom(String),
 }
 
+/// Login used instead of the main one for one direction of the transfers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct Account {
+    pub user: String,
+    #[serde(with = "crate::secret::serde_secret")]
+    pub password: String,
+}
+
+/// Settings of a site that replace the global options ("Site properties" of FTPRush v2).
+/// `None` everywhere = the global setting.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SiteSettings {
+    pub retries: Option<u32>,
+    pub retry_delay_secs: Option<u32>,
+    pub connect_timeout_secs: Option<u32>,
+    pub io_timeout_secs: Option<u32>,
+    pub keep_alive: Option<KeepAliveSettings>,
+    /// Resume interrupted transfers (`REST`); off: always start again from zero.
+    pub resume: bool,
+    /// Send `FEAT` after the login (some old servers dislike it).
+    pub send_feat: bool,
+    /// Client name sent with `CLNT` after the login (empty: not sent).
+    pub client_name: String,
+    pub skiplist: Option<SkipSettings>,
+    pub priorities: Option<Vec<MaskSetting>>,
+    pub exists: Option<ExistsRules>,
+    /// Login for the uploads (`None`: the main one).
+    pub upload_account: Option<Account>,
+    /// Login for the downloads (`None`: the main one).
+    pub download_account: Option<Account>,
+}
+
+impl Default for SiteSettings {
+    fn default() -> Self {
+        Self {
+            retries: None,
+            retry_delay_secs: None,
+            connect_timeout_secs: None,
+            io_timeout_secs: None,
+            keep_alive: None,
+            resume: true,
+            send_feat: true,
+            client_name: String::new(),
+            skiplist: None,
+            priorities: None,
+            exists: None,
+            upload_account: None,
+            download_account: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Bookmark {
@@ -150,6 +206,8 @@ pub struct Site {
     /// Trusted SSH host key fingerprints (`SHA256:…`).
     pub ssh_host_keys: Vec<String>,
     pub bookmarks: Vec<Bookmark>,
+    /// Settings replacing the global options for this site.
+    pub settings: SiteSettings,
 }
 
 impl Default for Site {
@@ -179,6 +237,7 @@ impl Default for Site {
             ssh_key_file: None,
             ssh_host_keys: Vec::new(),
             bookmarks: Vec::new(),
+            settings: SiteSettings::default(),
         }
     }
 }

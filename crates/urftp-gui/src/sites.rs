@@ -11,7 +11,7 @@ use eframe::egui::{self, RichText};
 use urftp_core::import::{self, ImportResult, ImportWarning};
 use urftp_core::settings::Settings;
 use urftp_core::site::{
-    Bookmark, CertPolicy, IdentChoice, ProxyChoice, ProxyType, Site, SiteBook, SiteGroup, SiteProtocol, SiteProxy, TransferMode,
+    Account, Bookmark, CertPolicy, IdentChoice, ProxyChoice, ProxyType, Site, SiteBook, SiteGroup, SiteProtocol, SiteProxy, TransferMode,
 };
 use urftp_core::sitestore;
 
@@ -198,7 +198,7 @@ impl SiteManager {
         }
     }
 
-    pub fn show(&mut self, ctx: &egui::Context) {
+    pub fn show(&mut self, ctx: &egui::Context, settings: &Settings) {
         if !self.open {
             return;
         }
@@ -228,7 +228,7 @@ impl SiteManager {
                     });
                     ui.separator();
                     ui.vertical(|ui| {
-                        egui::ScrollArea::vertical().id_salt("site-form").show(ui, |ui| self.form(ui));
+                        egui::ScrollArea::vertical().id_salt("site-form").show(ui, |ui| self.form(ui, settings));
                     });
                 });
             });
@@ -328,7 +328,7 @@ impl SiteManager {
         self.last_change = ui.input(|i| i.time);
     }
 
-    fn form(&mut self, ui: &mut egui::Ui) {
+    fn form(&mut self, ui: &mut egui::Ui, settings: &Settings) {
         match self.selection.clone() {
             Selection::Group(path) => {
                 let is_root = path.is_empty();
@@ -354,7 +354,7 @@ impl SiteManager {
                 let probe = self.probes.lock().get(&id).cloned();
                 let Some(site) = self.book.find_mut(id) else { return };
                 let before = site.clone();
-                site_form(ui, site, show_password, probe.as_ref());
+                site_form(ui, site, show_password, probe.as_ref(), settings);
                 if *site != before {
                     self.dirty = true;
                     self.last_change = ui.input(|i| i.time);
@@ -540,7 +540,7 @@ fn optional_limit(ui: &mut egui::Ui, value: &mut Option<u32>, label: egui::Id, n
     });
 }
 
-fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: Option<&Probe>) {
+fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: Option<&Probe>, global: &Settings) {
     ui.heading(format!("{} {}", if s.protocol == SiteProtocol::Sftp { "🔑" } else { "🌐" }, s.name));
     ui.add_space(4.0);
     section(ui, &t!("site.connection"), |ui| {
@@ -753,6 +753,8 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
         });
     });
 
+    ui.push_id("site-own", |ui| own_settings(ui, s, global, show_password));
+
     section(ui, &t!("site.bookmarks"), |ui| {
         let mut remove = None;
         egui::Grid::new("site-bm").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
@@ -783,6 +785,101 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
     section(ui, &t!("site.notes"), |ui| {
         let r = ui.add(egui::TextEdit::multiline(&mut s.notes).desired_rows(3).desired_width(f32::INFINITY));
         theme::name(&r, t!("site.notes"));
+    });
+}
+
+/// Checkbox "specific to this site": on, the value starts from the global one; off, the
+/// global setting applies again.
+fn own<'a, T: Clone>(ui: &mut egui::Ui, value: &'a mut Option<T>, global: &T, label: String) -> Option<&'a mut T> {
+    let mut on = value.is_some();
+    if ui.checkbox(&mut on, label).changed() {
+        *value = on.then(|| global.clone());
+    }
+    value.as_mut()
+}
+
+/// Separate account for one direction.
+fn account_ui(ui: &mut egui::Ui, value: &mut Option<Account>, label: String, show_password: bool) {
+    let mut on = value.is_some();
+    if ui.checkbox(&mut on, label.clone()).changed() {
+        *value = on.then(Account::default);
+    }
+    if let Some(a) = value {
+        ui.horizontal(|ui| {
+            ui.add_space(24.0);
+            let r = ui.add(theme::single_line(&mut a.user).hint_text(t!("common.user")).desired_width(150.0));
+            theme::name(&r, format!("{label} — {}", t!("common.user")));
+            let r =
+                ui.add(theme::single_line(&mut a.password).password(!show_password).hint_text(t!("common.password")).desired_width(150.0));
+            theme::name(&r, format!("{label} — {}", t!("common.password")));
+        });
+    }
+}
+
+/// Settings of the site replacing the global options.
+fn own_settings(ui: &mut egui::Ui, s: &mut Site, global: &Settings, show_password: &bool) {
+    let o = &mut s.settings;
+    let is_ftp = s.protocol != SiteProtocol::Sftp;
+    // Development: `URUSHFTP_SITE_SETTINGS=1` keeps the form scrolled to this part.
+    static SCROLL: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *SCROLL.get_or_init(|| std::env::var_os("URUSHFTP_SITE_SETTINGS").is_some()) {
+        ui.scroll_to_cursor(Some(egui::Align::TOP));
+    }
+    section(ui, &t!("site.own_connection"), |ui| {
+        ui.label(RichText::new(t!("site.own_note")).weak());
+        let mut on = o.retries.is_some();
+        if ui.checkbox(&mut on, t!("site.own_retries")).changed() {
+            let t = &global.transfer;
+            o.retries = on.then_some(t.retries);
+            o.retry_delay_secs = on.then_some(t.retry_delay_secs);
+            o.connect_timeout_secs = on.then_some(t.connect_timeout_secs);
+            o.io_timeout_secs = on.then_some(t.io_timeout_secs);
+        }
+        if on {
+            egui::Grid::new("site-own-retries").num_columns(2).spacing([16.0, 6.0]).show(ui, |ui| {
+                for (value, key, range) in [
+                    (&mut o.retries, "options.retries", 0..=50),
+                    (&mut o.retry_delay_secs, "options.retry_delay", 0..=600),
+                    (&mut o.connect_timeout_secs, "options.connect_timeout", 5..=600),
+                    (&mut o.io_timeout_secs, "options.io_timeout", 10..=3600),
+                ] {
+                    let v = value.get_or_insert(*range.start());
+                    theme::grid_row(ui, urftp_i18n::text(key), egui::DragValue::new(v).range(range));
+                }
+            });
+        }
+        ui.checkbox(&mut o.resume, t!("site.resume"));
+        if is_ftp {
+            ui.checkbox(&mut o.send_feat, t!("site.send_feat"));
+            ui.horizontal(|ui| {
+                theme::labelled(
+                    ui,
+                    t!("site.client_name"),
+                    theme::single_line(&mut o.client_name).hint_text("UltraRushFTP").desired_width(160.0),
+                );
+            });
+        }
+        if let Some(k) = own(ui, &mut o.keep_alive, &global.keep_alive, t!("site.own_keep_alive")) {
+            ui.indent("site-own-ka", |ui| crate::options::keep_alive_ui(ui, k));
+        }
+    });
+
+    section(ui, &t!("site.own_queue"), |ui| {
+        if let Some(k) = own(ui, &mut o.skiplist, &global.skiplist, t!("site.own_skiplist")) {
+            ui.indent("site-own-skip", |ui| crate::options::skiplist_ui(ui, k));
+        }
+        if let Some(p) = own(ui, &mut o.priorities, &global.priorities, t!("site.own_priorities")) {
+            ui.indent("site-own-prio", |ui| crate::options::priorities_ui(ui, p));
+        }
+        if let Some(e) = own(ui, &mut o.exists, &global.exists, t!("site.own_exists")) {
+            ui.indent("site-own-exists", |ui| crate::options::exists_ui(ui, e));
+        }
+    });
+
+    section(ui, &t!("site.accounts"), |ui| {
+        ui.label(RichText::new(t!("site.accounts_note")).weak());
+        account_ui(ui, &mut o.upload_account, t!("site.upload_account"), *show_password);
+        account_ui(ui, &mut o.download_account, t!("site.download_account"), *show_password);
     });
 }
 

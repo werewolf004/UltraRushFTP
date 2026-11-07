@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
+Résumé (284 sujets) : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17.
 
 ## Fenêtre principale et menus
 
@@ -182,19 +182,19 @@ Résumé (284 sujets) : ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
 | Signets | ✅ | |
 | Correspondance d'URL HTTP, copier l'URL HTTP | ⬜ | |
 | Affichage : nom du site au lieu de [1]/[2] dans le journal | ⬜ | Le journal affiche Gauche / Droite |
-| Connexion : essais et délais globaux ou propres au site | 🟡 | Globaux seulement |
-| Reprise : auto / oui / non | 🟡 | Détectée automatiquement ; pas forcée par site |
-| Maintien de connexion par site | ⬜ | |
-| `FEAT` par site | 🟡 | Toujours envoyé ; non réglable |
+| Connexion : essais et délais globaux ou propres au site | ✅ | |
+| Reprise : auto / oui / non | ✅ | Active (le refus du serveur est détecté) ou désactivée par site |
+| Maintien de connexion par site | ✅ | |
+| `FEAT` par site | ✅ | |
 | `PRET` | ✅ | Utilisé quand le serveur l'annonce |
 | UTF-8 | ✅ | `OPTS UTF8 ON` quand le serveur l'annonce |
-| `CLNT` | ⬜ | |
+| `CLNT` | ✅ | Nom du client par site |
 | Compression `MODE Z` | ⬜ | |
 | Vérification `XCRC` après transfert | ⬜ | |
 | `MLSD` | ✅ | |
 | `SSCN` / `CPSV` pour le FXP chiffré | ✅ | |
-| Comptes : identifiants différents pour envois et téléchargements | ⬜ | |
-| Ident : nom global ou propre au site | 🟡 | Enregistré dans la fiche ; le serveur Ident répond le nom global |
+| Comptes : identifiants différents pour envois et téléchargements | ✅ | La navigation garde le compte principal |
+| Ident : nom global ou propre au site | ✅ | Répondu pendant la connexion du site |
 | Proxy : global, contourné, personnalisé ; canal de données | ✅ | |
 | Mode de listing : `STAT -l` | 🟡 | Géré par la couche protocole (`list_command`) ; pas de réglage |
 | Mode de listing : retirer les espaces de tête | ⬜ | |
@@ -212,7 +212,7 @@ Résumé (284 sujets) : ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
 | Transfert : méthode FXP (pas de `PASV` côté source, `PASV` côté cible) | 🟡 | Inversion automatique quand `PORT` est refusé ; pas de réglage fixe |
 | Transfert : forcer le mode actif | ⬜ | |
 | Transfert : taille du tampon TCP | ⬜ | |
-| Liste d'exclusion, priorités, règles « fichier existant » par site | ⬜ | Globales seulement |
+| Liste d'exclusion, priorités, règles « fichier existant » par site | ✅ | |
 | Notification d'événements : surveiller des dossiers | ⬜ | Demande le maintien de connexion |
 | Statistiques de ce serveur | ⬜ | Statistiques globales et de session disponibles |
 
@@ -251,7 +251,7 @@ Résumé (284 sujets) : ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17.
 | Plage de ports locaux | 🟡 | Gérée par la couche protocole ; pas de réglage |
 | Ident : activer, nom, système, port | ✅ | |
 | Ident : seulement pendant la connexion | ⬜ | |
-| Maintien de connexion : commande, intervalle, arrêt, déconnexion, reconnexion après expulsion, commande aléatoire | ✅ | Global ; par site au bloc G3 |
+| Maintien de connexion : commande, intervalle, arrêt, déconnexion, reconnexion après expulsion, commande aléatoire | ✅ | Global ou par site |
 | Proxy : liste de proxys nommés | 🟡 | Un proxy global et un proxy personnalisé par site |
 | Proxy : `NOOP` pendant les transferts, passif avec proxy | ⬜ | |
 | Proxy : contourner pour les adresses locales, exceptions | ✅ | |

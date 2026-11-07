@@ -192,9 +192,24 @@ idle before reusing it, and opens a new one when the server has dropped it.
 | Max. downloads / Max. uploads | not set | Extra limits per direction |
 | Remote folder, local folder | empty | Opened on connection |
 | Proxy | Global setting | Global setting, Never use a proxy, or a proxy specific to the site (same fields as the global one) |
-| Ident name specific to this site | off | Stored; not yet answered by the Ident server (see the roadmap) |
+| Ident name specific to this site | off | Answered by the Ident server while the site connects (the server must be enabled) |
 | Bookmarks | none | Name, remote folder, local folder; used by `RS_BOOKMARK` in scripts |
 | Notes | empty | Free text |
+
+![Settings of a site](images/site-settings.en.png)
+
+**Settings of the site** (sections *Connection settings of this site*, *Queue rules of this
+site*, *Separate accounts*). A setting left unticked follows the global option.
+
+| Field | Default | Notes |
+|---|---|---|
+| Own retries and timeouts | off | Retries, delay between retries, connection and reply timeouts; they start from the global values (Transfers page) |
+| Resume interrupted transfers | on | Off: a partial file is always transferred again from zero (no `REST`) |
+| Ask the server its features (FEAT) | on | FTP: off for old servers that dislike `FEAT` (`MLSD`, `PRET`, `UTF8` are then not detected) |
+| Client name (CLNT) | empty | FTP: sent with `CLNT` after the login (empty: not sent) |
+| Own keep alive and reconnection | off | Same fields as the Keep alive page |
+| Own skip list / priorities / "existing file" rules | off | Same fields as the matching pages; the skip list and the priorities of the site the files come from apply, the "existing file" rules, the retries and the resume setting of the site they go to |
+| Account for uploads / for downloads | off | Login and password used by the transfers in this direction (and the folders created or listed for them); browsing keeps the main login |
 
 **Connect** (site manager): hold `Shift` for a ghost login (`!user`: the server closes
 the other sessions of the account) and `Ctrl` for `-password` (glftpd and others: no
@@ -301,6 +316,7 @@ Use `mirc/x86/rushmirc.dll` for 32-bit mIRC and `mirc/x64/rushmirc.dll` for 64-b
 | `URUSHFTP_SCRIPT` | Script source run at startup |
 | `URUSHFTP_IPC_CLASS` | Window class used for the mIRC link instead of `TfmRush` (tests next to a running FTPRush) |
 | `URUSHFTP_OPEN_SITES` | Development: opens the site manager on this site id |
+| `URUSHFTP_SITE_SETTINGS` | Development: keeps the site form scrolled to the settings of the site |
 | `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 8) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Development: opens the keyboard shortcuts window |
 

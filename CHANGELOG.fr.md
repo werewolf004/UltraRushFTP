@@ -12,6 +12,11 @@ la traduction.
 
 ### Ajouté
 
+- **Réglages propres à un site** remplaçant les options globales : essais et délais,
+  maintien de connexion et reconnexion, reprise activée ou non, `FEAT` activé ou non, nom de
+  client `CLNT`, liste d'exclusion, priorités, règles « fichier existant », comptes séparés
+  pour les envois et les téléchargements.
+- **Nom Ident par site** : répondu par le serveur Ident pendant la connexion du site.
 - **Plusieurs adresses par site** (fiche du site → Autres adresses) : essayées à tour de
   rôle quand l'une ne répond pas ou refuse la connexion ; celle qui a marché sert en premier
   la fois suivante.

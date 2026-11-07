@@ -1089,6 +1089,8 @@ impl UltraRushApp {
             limits: SiteLimits { max_transfers: s.transfer.quick_connect_transfers, ..SiteLimits::default() },
             session: urftp_proto::profile::session_policy(s),
             hosts: Default::default(),
+            rules: Default::default(),
+            ident: None,
         })
     }
 
@@ -1141,10 +1143,22 @@ impl UltraRushApp {
     }
 
     /// Connection from a site manager record.
+    /// Connection profile of a site record, with its own Ident name when the Ident server
+    /// runs.
+    pub(crate) fn site_profile(&self, site: &Site) -> SiteProfile {
+        let mut p = sites::to_profile(site, &self.options.settings);
+        if let (Some(srv), urftp_core::site::IdentChoice::Custom(name)) = (&self.ident, &site.ident)
+            && !name.trim().is_empty()
+        {
+            p.ident = Some(urftp_proto::session::SiteIdent { registrar: srv.registrar(), name: name.trim().to_string() });
+        }
+        p
+    }
+
     /// Availability tests asked in the site manager: every site in parallel.
     fn run_probes(&mut self, ctx: &egui::Context) {
         for site in self.sites.take_probe_requests() {
-            let profile = sites::to_profile(&site, &self.options.settings);
+            let profile = self.site_profile(&site);
             let probes = self.sites.probes.clone();
             let ctx = ctx.clone();
             self.rt.spawn(async move {
@@ -1159,7 +1173,7 @@ impl UltraRushApp {
     }
 
     fn connect_site(&mut self, site: Site, variant: sites::LoginVariant, ctx: &egui::Context) {
-        let profile = sites::to_profile(&site, &self.options.settings).with_login_variant(variant.ghost, variant.quiet);
+        let profile = self.site_profile(&site).with_login_variant(variant.ghost, variant.quiet);
         let remote = (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone());
         self.connect_profile(profile, Some(site.id), remote, ctx);
         if !site.local_dir.trim().is_empty()
@@ -1463,7 +1477,7 @@ impl UltraRushApp {
         let Some(t) = self.tabs.get(tab) else { return Vec::new() };
         let names: BTreeSet<String> =
             t.queue.lock().items().iter().flat_map(|i| [i.src.site.clone(), i.dst.site.clone()]).flatten().collect();
-        names.iter().filter_map(|n| self.sites.book.find_by_name(n)).map(|s| sites::to_profile(s, &self.options.settings)).collect()
+        names.iter().filter_map(|n| self.sites.book.find_by_name(n)).map(|s| self.site_profile(s)).collect()
     }
 
     /// Keyboard shortcuts. Application shortcuts work everywhere outside dialogs; the file
@@ -1769,7 +1783,7 @@ impl eframe::App for UltraRushApp {
         self.prompt_dialog(&ctx);
         self.trust_dialog(&ctx);
         self.shortcuts_window(&ctx);
-        self.sites.show(&ctx);
+        self.sites.show(&ctx, &self.options.settings);
         if self.options.show(&ctx) {
             self.apply_settings(&ctx);
         }

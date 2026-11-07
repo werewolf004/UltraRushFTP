@@ -297,8 +297,7 @@ impl AppHost<'_> {
 
     /// Connects a site in a new panel and returns its position.
     fn connect(&mut self, site: &Site, dir: Option<String>, flags: i64) -> (usize, usize) {
-        let profile = sites::to_profile(site, &self.app.options.settings)
-            .with_login_variant(has_flag(flags, "RS_GHOST"), has_flag(flags, "RS_INVERT"));
+        let profile = self.app.site_profile(site).with_login_variant(has_flag(flags, "RS_GHOST"), has_flag(flags, "RS_INVERT"));
         let dir = dir.or_else(|| (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone()));
         self.app.connect_profile(profile, Some(site.id), dir, self.ctx);
         (self.app.active, 1)
@@ -348,8 +347,7 @@ impl AppHost<'_> {
                 self.app.new_tab();
                 let t = self.app.active;
                 for (side, (site, dir)) in w.iter().enumerate() {
-                    let profile = sites::to_profile(site, &self.app.options.settings)
-                        .with_login_variant(has_flag(flags, "RS_GHOST"), has_flag(flags, "RS_INVERT"));
+                    let profile = self.app.site_profile(site).with_login_variant(has_flag(flags, "RS_GHOST"), has_flag(flags, "RS_INVERT"));
                     let dir = dir.clone().or_else(|| (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone()));
                     self.app.open_remote(t, side, profile, Some(site.id), dir, self.ctx);
                 }

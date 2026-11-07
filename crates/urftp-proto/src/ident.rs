@@ -47,7 +47,9 @@ impl Default for IdentConfig {
     }
 }
 
-type Registry = Arc<Mutex<HashMap<(IpAddr, u16), String>>>;
+/// Name registered for (server IP, server port), and how many registrations hold it
+/// (parallel connections to the same server).
+type Registry = Arc<Mutex<HashMap<(IpAddr, u16), (String, usize)>>>;
 
 /// Running Ident server; it stops when dropped.
 pub struct IdentServer {
@@ -64,7 +66,13 @@ pub struct IdentRegistration {
 
 impl Drop for IdentRegistration {
     fn drop(&mut self) {
-        self.registry.lock().remove(&self.key);
+        let mut reg = self.registry.lock();
+        if let Some((_, count)) = reg.get_mut(&self.key) {
+            *count -= 1;
+            if *count == 0 {
+                reg.remove(&self.key);
+            }
+        }
     }
 }
 
@@ -90,11 +98,38 @@ impl IdentServer {
         self.local
     }
 
+    /// Handle to register site names, usable by the connections (cheap to clone).
+    pub fn registrar(&self) -> IdentRegistrar {
+        IdentRegistrar { registry: self.registry.clone() }
+    }
+
     /// Answers `name` to requests coming from `server_ip` for the FTP port `server_port`.
     /// Call it before connecting: the FTP server queries as soon as TCP is open.
     pub fn register(&self, server_ip: IpAddr, server_port: u16, name: impl Into<String>) -> IdentRegistration {
+        self.registrar().register(server_ip, server_port, &name.into())
+    }
+}
+
+/// Registers site names on a running Ident server (see [`IdentServer::registrar`]).
+#[derive(Clone)]
+pub struct IdentRegistrar {
+    registry: Registry,
+}
+
+impl std::fmt::Debug for IdentRegistrar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("IdentRegistrar")
+    }
+}
+
+impl IdentRegistrar {
+    /// Like [`IdentServer::register`].
+    pub fn register(&self, server_ip: IpAddr, server_port: u16, name: &str) -> IdentRegistration {
         let key = (canonical(server_ip), server_port);
-        self.registry.lock().insert(key, sanitize(&name.into()));
+        let mut reg = self.registry.lock();
+        // The latest name wins; the entry stays until every registration is dropped.
+        let entry = reg.entry(key).or_insert_with(|| (String::new(), 0));
+        *entry = (sanitize(name), entry.1 + 1);
         IdentRegistration { registry: self.registry.clone(), key }
     }
 }
@@ -131,7 +166,7 @@ fn answer(query: &str, peer: IpAddr, reg: &Registry, config: &IdentConfig) -> St
     let Some((local, remote)) = ports else {
         return format!("{} : ERROR : INVALID-PORT", query.trim());
     };
-    let name = reg.lock().get(&(canonical(peer), remote)).cloned().unwrap_or_else(|| sanitize(&config.name));
+    let name = reg.lock().get(&(canonical(peer), remote)).map(|(n, _)| n.clone()).unwrap_or_else(|| sanitize(&config.name));
     format!("{local} , {remote} : USERID : {} : {name}", sanitize(&config.system))
 }
 
@@ -159,7 +194,7 @@ mod tests {
         let reg: Registry = Arc::default();
         let cfg = IdentConfig::default();
         let srv: IpAddr = "203.0.113.4".parse().unwrap();
-        reg.lock().insert((srv, 21), "monident".into());
+        reg.lock().insert((srv, 21), ("monident".into(), 1));
         assert_eq!(answer("6193, 21", srv, &reg, &cfg), "6193 , 21 : USERID : UNIX : monident");
         assert_eq!(answer("6193 , 2121", srv, &reg, &cfg), "6193 , 2121 : USERID : UNIX : URUSHFTP");
         let other: IpAddr = "198.51.100.1".parse().unwrap();
@@ -167,6 +202,19 @@ mod tests {
         assert_eq!(answer("abc", srv, &reg, &cfg), "abc : ERROR : INVALID-PORT");
         assert_eq!(answer("0 , 21", srv, &reg, &cfg), "0 , 21 : ERROR : INVALID-PORT");
         assert_eq!(answer("70000 , 21", srv, &reg, &cfg), "70000 , 21 : ERROR : INVALID-PORT");
+    }
+
+    #[test]
+    fn parallel_registrations_keep_the_name() {
+        let r = IdentRegistrar { registry: Registry::default() };
+        let srv: IpAddr = "203.0.113.4".parse().unwrap();
+        let cfg = IdentConfig::default();
+        let a = r.register(srv, 21, "site");
+        let b = r.register(srv, 21, "site");
+        drop(a);
+        assert!(answer("1,21", srv, &r.registry, &cfg).ends_with(": site"), "still connecting through b");
+        drop(b);
+        assert!(answer("1,21", srv, &r.registry, &cfg).ends_with(": URUSHFTP"));
     }
 
     #[test]

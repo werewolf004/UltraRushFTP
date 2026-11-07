@@ -248,7 +248,12 @@ impl Default for Settings {
 
 impl Settings {
     pub fn priority_list(&self) -> PriorityList {
-        PriorityList::new(self.priorities.iter().filter(|m| !m.mask.trim().is_empty()).filter_map(|m| m.compile().ok()))
+        Self::priorities_of(&self.priorities)
+    }
+
+    /// Usable priority list; empty or invalid masks are ignored.
+    pub fn priorities_of(masks: &[MaskSetting]) -> PriorityList {
+        PriorityList::new(masks.iter().filter(|m| !m.mask.trim().is_empty()).filter_map(|m| m.compile().ok()))
     }
 
     pub fn default_path() -> PathBuf {

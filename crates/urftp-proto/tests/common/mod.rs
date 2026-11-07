@@ -539,7 +539,7 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 s.push_str("211 End");
                 reply(&mut c, &s).await?;
             }
-            "OPTS" | "NOOP" | "TYPE" | "PRET" => reply(&mut c, "200 OK").await?,
+            "OPTS" | "NOOP" | "TYPE" | "PRET" | "CLNT" => reply(&mut c, "200 OK").await?,
             "SYST" => reply(&mut c, "215 UNIX Type: L8").await?,
             "PWD" => reply(&mut c, &format!("257 \"{}\" is current directory", st.cwd)).await?,
             "CWD" | "CDUP" => {

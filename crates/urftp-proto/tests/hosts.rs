@@ -21,6 +21,8 @@ fn profile(port: u16, alternates: Vec<(String, u16)>) -> SiteProfile {
         limits: SiteLimits::default(),
         session: Default::default(),
         hosts: HostList::new(alternates),
+        rules: Default::default(),
+        ident: None,
     }
 }
 

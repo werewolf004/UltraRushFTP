@@ -11,6 +11,10 @@ GitHub release with the same tag.
 
 ### Added
 
+- **Settings of a site** replacing the global options: retries and timeouts, keep alive and
+  reconnection, resume on or off, `FEAT` on or off, `CLNT` client name, skip list,
+  priorities, "existing file" rules, separate accounts for uploads and downloads.
+- **Ident name per site**: answered by the Ident server while the site connects.
 - **Several addresses per site** (site record → Other addresses): tried in turn when one
   cannot be reached or refuses the login; the address that worked is used first next time.
 - **Test availability** of a site or of every site of a folder (site manager toolbar).

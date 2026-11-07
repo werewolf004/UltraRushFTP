@@ -4,9 +4,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
+use urftp_core::exists::ExistsRules;
+use urftp_core::priority::PriorityList;
 use urftp_core::queue::SiteLimits;
+use urftp_core::skiplist::SkipList;
 
 use crate::ftp::{FtpClient, FtpConfig, FtpError, LogLine, LogSink, RemoteEntry, Reply, path};
+use crate::ident::IdentRegistrar;
 use crate::keepalive::SessionPolicy;
 use crate::sftp::{SftpAuth, SftpClient, SftpConfig, SftpError};
 
@@ -33,6 +37,73 @@ pub struct SiteProfile {
     pub session: SessionPolicy,
     /// Other addresses of the site, tried in turn when one fails.
     pub hosts: HostList,
+    /// Queue rules and accounts specific to the site.
+    pub rules: SiteRules,
+    /// Ident name answered while this site connects (`None`: the global name).
+    pub ident: Option<SiteIdent>,
+}
+
+/// Login and password (the password never appears in `Debug`).
+#[derive(Clone, PartialEq, Eq)]
+pub struct Credentials {
+    pub user: String,
+    pub password: String,
+}
+
+impl std::fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Credentials({}, ****)", self.user)
+    }
+}
+
+/// Queue settings of a site replacing the engine options (`None`: the engine's).
+///
+/// For a transfer, the skip list and the priorities are those of the site the files come
+/// from; the retries, the "existing file" rules and the resume setting those of the site
+/// they go to (of the remote site for a download or an upload).
+#[derive(Debug, Clone)]
+pub struct SiteRules {
+    pub retries: Option<u32>,
+    pub retry_delay: Option<Duration>,
+    pub skiplist: Option<SkipList>,
+    pub priorities: Option<PriorityList>,
+    pub exists: Option<ExistsRules>,
+    /// Resume interrupted transfers; off: always start again from zero.
+    pub resume: bool,
+    /// Login for the uploads (and the folders created for them).
+    pub upload_account: Option<Credentials>,
+    /// Login for the downloads (and the listings of the folders downloaded).
+    pub download_account: Option<Credentials>,
+}
+
+impl Default for SiteRules {
+    fn default() -> Self {
+        Self {
+            retries: None,
+            retry_delay: None,
+            skiplist: None,
+            priorities: None,
+            exists: None,
+            resume: true,
+            upload_account: None,
+            download_account: None,
+        }
+    }
+}
+
+/// Ident name of a site, registered on the running Ident server while connecting.
+#[derive(Debug, Clone)]
+pub struct SiteIdent {
+    pub registrar: IdentRegistrar,
+    pub name: String,
+}
+
+/// Which login a connection uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Account {
+    Main,
+    Upload,
+    Download,
 }
 
 /// Other `host:port` addresses of a site ("Site IP List" of FTPRush v2).
@@ -53,6 +124,30 @@ impl HostList {
 }
 
 impl SiteProfile {
+    /// The login actually used for `account` (`Main` when the site has no such account).
+    pub fn account(&self, account: Account) -> Account {
+        match account {
+            Account::Upload if self.rules.upload_account.is_some() => Account::Upload,
+            Account::Download if self.rules.download_account.is_some() => Account::Download,
+            _ => Account::Main,
+        }
+    }
+
+    /// Copy of the profile logging in with `account`.
+    pub fn with_account(&self, account: Account) -> SiteProfile {
+        let creds = match self.account(account) {
+            Account::Main => None,
+            Account::Upload => self.rules.upload_account.as_ref(),
+            Account::Download => self.rules.download_account.as_ref(),
+        };
+        let mut p = self.clone();
+        if let Some(c) = creds {
+            p.user = c.user.clone();
+            p.password = c.password.clone();
+        }
+        p
+    }
+
     /// Every address of the site, the main one first.
     pub fn addresses(&self) -> Vec<(String, u16)> {
         std::iter::once((self.host.clone(), self.port)).chain(self.hosts.alternates.iter().cloned()).collect()
@@ -190,6 +285,16 @@ impl RemoteSession {
     }
 
     async fn open_at(site: &SiteProfile, host: &str, port: u16, log: Option<LogSink>) -> Result<Self> {
+        // The FTP server queries the Ident server as soon as TCP is open: the name of the
+        // site is registered for its addresses before connecting, until the login is done.
+        let mut _ident = Vec::new();
+        if let (Some(id), SiteProtocol::Ftp(_)) = (&site.ident, &site.protocol) {
+            let addrs: Vec<std::net::SocketAddr> = match host.trim_matches(['[', ']']).parse::<std::net::IpAddr>() {
+                Ok(ip) => vec![std::net::SocketAddr::new(ip, port)],
+                Err(_) => tokio::net::lookup_host((host, port)).await.map(Iterator::collect).unwrap_or_default(),
+            };
+            _ident = addrs.iter().map(|a| id.registrar.register(a.ip(), port, &id.name)).collect();
+        }
         Ok(match &site.protocol {
             SiteProtocol::Ftp(cfg) => {
                 let mut c = FtpClient::connect_with_log(host, port, cfg.clone(), log).await?;

@@ -25,6 +25,8 @@ fn profile(srv: &MockServer, session: SessionPolicy) -> SiteProfile {
         limits: SiteLimits::default(),
         session,
         hosts: Default::default(),
+        rules: Default::default(),
+        ident: None,
     }
 }
 

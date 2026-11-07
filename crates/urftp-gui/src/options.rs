@@ -5,7 +5,7 @@ use urftp_i18n::{Lang, t};
 
 use eframe::egui::{self, RichText};
 use urftp_core::exists::{ExistsAction, ExistsRules};
-use urftp_core::settings::{GlobalProxy, KeepAliveSettings, LanguageSetting, MaskSetting, Settings, SkipRuleSetting};
+use urftp_core::settings::{GlobalProxy, KeepAliveSettings, LanguageSetting, MaskSetting, Settings, SkipRuleSetting, SkipSettings};
 use urftp_core::site::ProxyType;
 use urftp_core::skiplist::{RuleAction, RuleTarget};
 
@@ -184,26 +184,8 @@ impl OptionsWindow {
                 ui.add_space(6.0);
                 ui.label(RichText::new(t!("options.speed_note")).weak());
             }
-            Page::Exists => {
-                let e = &mut s.exists;
-                egui::Grid::new("opt-exists").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                    for (label, action) in [
-                        (t!("options.exists_smaller"), &mut e.smaller),
-                        (t!("options.exists_same"), &mut e.same),
-                        (t!("options.exists_larger"), &mut e.larger),
-                    ] {
-                        let l = ui.label(&label);
-                        exists_combo(ui, &label, action).labelled_by(l.id);
-                        ui.end_row();
-                    }
-                });
-                ui.add_space(6.0);
-                ui.checkbox(&mut e.overwrite_if_resume_fails, t!("options.exists_restart"));
-                if ui.button(t!("common.defaults")).clicked() {
-                    *e = ExistsRules::default();
-                }
-            }
-            Page::Skiplist => skiplist_ui(ui, s),
+            Page::Exists => exists_ui(ui, &mut s.exists),
+            Page::Skiplist => skiplist_ui(ui, &mut s.skiplist),
             Page::Priorities => priorities_ui(ui, &mut s.priorities),
             Page::Proxy => proxy_ui(ui, &mut s.proxy),
             Page::KeepAlive => keep_alive_ui(ui, &mut s.keep_alive),
@@ -298,8 +280,28 @@ fn mask_field(ui: &mut egui::Ui, m: &mut MaskSetting, width: f32, name: &str) {
     }
 }
 
-fn skiplist_ui(ui: &mut egui::Ui, s: &mut Settings) {
-    let k = &mut s.skiplist;
+/// "Existing file" rules (options page, and site record when the site has its own).
+pub(crate) fn exists_ui(ui: &mut egui::Ui, e: &mut ExistsRules) {
+    egui::Grid::new("opt-exists").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        for (label, action) in [
+            (t!("options.exists_smaller"), &mut e.smaller),
+            (t!("options.exists_same"), &mut e.same),
+            (t!("options.exists_larger"), &mut e.larger),
+        ] {
+            let l = ui.label(&label);
+            exists_combo(ui, &label, action).labelled_by(l.id);
+            ui.end_row();
+        }
+    });
+    ui.add_space(6.0);
+    ui.checkbox(&mut e.overwrite_if_resume_fails, t!("options.exists_restart"));
+    if ui.button(t!("common.defaults")).clicked() {
+        *e = ExistsRules::default();
+    }
+}
+
+/// Skip list (options page, and site record when the site has its own).
+pub(crate) fn skiplist_ui(ui: &mut egui::Ui, k: &mut SkipSettings) {
     ui.checkbox(&mut k.enabled, t!("options.skip_enable"));
     ui.checkbox(&mut k.skip_zero_byte_files, t!("options.skip_zero"));
     ui.checkbox(&mut k.skip_empty_dirs, t!("options.skip_empty_dirs"));
@@ -370,7 +372,7 @@ fn reorder_buttons(ui: &mut egui::Ui, i: usize, n: usize, swap: &mut Option<(usi
     }
 }
 
-fn priorities_ui(ui: &mut egui::Ui, list: &mut Vec<MaskSetting>) {
+pub(crate) fn priorities_ui(ui: &mut egui::Ui, list: &mut Vec<MaskSetting>) {
     ui.label(RichText::new(t!("options.prio_note")).weak());
     ui.add_space(4.0);
     let mut remove = None;
@@ -395,7 +397,7 @@ fn priorities_ui(ui: &mut egui::Ui, list: &mut Vec<MaskSetting>) {
 }
 
 /// Keep alive and automatic reconnection.
-fn keep_alive_ui(ui: &mut egui::Ui, k: &mut KeepAliveSettings) {
+pub(crate) fn keep_alive_ui(ui: &mut egui::Ui, k: &mut KeepAliveSettings) {
     ui.checkbox(&mut k.enabled, t!("options.ka_enable"));
     ui.add_enabled_ui(k.enabled, |ui| {
         egui::Grid::new("opt-keepalive").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {

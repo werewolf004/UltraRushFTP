@@ -410,3 +410,44 @@ fn shift_and_ctrl_pick_the_login_variant() {
     assert_eq!(LoginVariant::from_modifiers(Modifiers::SHIFT), LoginVariant { ghost: true, quiet: false });
     assert_eq!(LoginVariant::from_modifiers(Modifiers::COMMAND), LoginVariant { ghost: false, quiet: true });
 }
+
+#[test]
+fn site_own_settings_start_from_the_global_ones() {
+    let mut ui = Ui::start(Lang::En, true);
+    let site = urftp_core::site::Site { name: "Own".into(), host: "a.example.com".into(), ..Default::default() };
+    let id = ui.app().sites.book.add_site(&[], site);
+    ui.app().sites.open = true;
+    ui.run();
+    ui.harness.get_by_label_contains("Own").click();
+    ui.run();
+    ui.harness.get_by_label(&t!("site.own_retries")).click_accesskit();
+    ui.harness.get_by_label(&t!("site.upload_account")).click_accesskit();
+    ui.run();
+    let global = ui.app().options.settings.transfer.retries;
+    let s = ui.app().sites.book.find(id).cloned().unwrap();
+    assert_eq!(s.settings.retries, Some(global));
+    assert!(s.settings.upload_account.is_some() && s.settings.download_account.is_none());
+    assert_all_named(&ui, "site manager, own settings");
+}
+
+#[test]
+fn shift_on_connect_asks_for_a_ghost_login() {
+    let mut ui = Ui::start(Lang::En, true);
+    // A local port nobody listens on: no network access.
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let site = urftp_core::site::Site { name: "Ghost".into(), host: "127.0.0.1".into(), port, ..Default::default() };
+    let id = ui.app().sites.book.add_site(&[], site);
+    ui.app().sites.open = true;
+    ui.run();
+    ui.harness.get_by_label_contains("Ghost").click();
+    ui.run();
+    ui.harness.get_by_label(&t!("sites.connect")).click_modifiers(Modifiers::SHIFT);
+    ui.run();
+    // The panel connects with the ghost login.
+    let app = ui.app();
+    let user = app.tabs.iter().flat_map(|t| t.sides.iter()).find_map(|s| match s {
+        Side::Remote(r) if r.site_id == Some(id) => Some(r.profile.user.clone()),
+        _ => None,
+    });
+    assert_eq!(user.as_deref(), Some("!anonymous"));
+}

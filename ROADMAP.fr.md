@@ -54,7 +54,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
@@ -64,9 +64,9 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
   disponibilité des sites (G2).
 - ✅ Connexion fantôme (`!user`, `Maj`+connexion) et `-motdepasse` (`Ctrl`+connexion)
   depuis l'interface, `RS_INVERT` dans les scripts (G2).
-- ⬜ Réglages par site : nom Ident, essais et délais, maintien de connexion, reprise,
+- ✅ Réglages par site : nom Ident, essais et délais, maintien de connexion, reprise,
   `FEAT`, `CLNT`, liste d'exclusion, priorités, règles « fichier existant », comptes
-  séparés pour envois et téléchargements.
+  séparés pour envois et téléchargements (G3).
 - ⬜ Réglages de listing accessibles : `LIST -a` (fichiers cachés), `STAT -l`, commande
   personnalisée, espaces de tête, repli `PORT` quand `PASV` échoue, fuseau horaire, jeu de
   caractères des serveurs non UTF-8.

@@ -5,14 +5,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use urftp_core::settings::{GlobalProxy, Settings};
+use urftp_core::settings::{GlobalProxy, KeepAliveSettings, Settings};
 use urftp_core::site::{CertPolicy, ProxyChoice, ProxyType, Site, SiteProtocol, SiteProxy, TransferMode};
 
 use crate::engine::EngineOptions;
 use crate::ftp::{FtpConfig, Security, TlsOptions, TlsVerify};
 use crate::keepalive::{KeepAlive, Reconnect, SessionPolicy, split_list};
 use crate::proxy::{ProxyConfig, ProxyKind, parse_exceptions};
-use crate::session::{HostList, SiteProfile, SiteProtocol as ProfileProtocol};
+use crate::session::{Credentials, HostList, SiteProfile, SiteProtocol as ProfileProtocol, SiteRules};
 use crate::sftp::{HostKeyPolicy, SftpAuth, SftpConfig};
 use crate::throttle::RateLimiter;
 
@@ -43,7 +43,10 @@ pub fn global_proxy(g: &GlobalProxy) -> Option<ProxyConfig> {
 /// Keep alive and reconnection from the options (retries and delay of the transfers are
 /// reused for the reconnection attempts).
 pub fn session_policy(s: &Settings) -> SessionPolicy {
-    let k = &s.keep_alive;
+    policy(&s.keep_alive, s.transfer.retries, s.transfer.retry_delay_secs)
+}
+
+fn policy(k: &KeepAliveSettings, retries: u32, retry_delay_secs: u32) -> SessionPolicy {
     SessionPolicy {
         keep_alive: k.enabled.then(|| KeepAlive {
             interval: Duration::from_secs(u64::from(k.interval_secs.max(5))),
@@ -55,8 +58,8 @@ pub fn session_policy(s: &Settings) -> SessionPolicy {
         reconnect: Reconnect {
             when_kicked: k.reconnect_when_kicked,
             on_replies: split_list(&k.reconnect_replies),
-            attempts: s.transfer.retries.max(1),
-            delay: Duration::from_secs(u64::from(s.transfer.retry_delay_secs)),
+            attempts: retries.max(1),
+            delay: Duration::from_secs(u64::from(retry_delay_secs)),
         },
     }
 }
@@ -92,8 +95,12 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
         ProxyChoice::Global => global_proxy(&settings.proxy),
         ProxyChoice::Direct => None,
     };
-    let connect_timeout = Duration::from_secs(u64::from(settings.transfer.connect_timeout_secs));
-    let io_timeout = Duration::from_secs(u64::from(settings.transfer.io_timeout_secs));
+    let own = &site.settings;
+    let t = &settings.transfer;
+    let connect_timeout = Duration::from_secs(u64::from(own.connect_timeout_secs.unwrap_or(t.connect_timeout_secs)));
+    let io_timeout = Duration::from_secs(u64::from(own.io_timeout_secs.unwrap_or(t.io_timeout_secs)));
+    let retries = own.retries.unwrap_or(t.retries);
+    let retry_delay_secs = own.retry_delay_secs.unwrap_or(t.retry_delay_secs);
     let tls = TlsOptions {
         verify: match &site.cert {
             CertPolicy::System => TlsVerify::System,
@@ -110,6 +117,8 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             proxy: proxy.clone(),
             connect_timeout,
             io_timeout,
+            send_feat: own.send_feat,
+            client_name: (!own.client_name.trim().is_empty()).then(|| own.client_name.trim().to_string()),
             ..FtpConfig::default()
         })
     };
@@ -139,9 +148,25 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
         password: if site.anonymous { "anonymous@".into() } else { site.password.clone() },
         protocol,
         limits: site.limits(),
-        session: session_policy(settings),
+        session: policy(own.keep_alive.as_ref().unwrap_or(&settings.keep_alive), retries, retry_delay_secs),
         hosts: HostList::new(site.alt_hosts.iter().filter_map(|a| parse_address(a, site.port)).collect()),
+        rules: SiteRules {
+            retries: own.retries,
+            retry_delay: own.retry_delay_secs.map(|s| Duration::from_secs(u64::from(s))),
+            skiplist: own.skiplist.as_ref().map(|s| s.to_skiplist()),
+            priorities: own.priorities.as_ref().map(|p| Settings::priorities_of(p)),
+            exists: own.exists,
+            resume: own.resume,
+            upload_account: account(own.upload_account.as_ref()),
+            download_account: account(own.download_account.as_ref()),
+        },
+        ident: None,
     }
+}
+
+/// A separate account, when its login is filled in.
+fn account(a: Option<&urftp_core::site::Account>) -> Option<Credentials> {
+    a.filter(|a| !a.user.trim().is_empty()).map(|a| Credentials { user: a.user.trim().to_string(), password: a.password.clone() })
 }
 
 /// Queue engine settings from the options.
@@ -216,6 +241,45 @@ mod tests {
         let p = site_profile(&site, &Settings::default());
         assert_eq!(p.addresses(), [("a".to_string(), 21), ("b".into(), 2121), ("c".into(), 21)]);
         assert_eq!(p.current_address(), ("a".to_string(), 21));
+    }
+
+    #[test]
+    fn site_settings_replace_the_options() {
+        use urftp_core::site::{Account, SiteSettings};
+        let g = Settings::default();
+        let p = site_profile(&Site::default(), &g);
+        assert!(p.rules.retries.is_none() && p.rules.skiplist.is_none() && p.rules.exists.is_none() && p.rules.resume);
+        assert!(p.rules.upload_account.is_none());
+
+        let own = SiteSettings {
+            retries: Some(7),
+            retry_delay_secs: Some(1),
+            connect_timeout_secs: Some(11),
+            io_timeout_secs: Some(22),
+            keep_alive: Some(KeepAliveSettings { enabled: false, ..KeepAliveSettings::default() }),
+            resume: false,
+            send_feat: false,
+            client_name: " UltraRushFTP ".into(),
+            priorities: Some(Vec::new()),
+            upload_account: Some(Account { user: "up".into(), password: "x".into() }),
+            download_account: Some(Account { user: " ".into(), password: "x".into() }),
+            ..SiteSettings::default()
+        };
+        let p = site_profile(&Site { settings: own, ..Site::default() }, &g);
+        assert_eq!((p.rules.retries, p.rules.retry_delay), (Some(7), Some(Duration::from_secs(1))));
+        assert!(p.session.keep_alive.is_none(), "own keep alive: off");
+        assert_eq!((p.session.reconnect.attempts, p.session.reconnect.delay), (7, Duration::from_secs(1)));
+        assert!(!p.rules.resume && p.rules.priorities.is_some());
+        assert_eq!(p.rules.upload_account.as_ref().map(|c| c.user.as_str()), Some("up"));
+        assert!(p.rules.download_account.is_none(), "an account without login is ignored");
+        let ProfileProtocol::Ftp(cfg) = &p.protocol else { panic!() };
+        assert_eq!((cfg.connect_timeout, cfg.io_timeout), (Duration::from_secs(11), Duration::from_secs(22)));
+        assert!(!cfg.send_feat);
+        assert_eq!(cfg.client_name.as_deref(), Some("UltraRushFTP"));
+
+        let up = p.with_account(crate::session::Account::Upload);
+        assert_eq!(up.user, "up");
+        assert_eq!(p.with_account(crate::session::Account::Download).user, p.user, "no download account: main login");
     }
 
     #[test]

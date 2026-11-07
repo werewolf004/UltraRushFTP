@@ -43,6 +43,10 @@ pub struct FtpConfig {
     pub active_port_range: Option<(u16, u16)>,
     /// Proxy (SOCKS4/4A/5, HTTP tunnel). Ignored when its bypass rules apply.
     pub proxy: Option<ProxyConfig>,
+    /// Ask the server its capabilities (`FEAT`) after the login.
+    pub send_feat: bool,
+    /// Client name announced with `CLNT` after the login (glftpd, DrFTPD...).
+    pub client_name: Option<String>,
 }
 
 impl Default for FtpConfig {
@@ -60,6 +64,8 @@ impl Default for FtpConfig {
             list_command: "LIST".into(),
             pasv_fix_private_ip: true,
             max_line_len: 64 * 1024,
+            send_feat: true,
+            client_name: None,
         }
     }
 }
@@ -390,7 +396,13 @@ impl FtpClient {
             self.ok(if protect { "PROT P" } else { "PROT C" }).await?;
             self.prot_p = protect;
         }
-        self.refresh_features().await?;
+        if self.config.send_feat {
+            self.refresh_features().await?;
+        }
+        if let Some(name) = self.config.client_name.clone().filter(|n| !n.trim().is_empty()) {
+            // Informative only: a refusal does not matter.
+            let _ = self.raw(&format!("CLNT {}", name.trim())).await?;
+        }
         if self.features.has("UTF8") {
             // Failure does not matter: some servers are already in UTF-8.
             let _ = self.raw("OPTS UTF8 ON").await?;

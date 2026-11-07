@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 75 · 🟡 50 · ⬜ 142 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 83 · 🟡 46 · ⬜ 138 · ➖ 17). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -59,8 +59,9 @@ planned work is grouped below into blocks, each ending with a release.
 - ✅ Several hosts per site with rotation on login failure; test availability of sites (G2).
 - ✅ Ghost login (`!user`, `Shift`+connect) and `-password` (`Ctrl`+connect) from the
   interface, `RS_INVERT` in scripts (G2).
-- ⬜ Per-site settings: Ident name, retries and timeouts, keep alive, resume, `FEAT`,
-  `CLNT`, skip list, priorities, "existing file" rules, separate upload/download accounts.
+- ✅ Per-site settings: Ident name, retries and timeouts, keep alive, resume, `FEAT`,
+  `CLNT`, skip list, priorities, "existing file" rules, separate upload/download accounts
+  (G3).
 - ⬜ Listing settings exposed: `LIST -a` (hidden files), `STAT -l`, custom command, trim
   spaces, `PORT` fallback when `PASV` fails, time zone, charset of non-UTF-8 servers.
 - ⬜ Active-mode settings exposed: external address, local port range, local IP binding.

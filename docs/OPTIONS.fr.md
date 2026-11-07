@@ -195,9 +195,24 @@ serveur l'a coupée.
 | Max. téléchargements / Max. envois | non fixé | Limites supplémentaires par sens |
 | Dossier distant, dossier local | vides | Ouverts à la connexion |
 | Proxy | Réglage global | Réglage global, Jamais de proxy, ou proxy propre au site (mêmes champs que le proxy global) |
-| Nom Ident propre à ce site | non | Enregistré ; pas encore répondu par le serveur Ident (voir la feuille de route) |
+| Nom Ident propre à ce site | non | Répondu par le serveur Ident pendant la connexion du site (le serveur doit être activé) |
 | Signets | aucun | Nom, dossier distant, dossier local ; utilisés par `RS_BOOKMARK` dans les scripts |
 | Notes | vide | Texte libre |
+
+![Réglages d'un site](images/site-settings.fr.png)
+
+**Réglages du site** (sections *Réglages de connexion du site*, *Règles de file du site*,
+*Comptes séparés*). Un réglage décoché suit l'option globale.
+
+| Champ | Défaut | Remarques |
+|---|---|---|
+| Essais et délais propres au site | non | Nombre d'essais, délai entre deux essais, délais de connexion et de réponse ; ils partent des valeurs globales (page Transferts) |
+| Reprendre les transferts interrompus | oui | Désactivé : un fichier partiel est toujours retransféré depuis zéro (pas de `REST`) |
+| Demander ses fonctions au serveur (FEAT) | oui | FTP : à désactiver pour les vieux serveurs qui n'aiment pas `FEAT` (`MLSD`, `PRET`, `UTF8` ne sont alors pas détectés) |
+| Nom du client (CLNT) | vide | FTP : envoyé par `CLNT` après la connexion (vide : pas envoyé) |
+| Maintien de connexion et reconnexion propres au site | non | Mêmes champs que la page Maintien de connexion |
+| Liste d'exclusion / priorités / règles « fichier existant » propres au site | non | Mêmes champs que les pages correspondantes ; la liste d'exclusion et les priorités du site d'où viennent les fichiers s'appliquent, les règles « fichier existant », les essais et la reprise du site où ils vont |
+| Compte pour les envois / pour les téléchargements | non | Identifiant et mot de passe utilisés par les transferts dans ce sens (et les dossiers créés ou listés pour eux) ; la navigation garde le compte principal |
 
 **Connecter** (gestionnaire de sites) : `Maj` enfoncée pour une connexion fantôme
 (`!user` : le serveur ferme les autres sessions du compte) et `Ctrl` pour `-motdepasse`
@@ -306,6 +321,7 @@ bits.
 | `URUSHFTP_SCRIPT` | Source d'un script exécuté au démarrage |
 | `URUSHFTP_IPC_CLASS` | Classe de fenêtre de la liaison mIRC à la place de `TfmRush` (tests à côté d'un FTPRush ouvert) |
 | `URUSHFTP_OPEN_SITES` | Développement : ouvre le gestionnaire de sites sur ce numéro de site |
+| `URUSHFTP_SITE_SETTINGS` | Développement : garde la fiche du site défilée sur les réglages du site |
 | `URUSHFTP_OPEN_OPTIONS` | Développement : ouvre la fenêtre Options sur cette page (0 à 8) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Développement : ouvre la fenêtre des raccourcis clavier |
 
