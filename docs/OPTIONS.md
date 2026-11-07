@@ -38,6 +38,7 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | Move the cursor | — | arrows, `Page Up` / `Page Down`, `Home` / `End` |
 | Select all / several | `Ctrl`+click, `Shift`+click | `Ctrl+A`, `Shift`+movement, `Ctrl+Space` (row at the cursor) |
 | Copy the full path | right-click → Copy path | — |
+| Copy the web address | right-click → Copy HTTP address (remote panel of a site with a web address) | — |
 | Sort | click a column header (again: reverse order) | — |
 
 The file-list keys act on the active panel (marked `▸`, cursor outlined) when no control
@@ -143,6 +144,11 @@ Used by the sites set to *Global setting*.
 | Also route transfers through the proxy | on | Data channels too |
 | No proxy for the local network | on | `localhost`, private addresses, names without a dot |
 
+**Named proxies**: *+ Add a proxy* creates a proxy with a name and the same fields (type,
+host, port, login, data channels). A site record chooses it by name in its *Proxy* list;
+a site whose proxy was removed from the list follows the global setting. Through a proxy
+the data channels always use the passive mode.
+
 ### Ident
 
 ![Ident](images/options-ident.en.png)
@@ -153,6 +159,7 @@ Used by the sites set to *Global setting*.
 | Name answered | `URUSHFTP` | User name returned |
 | System | `UNIX` | System returned |
 | TCP port | 113 | Forward it from your router to this computer when behind NAT |
+| Answer only while a connection is being opened | off | The requests of the connections being opened get their name; any other request gets `ERROR : NO-USER` |
 
 ### Keep alive
 
@@ -186,6 +193,7 @@ idle before reusing it, and opens a new one when the server has dropped it.
 | External address (sent with PORT) | empty | Public IP announced in active mode, behind a router; empty: the local address |
 | Local ports of the active mode | 0 – 0 (any) | Range forwarded by the router to this computer |
 | Local address of the connections | empty | IP of the network card the FTP and SFTP connections leave from (not used through a proxy) |
+| Send NOOP during the transfers, every | off, 60 s | FTP: keeps the control connection alive during long transfers (proxies, routers); the replies are read with the end of the transfer |
 
 The listing settings of a site (site record › Listing) win over the first three options.
 An invalid address is shown in red and ignored.
@@ -207,23 +215,29 @@ record). The host, the other addresses, the bookmarks and the trusted keys are a
 | Field | Default | Notes |
 |---|---|---|
 | Name | "New site" | Used by scripts, mIRC and `urftp` (case-insensitive) |
+| Description | empty | Short text shown next to the name in the site tree |
 | Protocol | FTP | FTP, FTPS (explicit), FTPS (implicit), SFTP; the port follows (21, 990, 22) |
 | Host, port | — / 21 | Name or IP address; when a name has IPv6 and IPv4 addresses both are tried ("happy eyeballs") |
 | Other addresses | none | `host:port` (or `[IPv6]:port`), one per line: tried in turn when the main address cannot be reached or refuses the login; the address that worked is used first next time |
 | User, password, anonymous | — | Password encrypted with DPAPI; with an SSH key it is the passphrase |
 | Site enabled | on | A disabled site cannot be connected (`RushApp.FTP.DisableSite`) |
-| Also encrypt transfers (PROT P) | on | FTPS: encrypted data channels |
+| Also encrypt transfers (PROT P) | on | FTPS: encrypted data channels of the transfers |
+| Also encrypt listings (PROT P) | like the transfers | FTPS: encrypted data channels of the listings |
 | Certificate | Verify with the Windows authorities | or Accept any certificate (not recommended), or Trusted certificate (SHA-256 fingerprint, filled in when you trust a server) |
 | Private key | none | SFTP: OpenSSH, PEM or PuTTY `.ppk` key file |
+| Other keys | none | SFTP: tried in turn when the server refuses the previous one; the password is the passphrase of every key |
 | Trusted server keys | none | SFTP host key fingerprints (`SHA256:…`) added when you trust a server |
 | Mode | Passive | Passive or Active (`PORT`/`EPRT`); see also the `PORT` fallback of the Connection page |
 | Simultaneous transfers | 2 | 0 = single connection |
 | Max. downloads / Max. uploads | not set | Extra limits per direction |
 | Remote folder, local folder | empty | Opened on connection |
-| Proxy | Global setting | Global setting, Never use a proxy, or a proxy specific to the site (same fields as the global one) |
+| FXP from this site: never PASV | off | FXP: this site always connects (`PORT`), the other one listens |
+| FXP to this site: always PASV | off | FXP: this site always listens; otherwise the source listens and the roles are reversed when `PORT` is refused |
+| Proxy | Global setting | Global setting, Never use a proxy, a proxy specific to the site (same fields as the global one), or one of the named proxies |
 | Ident name specific to this site | off | Answered by the Ident server while the site connects (the server must be enabled) |
 | Bookmarks | none | Name, remote folder, local folder; used by `RS_BOOKMARK` in scripts |
 | Notes | empty | Free text |
+| Web address: address of the folder, remote folder served there | empty, `/` | For *Copy HTTP address*: `https://www.example.com/files` and `/pub` turn `/pub/a b.zip` into `https://www.example.com/files/a%20b.zip` |
 
 **Listing** (FTP and FTPS):
 
@@ -233,6 +247,7 @@ record). The host, the other addresses, the bookmarks and the trusted keys are a
 | Time zone offset | 0 h | Hours (quarters allowed) added to the dates of the listings, for a server in another time zone |
 | Character set | UTF-8 (automatic) | For the servers that do not use UTF-8: windows-1252, ISO-8859-1/2/15, windows-1250/1251, KOI8-R, Shift_JIS, EUC-JP, GBK, gb18030, Big5, EUC-KR, IBM866. Names, paths and replies are converted; `OPTS UTF8 ON` is then not sent, and a name the set cannot write is refused |
 | Remove the spaces at the start of the listing lines | off | For servers whose `LIST` lines start with spaces (always done for `STAT`) |
+| Listing format | Automatic | Automatic (Unix or DOS/IIS line by line), Unix, DOS / IIS |
 
 ![Settings of a site](images/site-settings.en.png)
 

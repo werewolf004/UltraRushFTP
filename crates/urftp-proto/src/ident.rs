@@ -35,6 +35,9 @@ pub struct IdentConfig {
     pub system: String,
     /// Listen address (TCP port 113 by default; change it behind NAT).
     pub bind: SocketAddr,
+    /// Answers only the connections being opened (registered); the others get
+    /// `ERROR : NO-USER`.
+    pub only_registered: bool,
 }
 
 impl Default for IdentConfig {
@@ -43,6 +46,7 @@ impl Default for IdentConfig {
             name: urftp_core::DEFAULT_IDENT_NAME.to_string(),
             system: "UNIX".to_string(),
             bind: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), urftp_core::DEFAULT_IDENT_PORT),
+            only_registered: false,
         }
     }
 }
@@ -166,7 +170,12 @@ fn answer(query: &str, peer: IpAddr, reg: &Registry, config: &IdentConfig) -> St
     let Some((local, remote)) = ports else {
         return format!("{} : ERROR : INVALID-PORT", query.trim());
     };
-    let name = reg.lock().get(&(canonical(peer), remote)).map(|(n, _)| n.clone()).unwrap_or_else(|| sanitize(&config.name));
+    let registered = reg.lock().get(&(canonical(peer), remote)).map(|(n, _)| n.clone());
+    let name = match registered {
+        Some(n) => n,
+        None if config.only_registered => return format!("{local} , {remote} : ERROR : NO-USER"),
+        None => sanitize(&config.name),
+    };
     format!("{local} , {remote} : USERID : {} : {name}", sanitize(&config.system))
 }
 
@@ -188,6 +197,16 @@ fn sanitize(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_registered_connections_are_answered() {
+        let reg: Registry = Arc::default();
+        let cfg = IdentConfig { only_registered: true, ..IdentConfig::default() };
+        let srv: IpAddr = "203.0.113.4".parse().unwrap();
+        assert_eq!(answer("6193, 21", srv, &reg, &cfg), "6193 , 21 : ERROR : NO-USER");
+        reg.lock().insert((srv, 21), ("URUSHFTP".into(), 1));
+        assert_eq!(answer("6193, 21", srv, &reg, &cfg), "6193 , 21 : USERID : UNIX : URUSHFTP");
+    }
 
     #[test]
     fn answers() {

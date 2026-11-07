@@ -36,15 +36,17 @@ pub enum TlsVerify {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TlsOptions {
     pub verify: TlsVerify,
-    /// Also encrypt the data channels (`PROT P`); `PROT C` otherwise.
+    /// Also encrypt the data channels of the transfers (`PROT P`); `PROT C` otherwise.
     pub protect_data: bool,
+    /// Also encrypt the data channels of the listings.
+    pub protect_listings: bool,
     /// Try `AUTH SSL` when `AUTH TLS` is refused (old servers).
     pub auth_ssl_fallback: bool,
 }
 
 impl Default for TlsOptions {
     fn default() -> Self {
-        Self { verify: TlsVerify::System, protect_data: true, auth_ssl_fallback: true }
+        Self { verify: TlsVerify::System, protect_data: true, protect_listings: true, auth_ssl_fallback: true }
     }
 }
 

@@ -172,3 +172,17 @@ async fn sftp_through_socks5_and_http_proxies() {
         assert_eq!(px.targets(), [format!("127.0.0.1:{}", srv.addr.port())], "{kind:?}");
     }
 }
+
+#[tokio::test]
+async fn the_next_key_is_tried_when_the_first_is_refused() {
+    let good = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
+    let refused = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
+    let srv = MockSftp::start(SftpMockConfig { authorized_key: Some(good.public_key().clone()), ..SftpMockConfig::default() }).await;
+    let text = |k: &PrivateKey| SftpAuth::KeyText { text: k.to_openssh(LineEnding::LF).unwrap().to_string(), passphrase: None };
+    let unreadable = SftpAuth::KeyFile { path: std::env::temp_dir().join("urftp-no-such-key"), passphrase: None };
+    let auth = SftpAuth::Any(vec![unreadable, text(&refused), text(&good)]);
+    connect(&srv, &auth, trusting(&srv)).await.unwrap();
+    assert_eq!(srv.auth_log.lock().unwrap().as_slice(), ["publickey"]);
+    let none = SftpAuth::Any(vec![text(&refused)]);
+    assert!(matches!(connect(&srv, &none, trusting(&srv)).await, Err(SftpError::AuthFailed)));
+}

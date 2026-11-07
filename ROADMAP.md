@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -66,6 +66,9 @@ planned work is grouped below into blocks, each ending with a release.
   spaces, `PORT` fallback when `PASV` fails, time zone, charset of non-UTF-8 servers (G4).
 - ✅ Active-mode settings exposed: external address, local port range, local IP binding (G4).
 - ✅ Anonymous e-mail, default download folder, default site settings (G4).
+- ✅ Named proxies, `NOOP` during transfers, listings and transfers encrypted separately,
+  Ident only while connecting; several SSH keys per site, FXP roles per site; site
+  description, listing format, web address and "Copy HTTP address" (G5).
 - ✅ FXP between IPv6 addresses (`EPSV` / `EPRT`), IPv4/IPv6 "happy eyeballs" connection (G2).
 - ⬜ Validation against real servers (glftpd, vsftpd, ProFTPD, FileZilla Server, IIS,
   OpenSSH).

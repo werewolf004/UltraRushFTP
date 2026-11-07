@@ -74,6 +74,10 @@ pub struct SiteRules {
     pub upload_account: Option<Credentials>,
     /// Login for the downloads (and the listings of the folders downloaded).
     pub download_account: Option<Credentials>,
+    /// FXP from this site: always `PORT` (the other site listens).
+    pub fxp_source_active: bool,
+    /// FXP to this site: always `PASV` (this site listens).
+    pub fxp_target_passive: bool,
 }
 
 impl Default for SiteRules {
@@ -87,6 +91,8 @@ impl Default for SiteRules {
             resume: true,
             upload_account: None,
             download_account: None,
+            fxp_source_active: false,
+            fxp_target_passive: false,
         }
     }
 }

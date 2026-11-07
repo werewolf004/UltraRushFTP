@@ -100,6 +100,8 @@ pub enum ProxyChoice {
     /// Never use a proxy for this site.
     Direct,
     Custom(SiteProxy),
+    /// A proxy of the list in the options, by name.
+    Named(String),
 }
 
 /// Ident name answered for this site.
@@ -198,6 +200,67 @@ pub const CHARSETS: [&str; 14] = [
     "IBM866",
 ];
 
+/// Format of the `LIST` lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ListParser {
+    /// Unix or DOS/IIS, recognised line by line.
+    #[default]
+    Auto,
+    Unix,
+    Dos,
+}
+
+/// Web address of the files of a site ("HTTP URL mapping" in v2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct HttpMapping {
+    /// Address of the remote folder below (`https://www.example.com/files`).
+    pub base_url: String,
+    /// Remote folder served at that address (empty: `/`).
+    pub ftp_root: String,
+}
+
+impl HttpMapping {
+    pub fn is_set(&self) -> bool {
+        !self.base_url.trim().is_empty()
+    }
+
+    /// Web address of a remote path; `None` when no address is set or when the path is
+    /// outside the mapped folder. The names are percent-encoded.
+    pub fn url_of(&self, remote_path: &str) -> Option<String> {
+        let base = self.base_url.trim().trim_end_matches('/');
+        if base.is_empty() {
+            return None;
+        }
+        let root = self.ftp_root.trim().trim_end_matches('/');
+        let rest = if root.is_empty() {
+            remote_path
+        } else {
+            let r = remote_path.strip_prefix(root)?;
+            if !(r.is_empty() || r.starts_with('/')) {
+                return None;
+            }
+            r
+        };
+        let encoded: Vec<String> = rest.split('/').filter(|s| !s.is_empty()).map(percent_encode).collect();
+        Some(if encoded.is_empty() { format!("{base}/") } else { format!("{base}/{}", encoded.join("/")) })
+    }
+}
+
+/// Percent-encoding of a path segment (RFC 3986: unreserved characters kept).
+fn percent_encode(segment: &str) -> String {
+    let mut out = String::with_capacity(segment.len());
+    for b in segment.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+            out.push(char::from(b));
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
 /// Listing settings of a site.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -209,6 +272,25 @@ pub struct SiteListing {
     pub time_offset_mins: i32,
     /// Character set of the names and paths (empty: UTF-8).
     pub charset: String,
+    /// Format of the `LIST` lines.
+    pub parser: ListParser,
+}
+
+#[cfg(test)]
+mod http_tests {
+    use super::HttpMapping;
+
+    #[test]
+    fn remote_paths_become_web_addresses() {
+        let m = HttpMapping { base_url: "https://www.example.com/files/".into(), ftp_root: "/pub/".into() };
+        assert_eq!(m.url_of("/pub/a b/été.txt").as_deref(), Some("https://www.example.com/files/a%20b/%C3%A9t%C3%A9.txt"));
+        assert_eq!(m.url_of("/pub").as_deref(), Some("https://www.example.com/files/"));
+        assert_eq!(m.url_of("/public/x"), None, "outside the mapped folder");
+        assert_eq!(m.url_of("/other"), None);
+        let whole = HttpMapping { base_url: "http://h.example.org".into(), ftp_root: String::new() };
+        assert_eq!(whole.url_of("/x/y.zip").as_deref(), Some("http://h.example.org/x/y.zip"));
+        assert_eq!(HttpMapping::default().url_of("/x"), None);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -236,11 +318,15 @@ pub struct Site {
     pub remote_dir: String,
     pub local_dir: String,
     pub notes: String,
+    /// Short text shown next to the name (tree, menus).
+    pub description: String,
     /// Disabled site (`RushApp.FTP.DisableSite`).
     pub enabled: bool,
     pub cert: CertPolicy,
-    /// Encrypt the data channels (`PROT P`).
+    /// Encrypt the data channels of the transfers (`PROT P`).
     pub protect_data: bool,
+    /// Encrypt the data channels of the listings (`None`: like the transfers).
+    pub protect_listings: Option<bool>,
     pub transfer_mode: TransferMode,
     pub max_transfers: u32,
     pub max_downloads: Option<u32>,
@@ -249,6 +335,8 @@ pub struct Site {
     pub ident: IdentChoice,
     /// SSH private key (the password is then its passphrase).
     pub ssh_key_file: Option<String>,
+    /// Other keys, tried in turn when the server refuses the first one.
+    pub ssh_more_keys: Vec<String>,
     /// Trusted SSH host key fingerprints (`SHA256:…`).
     pub ssh_host_keys: Vec<String>,
     pub bookmarks: Vec<Bookmark>,
@@ -256,6 +344,11 @@ pub struct Site {
     pub settings: SiteSettings,
     /// Listing command, time zone and character set (FTP).
     pub listing: SiteListing,
+    /// FXP from this site: always `PORT` (the other site listens).
+    pub fxp_source_active: bool,
+    /// FXP to this site: always `PASV` (this site listens).
+    pub fxp_target_passive: bool,
+    pub http: HttpMapping,
 }
 
 impl Default for Site {
@@ -273,9 +366,11 @@ impl Default for Site {
             remote_dir: String::new(),
             local_dir: String::new(),
             notes: String::new(),
+            description: String::new(),
             enabled: true,
             cert: CertPolicy::System,
             protect_data: true,
+            protect_listings: None,
             transfer_mode: TransferMode::Passive,
             max_transfers: 2,
             max_downloads: None,
@@ -283,15 +378,24 @@ impl Default for Site {
             proxy: ProxyChoice::Global,
             ident: IdentChoice::Global,
             ssh_key_file: None,
+            ssh_more_keys: Vec::new(),
             ssh_host_keys: Vec::new(),
             bookmarks: Vec::new(),
             settings: SiteSettings::default(),
             listing: SiteListing::default(),
+            fxp_source_active: false,
+            fxp_target_passive: false,
+            http: HttpMapping::default(),
         }
     }
 }
 
 impl Site {
+    /// Encryption of the listings: its own setting, or the one of the transfers.
+    pub fn listings_protected(&self) -> bool {
+        self.protect_listings.unwrap_or(self.protect_data)
+    }
+
     pub fn limits(&self) -> SiteLimits {
         SiteLimits { max_transfers: self.max_transfers, max_downloads: self.max_downloads, max_uploads: self.max_uploads }
     }

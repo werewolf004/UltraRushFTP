@@ -38,6 +38,7 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | Déplacer le curseur | — | flèches, `Page préc.` / `Page suiv.`, `Début` / `Fin` |
 | Tout sélectionner / plusieurs | `Ctrl`+clic, `Maj`+clic | `Ctrl+A`, `Maj`+déplacement, `Ctrl+Espace` (ligne du curseur) |
 | Copier le chemin complet | clic droit → Copier le chemin | — |
+| Copier l'adresse web | clic droit → Copier l'adresse HTTP (panneau distant d'un site qui a une adresse web) | — |
 | Trier | clic sur un en-tête de colonne (à nouveau : ordre inverse) | — |
 
 Les touches de la liste agissent sur le panneau actif (marqué `▸`, curseur encadré) quand
@@ -145,6 +146,11 @@ Utilisé par les sites réglés sur *Réglage global*.
 | Faire passer aussi les transferts par le proxy | oui | Canaux de données aussi |
 | Pas de proxy pour le réseau local | oui | `localhost`, adresses privées, noms sans point |
 
+**Proxys nommés** : *+ Ajouter un proxy* crée un proxy avec un nom et les mêmes champs
+(type, hôte, port, identifiants, canaux de données). Une fiche de site le choisit par son
+nom dans sa liste *Proxy* ; un site dont le proxy a été retiré de la liste suit le réglage
+global. À travers un proxy, les canaux de données utilisent toujours le mode passif.
+
 ### Ident
 
 ![Ident](images/options-ident.fr.png)
@@ -155,6 +161,7 @@ Utilisé par les sites réglés sur *Réglage global*.
 | Nom répondu | `URUSHFTP` | Nom d'utilisateur renvoyé |
 | Système | `UNIX` | Système renvoyé |
 | Port TCP | 113 | À rediriger depuis le routeur vers cet ordinateur derrière un NAT |
+| Répondre seulement pendant l'ouverture d'une connexion | non | Les requêtes des connexions en cours d'ouverture reçoivent leur nom ; toute autre requête reçoit `ERROR : NO-USER` |
 
 ### Maintien de connexion
 
@@ -189,6 +196,7 @@ serveur l'a coupée.
 | Adresse externe (envoyée par PORT) | vide | IP publique annoncée en mode actif, derrière un routeur ; vide : l'adresse locale |
 | Ports locaux du mode actif | 0 – 0 (tous) | Plage redirigée par le routeur vers cet ordinateur |
 | Adresse locale des connexions | vide | IP de la carte réseau d'où partent les connexions FTP et SFTP (pas utilisée à travers un proxy) |
+| Envoyer NOOP pendant les transferts, toutes les | non, 60 s | FTP : garde la connexion de contrôle active pendant les longs transferts (proxys, routeurs) ; les réponses sont lues avec la fin du transfert |
 
 Les réglages de listing d'un site (fiche du site › Listing) l'emportent sur les trois
 premières options. Une adresse invalide est affichée en rouge et ignorée.
@@ -210,23 +218,29 @@ les clés de confiance restent toujours vides. *Valeurs par défaut* remet le mo
 | Champ | Défaut | Remarques |
 |---|---|---|
 | Nom | « Nouveau site » | Utilisé par les scripts, mIRC et `urftp` (insensible à la casse) |
+| Description | vide | Texte court affiché à côté du nom dans l'arbre des sites |
 | Protocole | FTP | FTP, FTPS explicite, FTPS implicite, SFTP ; le port suit (21, 990, 22) |
 | Hôte, port | — / 21 | Nom ou adresse IP ; quand un nom a des adresses IPv6 et IPv4, les deux sont essayées (« happy eyeballs ») |
 | Autres adresses | aucune | `hôte:port` (ou `[IPv6]:port`), une par ligne : essayées à tour de rôle quand l'adresse principale ne répond pas ou refuse la connexion ; celle qui a marché sert en premier la fois suivante |
 | Utilisateur, mot de passe, anonyme | — | Mot de passe chiffré par DPAPI ; avec une clé SSH, c'est sa phrase de passe |
 | Site activé | oui | Un site désactivé ne peut pas être connecté (`RushApp.FTP.DisableSite`) |
-| Chiffrer aussi les transferts (PROT P) | oui | FTPS : canaux de données chiffrés |
+| Chiffrer aussi les transferts (PROT P) | oui | FTPS : canaux de données des transferts chiffrés |
+| Chiffrer aussi les listings (PROT P) | comme les transferts | FTPS : canaux de données des listings chiffrés |
 | Certificat | Vérifier avec les autorités Windows | ou Accepter tout certificat (déconseillé), ou Certificat approuvé (empreinte SHA-256, remplie quand on approuve un serveur) |
 | Clé privée | aucune | SFTP : fichier de clé OpenSSH, PEM ou PuTTY `.ppk` |
+| Autres clés | aucune | SFTP : essayées à tour de rôle quand le serveur refuse la précédente ; le mot de passe est la phrase secrète de chaque clé |
 | Clés de serveur approuvées | aucune | Empreintes de clés d'hôte SFTP (`SHA256:…`) ajoutées quand on approuve un serveur |
 | Mode | Passif | Passif ou Actif (`PORT`/`EPRT`) ; voir aussi le repli `PORT` de la page Connexion |
 | Transferts simultanés | 2 | 0 = connexion unique |
 | Max. téléchargements / Max. envois | non fixé | Limites supplémentaires par sens |
 | Dossier distant, dossier local | vides | Ouverts à la connexion |
-| Proxy | Réglage global | Réglage global, Jamais de proxy, ou proxy propre au site (mêmes champs que le proxy global) |
+| FXP depuis ce site : jamais PASV | non | FXP : ce site se connecte toujours (`PORT`), l'autre écoute |
+| FXP vers ce site : toujours PASV | non | FXP : ce site écoute toujours ; sinon la source écoute et les rôles s'inversent quand `PORT` est refusé |
+| Proxy | Réglage global | Réglage global, Jamais de proxy, proxy propre au site (mêmes champs que le proxy global), ou l'un des proxys nommés |
 | Nom Ident propre à ce site | non | Répondu par le serveur Ident pendant la connexion du site (le serveur doit être activé) |
 | Signets | aucun | Nom, dossier distant, dossier local ; utilisés par `RS_BOOKMARK` dans les scripts |
 | Notes | vide | Texte libre |
+| Adresse web : adresse du dossier, dossier distant servi à cette adresse | vide, `/` | Pour *Copier l'adresse HTTP* : `https://www.example.com/files` et `/pub` transforment `/pub/a b.zip` en `https://www.example.com/files/a%20b.zip` |
 
 **Listing** (FTP et FTPS) :
 
@@ -236,6 +250,7 @@ les clés de confiance restent toujours vides. *Valeurs par défaut* remet le mo
 | Décalage horaire | 0 h | Heures (quarts d'heure possibles) ajoutées aux dates des listings, pour un serveur dans un autre fuseau horaire |
 | Jeu de caractères | UTF-8 (automatique) | Pour les serveurs qui n'utilisent pas UTF-8 : windows-1252, ISO-8859-1/2/15, windows-1250/1251, KOI8-R, Shift_JIS, EUC-JP, GBK, gb18030, Big5, EUC-KR, IBM866. Noms, chemins et réponses sont convertis ; `OPTS UTF8 ON` n'est alors pas envoyé, et un nom que le jeu ne sait pas écrire est refusé |
 | Retirer les espaces en début de ligne du listing | non | Pour les serveurs dont les lignes de `LIST` commencent par des espaces (toujours fait pour `STAT`) |
+| Format du listing | Automatique | Automatique (Unix ou DOS/IIS ligne par ligne), Unix, DOS / IIS |
 
 ![Réglages d'un site](images/site-settings.fr.png)
 

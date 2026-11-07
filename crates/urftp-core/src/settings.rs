@@ -135,6 +135,14 @@ pub struct GlobalProxy {
     pub exceptions: String,
 }
 
+/// Proxy of the list in the options, chosen by name in the site records.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct NamedProxy {
+    pub name: String,
+    pub proxy: SiteProxy,
+}
+
 impl Default for GlobalProxy {
     fn default() -> Self {
         Self {
@@ -153,11 +161,19 @@ pub struct IdentSettings {
     pub name: String,
     pub system: String,
     pub port: u16,
+    /// Answer only the requests of a connection being opened (others: `NO-USER`).
+    pub only_while_connecting: bool,
 }
 
 impl Default for IdentSettings {
     fn default() -> Self {
-        Self { enabled: false, name: crate::DEFAULT_IDENT_NAME.into(), system: "UNIX".into(), port: crate::DEFAULT_IDENT_PORT }
+        Self {
+            enabled: false,
+            name: crate::DEFAULT_IDENT_NAME.into(),
+            system: "UNIX".into(),
+            port: crate::DEFAULT_IDENT_PORT,
+            only_while_connecting: false,
+        }
     }
 }
 
@@ -220,7 +236,7 @@ impl Default for ListingSettings {
 }
 
 /// Network options of the active mode and of the outgoing connections (Connection page).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NetworkSettings {
     /// Address announced with `PORT` / `EPRT` (public IP behind a router); empty: the local one.
@@ -230,6 +246,23 @@ pub struct NetworkSettings {
     pub port_max: u16,
     /// Local address the connections leave from (several network cards); empty: the system's choice.
     pub bind_ip: String,
+    /// Send `NOOP` on the control connection during the transfers (proxies and routers
+    /// that drop a connection idle for too long).
+    pub noop_during_transfers: bool,
+    pub noop_interval_secs: u32,
+}
+
+impl Default for NetworkSettings {
+    fn default() -> Self {
+        Self {
+            external_ip: String::new(),
+            port_min: 0,
+            port_max: 0,
+            bind_ip: String::new(),
+            noop_during_transfers: false,
+            noop_interval_secs: 60,
+        }
+    }
 }
 
 impl NetworkSettings {
@@ -286,6 +319,8 @@ pub struct Settings {
     pub skiplist: SkipSettings,
     pub priorities: Vec<MaskSetting>,
     pub proxy: GlobalProxy,
+    /// Proxies chosen by name in the site records.
+    pub proxies: Vec<NamedProxy>,
     pub ident: IdentSettings,
     pub keep_alive: KeepAliveSettings,
     pub listing: ListingSettings,
@@ -311,6 +346,7 @@ impl Default for Settings {
             // As on scene sites: the .sfv then the .nfo go first.
             priorities: vec![MaskSetting::wildcard("*.sfv"), MaskSetting::wildcard("*.nfo")],
             proxy: GlobalProxy::default(),
+            proxies: Vec::new(),
             ident: IdentSettings::default(),
             keep_alive: KeepAliveSettings::default(),
             listing: ListingSettings::default(),
@@ -336,6 +372,11 @@ impl Settings {
             enabled: true,
             ..self.new_site.clone()
         }
+    }
+
+    /// Proxy of the list with this name.
+    pub fn named_proxy(&self, name: &str) -> Option<&NamedProxy> {
+        self.proxies.iter().find(|p| p.name == name)
     }
 
     /// Password of the anonymous logins (the default one when the field is empty).
@@ -426,7 +467,13 @@ mod tests {
 
     #[test]
     fn network_values_are_checked() {
-        let n = NetworkSettings { external_ip: "203.0.113.7".into(), port_min: 50000, port_max: 50100, bind_ip: "nope".into() };
+        let n = NetworkSettings {
+            external_ip: "203.0.113.7".into(),
+            port_min: 50000,
+            port_max: 50100,
+            bind_ip: "nope".into(),
+            ..NetworkSettings::default()
+        };
         assert_eq!(n.external().map(|i| i.to_string()).as_deref(), Some("203.0.113.7"));
         assert_eq!(n.port_range(), Some((50000, 50100)));
         assert!(n.bind().is_none());

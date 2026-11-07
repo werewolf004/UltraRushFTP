@@ -142,3 +142,21 @@ async fn connections_leave_from_the_local_address() {
     .await;
     assert!(wrong.is_err(), "an IPv6 local address cannot reach an IPv4 server");
 }
+
+#[tokio::test]
+async fn noop_keeps_the_control_connection_alive_during_transfers() {
+    let srv = MockServer::start(plain()).await;
+    let data: Vec<u8> = (0..4_000_000u32).map(|i| (i % 253) as u8).collect();
+    srv.fs.lock().unwrap().files.insert("/big.bin".into(), data.clone());
+    let cfg = FtpConfig { noop_during_transfer: Some(std::time::Duration::from_millis(1)), ..FtpConfig::default() };
+    let mut c = connect(&srv, cfg).await;
+    let mut out = Vec::new();
+    c.retr("/big.bin", 0, &mut out, |_| {}).await.unwrap();
+    assert_eq!(out, data);
+    c.stor("/up.bin", 0, &mut data.as_slice(), |_| {}).await.unwrap();
+    // The replies of the NOOP were all read: the next commands get their own reply.
+    assert_eq!(c.size("/up.bin").await.unwrap(), data.len() as u64);
+    assert_eq!(names(&c.list(None).await.unwrap()), ["big.bin", "up.bin"]);
+    let noops = srv.received().iter().filter(|l| *l == "NOOP").count();
+    assert!(noops >= 2, "NOOP sent during the transfers: {noops}");
+}

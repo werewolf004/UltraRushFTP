@@ -15,11 +15,11 @@ use egui_extras::{Column, TableBuilder};
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use urftp_core::TransferKind;
-use urftp_core::queue::{Endpoint, ItemId, ItemState, Queue, QueueItem, SiteLimits};
+use urftp_core::queue::{Endpoint, ItemId, ItemState, Queue, QueueItem};
 use urftp_proto::engine::{Engine, EngineEvent, EngineOptions};
-use urftp_proto::ftp::{FtpConfig, FtpTime, LogLine, RemoteEntry, Security, TlsOptions, TlsVerify, path as rpath};
+use urftp_proto::ftp::{FtpTime, LogLine, RemoteEntry, Security, TlsVerify, path as rpath};
 use urftp_proto::session::{SiteProfile, SiteProtocol};
-use urftp_proto::sftp::{HostKeyPolicy, SftpConfig};
+use urftp_proto::sftp::HostKeyPolicy;
 
 use crate::browser::{self, BrowserCmd, BrowserEvent, BrowserHandle, TrustKind};
 use crate::cmdline::StartupOptions;
@@ -247,6 +247,8 @@ struct RemoteView {
     /// Record of the site manager it came from (to store a trusted fingerprint there).
     site_id: Option<u64>,
     sort: Sort,
+    /// Web address of the files of the site ("Copy HTTP URL").
+    http: urftp_core::site::HttpMapping,
 }
 
 enum Side {
@@ -944,6 +946,7 @@ enum Action {
     Rename(usize),
     Delete(usize),
     CopyPath(usize, String),
+    CopyHttpUrl(usize, String),
     QueueStop(ItemId),
     QueueStopAll,
     QueueMove(ItemId, Move),
@@ -1053,6 +1056,7 @@ impl UltraRushApp {
             name: if wanted.name.trim().is_empty() { urftp_core::DEFAULT_IDENT_NAME.into() } else { wanted.name.trim().into() },
             system: if wanted.system.trim().is_empty() { "UNIX".into() } else { wanted.system.trim().into() },
             bind: std::net::SocketAddr::from(([0, 0, 0, 0], wanted.port)),
+            only_registered: wanted.only_while_connecting,
         };
         // The interface does not run inside the runtime: it may block on the startup here.
         match self.rt.block_on(IdentServer::start(cfg)) {
@@ -1070,43 +1074,34 @@ impl UltraRushApp {
         self.active = self.tabs.len() - 1;
     }
 
+    /// Quick-connection profile: a site record without name, with the global options.
     fn quick_profile(&self) -> Option<SiteProfile> {
         let q = &self.quick;
         let host = q.host.trim();
         if host.is_empty() {
             return None;
         }
-        let port = q.port.trim().parse().unwrap_or(q.proto.default_port());
-        let user = if q.user.trim().is_empty() { "anonymous".to_string() } else { q.user.trim().to_string() };
-        let tls = TlsOptions { verify: TlsVerify::System, ..TlsOptions::default() };
-        let s = &self.options.settings;
-        let proxy = options::global_proxy(&s.proxy);
-        let connect_timeout = Duration::from_secs(u64::from(s.transfer.connect_timeout_secs));
-        let io_timeout = Duration::from_secs(u64::from(s.transfer.io_timeout_secs));
-        let ftp =
-            |security| SiteProtocol::Ftp(FtpConfig { security, proxy: proxy.clone(), connect_timeout, io_timeout, ..FtpConfig::default() });
         let protocol = match q.proto {
-            QuickProto::Ftp => ftp(Security::None),
-            QuickProto::FtpsExplicit => ftp(Security::Explicit(tls)),
-            QuickProto::FtpsImplicit => ftp(Security::Implicit(tls)),
-            QuickProto::Sftp => SiteProtocol::Sftp {
-                config: SftpConfig { proxy: proxy.clone(), connect_timeout, io_timeout, ..SftpConfig::default() },
-                key: None,
-            },
+            QuickProto::Ftp => urftp_core::site::SiteProtocol::Ftp,
+            QuickProto::FtpsExplicit => urftp_core::site::SiteProtocol::FtpsExplicit,
+            QuickProto::FtpsImplicit => urftp_core::site::SiteProtocol::FtpsImplicit,
+            QuickProto::Sftp => urftp_core::site::SiteProtocol::Sftp,
         };
-        Some(SiteProfile {
-            name: format!("{user}@{host}:{port}"),
+        let port = q.port.trim().parse().unwrap_or(q.proto.default_port());
+        let user = q.user.trim();
+        let anonymous = user.is_empty() && q.pass.is_empty();
+        let site = Site {
+            name: format!("{}@{host}:{port}", if user.is_empty() { "anonymous" } else { user }),
             host: host.to_string(),
             port,
-            user,
-            password: q.pass.clone(),
             protocol,
-            limits: SiteLimits { max_transfers: s.transfer.quick_connect_transfers, ..SiteLimits::default() },
-            session: urftp_proto::profile::session_policy(s),
-            hosts: Default::default(),
-            rules: Default::default(),
-            ident: None,
-        })
+            user: if user.is_empty() { "anonymous".into() } else { user.to_string() },
+            password: q.pass.clone(),
+            anonymous,
+            max_transfers: self.options.settings.transfer.quick_connect_transfers,
+            ..Site::default()
+        };
+        Some(self.site_profile(&site))
     }
 
     /// Connects the right panel of the active tab (like the v2 quick-connect bar).
@@ -1137,6 +1132,7 @@ impl UltraRushApp {
         if let Side::Remote(r) = &self.tabs[tab].sides[side] {
             r.handle.send(BrowserCmd::Disconnect);
         }
+        let http = site_id.and_then(|id| self.sites.book.find(id)).map(|s| s.http.clone()).unwrap_or_default();
         let handle = browser::spawn(&self.rt, ctx.clone());
         handle.send(BrowserCmd::Connect(Box::new(profile.clone())));
         if let Some(dir) = start_dir.filter(|d| !d.trim().is_empty()) {
@@ -1154,6 +1150,7 @@ impl UltraRushApp {
             state: RemoteState::Connecting,
             site_id,
             sort: Sort::default(),
+            http,
         }));
     }
 
@@ -1162,10 +1159,18 @@ impl UltraRushApp {
     /// runs.
     pub(crate) fn site_profile(&self, site: &Site) -> SiteProfile {
         let mut p = sites::to_profile(site, &self.options.settings);
-        if let (Some(srv), urftp_core::site::IdentChoice::Custom(name)) = (&self.ident, &site.ident)
-            && !name.trim().is_empty()
-        {
-            p.ident = Some(urftp_proto::session::SiteIdent { registrar: srv.registrar(), name: name.trim().to_string() });
+        let Some(srv) = &self.ident else { return p };
+        let own = match &site.ident {
+            urftp_core::site::IdentChoice::Custom(name) if !name.trim().is_empty() => Some(name.trim().to_string()),
+            _ => None,
+        };
+        // "Only while connecting": every connection registers itself, with the global name
+        // when the site has none of its own.
+        let ident = &self.options.settings.ident;
+        let global = if ident.name.trim().is_empty() { urftp_core::DEFAULT_IDENT_NAME.to_string() } else { ident.name.trim().to_string() };
+        let name = own.or_else(|| ident.only_while_connecting.then_some(global));
+        if let Some(name) = name {
+            p.ident = Some(urftp_proto::session::SiteIdent { registrar: srv.registrar(), name });
         }
         p
     }
@@ -1448,6 +1453,13 @@ impl UltraRushApp {
                 Action::Rename(side) => tab.ask_rename(side),
                 Action::Delete(side) => tab.ask_delete(side),
                 Action::CopyPath(side, name) => ctx.copy_text(tab.sides[side].full_path(&name)),
+                Action::CopyHttpUrl(side, name) => {
+                    if let Side::Remote(r) = &tab.sides[side]
+                        && let Some(url) = r.http.url_of(&rpath::join(&r.dir, &name))
+                    {
+                        ctx.copy_text(url);
+                    }
+                }
                 Action::QueueStop(id) => tab.stop_item(id),
                 Action::QueueStopAll => tab.stop_all(),
                 Action::QueueMove(id, m) => tab.move_item(id, m),
@@ -1921,6 +1933,7 @@ impl PaneViewer<'_> {
         ui.separator();
 
         let rows: Vec<FileRow> = self.sides[side].rows().to_vec();
+        let http = matches!(&self.sides[side], Side::Remote(r) if r.http.is_set());
         let selected = self.sides[side].selected().clone();
         let sort = self.sides[side].sort();
         let cursor = self.sides[side].cursor();
@@ -2029,6 +2042,10 @@ impl PaneViewer<'_> {
                             ui.separator();
                             if ui.button(t!("files.ctx_copy_path")).clicked() {
                                 menu.push(Action::CopyPath(side, f.name.clone()));
+                                ui.close();
+                            }
+                            if http && ui.button(t!("files.ctx_copy_http")).clicked() {
+                                menu.push(Action::CopyHttpUrl(side, f.name.clone()));
                                 ui.close();
                             }
                             if ui.button(t!("files.ctx_refresh")).clicked() {

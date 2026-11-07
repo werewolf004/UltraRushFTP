@@ -58,7 +58,8 @@ $sites = @{
                             upload_account = @{ user = 'upload'; password = 'b64:dXBsb2Fk' } }
                         bookmarks = @(@{ name = 'releases'; remote_dir = '/pub/Releases'; local_dir = '' })
                         notes = 'Development server: cargo run -p urftp-proto --example dev_server' },
-                    @{ id = 2; name = 'Example FTPS'; host = 'ftp.example.com'; port = 21; protocol = 'ftps_explicit'; user = 'demo'; max_transfers = 4 },
+                    @{ id = 2; name = 'Example FTPS'; host = 'ftp.example.com'; port = 21; protocol = 'ftps_explicit'; user = 'demo'; max_transfers = 4
+                        description = 'Releases'; proxy = @{ named = 'Office' }; http = @{ base_url = 'https://www.example.com/files'; ftp_root = '/pub' } },
                     @{ id = 3; name = 'Example SFTP'; host = 'sftp.example.org'; port = 22; protocol = 'sftp'; user = 'demo' }) },
             @{ name = 'Mirrors'; groups = @(); sites = @(
                     @{ id = 4; name = 'Mirror A'; host = 'mirror-a.example.net'; port = 990; protocol = 'ftps_implicit'; anonymous = $true },
@@ -74,6 +75,7 @@ $rule = { param($mask, $regex, $target, $up, $down, $fxp)
     skiplist = @{ enabled = $true; skip_zero_byte_files = $true; skip_empty_dirs = $false
         rules = @((& $rule '*.jpg' $false 'Files' $true $true $true), (& $rule 'Sample' $false 'Dirs' $true $true $true), (& $rule '^.*\.(tmp|part)$' $true 'Files' $true $false $false)) }
     priorities = @(@{ mask = '*.sfv'; regex = $false }, @{ mask = '*.nfo'; regex = $false })
+    proxies = @(@{ name = 'Office'; proxy = @{ kind = 'http_tunnel'; host = 'proxy.example.net'; port = 3128; data_channel = $true } })
 } | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8NoBOM "$data/settings.json"
 $script = Join-Path $demo 'transfer.pas'
 "begin`n  RushApp.FTP.Transfer(0, 'Local demo', '/pub/Releases', 'UltraRush.Demo-2026', '', '$local\Downloads', '', RS_DOWN or RS_DIRSRC or RS_DIRDES, '', '', '', '', '', 0, 0, 0, 0, 0, 0, 0);`nend." |

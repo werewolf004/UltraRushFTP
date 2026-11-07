@@ -486,7 +486,13 @@ impl Engine {
         let (Some(src), Some(dstc)) = (a.as_ftp(), b.as_ftp()) else {
             return Err(SessionError::FxpNeedsFtp);
         };
-        let opts = FxpOptions { offset, ..self.opts.fxp.clone() };
+        let mut opts = FxpOptions { offset, ..self.opts.fxp.clone() };
+        let rules = |site: &Option<String>| site.as_deref().and_then(|s| self.sites.get(s)).map(|p| &p.profile.rules);
+        let source_active = rules(&item.src.site).is_some_and(|r| r.fxp_source_active);
+        let target_passive = rules(&item.dst.site).is_some_and(|r| r.fxp_target_passive);
+        if source_active || target_passive {
+            opts.mode = crate::ftp::FxpMode::DestinationPassive;
+        }
         fxp(src, &item.src.path, dstc, &dst, &opts).await?;
         self.progress(item.id, size.unwrap_or(0), size);
         Ok(Outcome::Done(size.unwrap_or(0)))

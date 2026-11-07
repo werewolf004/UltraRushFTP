@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
+Summary (284 topics): ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17.
 
 ## Main window and menus
 
@@ -178,9 +178,9 @@ Summary (284 topics): ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
 | Time zone | ✅ | Offset added to the listing dates (FTP) |
 | Maximum simultaneous transfers (0 = browsing connection) | ✅ | |
 | Remote and local paths | ✅ | |
-| Description (short text for menus, notes) | 🟡 | Notes; no short description |
+| Description (short text for menus, notes) | ✅ | Shown next to the name in the site tree |
 | Bookmarks | ✅ | |
-| HTTP URL mapping, copy HTTP URL | ⬜ | |
+| HTTP URL mapping, copy HTTP URL | ✅ | Remote panel: right-click → Copy HTTP address |
 | Display: site name instead of [1]/[2] in the log | ⬜ | The log shows Left / Right |
 | Connection: global or custom retries and timeouts | ✅ | |
 | Resume support: auto / yes / no | ✅ | On (the server's refusal is detected) or off per site |
@@ -202,14 +202,14 @@ Summary (284 topics): ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
 | List mode: UPnP | ⬜ | |
 | Directory cache per site | ⬜ | |
 | Directory charset (non-UTF-8 servers) | ✅ | Commands, replies and listings; 14 character sets |
-| Listing parser choice | 🟡 | Automatic detection (Unix, DOS/IIS, `MLSD`); no manual choice |
+| Listing parser choice | ✅ | Automatic, Unix or DOS/IIS (`MLSD` is always read as such) |
 | SSL: `PBSZ 0` | ✅ | |
-| SSL: encrypt listings / transfers separately | 🟡 | One "protect data" setting for both |
+| SSL: encrypt listings / transfers separately | ✅ | |
 | SSL: encrypted FXP | ✅ | |
-| SFTP: private keys | 🟡 | One key per site; several keys not yet |
+| SFTP: private keys | ✅ | Several keys, tried in turn |
 | Transfer: file-name case conversion | ⬜ | |
 | Transfer: XDupe | ⬜ | |
-| Transfer: FXP method (no `PASV` as source, `PASV` as target) | 🟡 | Automatic reversal when `PORT` is refused; no fixed setting |
+| Transfer: FXP method (no `PASV` as source, `PASV` as target) | ✅ | Per site; automatic reversal when `PORT` is refused |
 | Transfer: force active mode | ⬜ | |
 | Transfer: TCP buffer size | ⬜ | |
 | Skip list, priority, file-exists rules per site | ✅ | |
@@ -250,10 +250,10 @@ Summary (284 topics): ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
 | Bind to a local IP address | ✅ | Direct connections (not the proxy one) |
 | Limit local port range | ✅ | |
 | Ident: enable, name, system, port | ✅ | |
-| Ident: only while connecting | ⬜ | |
+| Ident: only while connecting | ✅ | Other requests get `NO-USER` |
 | Keep alive: command, interval, stop after, log out, reconnect when kicked, random command | ✅ | Global or per site |
-| Proxy: list of named proxies | 🟡 | One global proxy and one custom proxy per site |
-| Proxy: `NOOP` during transfers, passive with proxy | ⬜ | |
+| Proxy: list of named proxies | ✅ | Proxy page; chosen by name in the site records |
+| Proxy: `NOOP` during transfers, passive with proxy | ✅ | `NOOP`: Connection page; passive mode always used through a proxy |
 | Proxy: bypass for local addresses, exceptions | ✅ | |
 | Proxy editor | ✅ | Inline in the options and the site record |
 | List mode: show hidden files (`LIST -a`) | ✅ | |

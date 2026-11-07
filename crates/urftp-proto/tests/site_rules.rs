@@ -185,3 +185,18 @@ async fn the_site_ident_name_is_answered_while_connecting() {
     assert!(answers[0].ends_with(": SITENAME"), "{answers:?}");
     assert!(answers[1].ends_with(": URUSHFTP"), "{answers:?}");
 }
+
+#[tokio::test]
+async fn fxp_roles_follow_the_site_settings() {
+    let a = MockServer::start(MockConfig::default()).await;
+    let b = MockServer::start(MockConfig::default()).await;
+    a.fs.lock().unwrap().files.insert("/f.rar".into(), payload(20_000));
+    let mut q = Queue::new();
+    let id = q.push(Endpoint::remote("A", "/f.rar"), Endpoint::remote("B", "/f.rar"), false, None, None);
+    let target = SiteRules { fxp_target_passive: true, ..SiteRules::default() };
+    let e = run(q, vec![site("A", a.addr.port(), SiteRules::default()), site("B", b.addr.port(), target)], opts()).await;
+    assert_eq!(state(&e, id), ItemState::Done);
+    assert_eq!(b.fs.lock().unwrap().files["/f.rar"], payload(20_000));
+    assert!(b.received().iter().any(|l| l == "PASV" || l == "EPSV"), "the target listens");
+    assert!(a.received().iter().any(|l| l.starts_with("PORT")), "the source connects");
+}

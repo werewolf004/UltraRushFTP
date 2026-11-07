@@ -502,3 +502,51 @@ fn an_invalid_address_is_flagged_on_the_connection_page() {
     ui.run();
     assert!(ui.harness.query_by_label_contains(&t!("options.invalid_ip")).is_some(), "warning shown");
 }
+
+#[test]
+fn named_proxies_are_added_in_the_options_and_chosen_in_a_site() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.app().options.open = true;
+    ui.run();
+    ui.harness.get_by_role_and_label(Role::Button, &crate::options::Page::Proxy.label()).click();
+    ui.run();
+    ui.harness.get_by_label(&t!("options.add_proxy")).click_accesskit();
+    ui.run();
+    assert_eq!(ui.app().options.settings.proxies.len(), 1);
+    assert_all_named(&ui, "options, named proxy");
+    ui.app().options.open = false;
+
+    let site = urftp_core::site::Site { name: "Behind".into(), host: "ftp.example.com".into(), ..Default::default() };
+    let id = ui.app().sites.book.add_site(&[], site);
+    ui.app().sites.open = true;
+    ui.run();
+    ui.harness.get_by_label_contains("Behind").click();
+    ui.run();
+    ui.harness.get_by_label(&t!("site.proxy")).click_accesskit();
+    ui.run();
+    ui.harness.get_by_label("Proxy 1").click_accesskit();
+    ui.run();
+    let s = ui.app().sites.book.find(id).cloned().unwrap();
+    assert_eq!(s.proxy, urftp_core::site::ProxyChoice::Named("Proxy 1".into()));
+}
+
+#[test]
+fn sftp_record_with_several_keys_is_named() {
+    let mut ui = Ui::start(Lang::Fr, true);
+    let site = urftp_core::site::Site {
+        name: "Keys".into(),
+        host: "ssh.example.com".into(),
+        protocol: urftp_core::site::SiteProtocol::Sftp,
+        ssh_key_file: Some("a.ppk".into()),
+        ssh_more_keys: vec!["b.ppk".into()],
+        description: "Two keys".into(),
+        ..Default::default()
+    };
+    ui.app().sites.book.add_site(&[], site);
+    ui.app().sites.open = true;
+    ui.run();
+    ui.harness.get_by_label_contains("Keys").click();
+    ui.run();
+    assert!(ui.harness.query_by_label(&t!("site.more_key", n = 2)).is_some());
+    assert_all_named(&ui, "site manager, SFTP keys");
+}

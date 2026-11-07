@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
+Résumé (284 sujets) : ✅ 110 · 🟡 31 · ⬜ 126 · ➖ 17.
 
 ## Fenêtre principale et menus
 
@@ -178,9 +178,9 @@ Résumé (284 sujets) : ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
 | Fuseau horaire | ✅ | Décalage ajouté aux dates des listings (FTP) |
 | Transferts simultanés maximum (0 = connexion de navigation) | ✅ | |
 | Chemins distant et local | ✅ | |
-| Description (texte court pour les menus, notes) | 🟡 | Notes ; pas de description courte |
+| Description (texte court pour les menus, notes) | ✅ | Affichée à côté du nom dans l'arbre des sites |
 | Signets | ✅ | |
-| Correspondance d'URL HTTP, copier l'URL HTTP | ⬜ | |
+| Correspondance d'URL HTTP, copier l'URL HTTP | ✅ | Panneau distant : clic droit → Copier l'adresse HTTP |
 | Affichage : nom du site au lieu de [1]/[2] dans le journal | ⬜ | Le journal affiche Gauche / Droite |
 | Connexion : essais et délais globaux ou propres au site | ✅ | |
 | Reprise : auto / oui / non | ✅ | Active (le refus du serveur est détecté) ou désactivée par site |
@@ -202,14 +202,14 @@ Résumé (284 sujets) : ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
 | Mode de listing : UPnP | ⬜ | |
 | Cache des dossiers par site | ⬜ | |
 | Jeu de caractères des dossiers (serveurs non UTF-8) | ✅ | Commandes, réponses et listings ; 14 jeux de caractères |
-| Choix de l'analyseur de listing | 🟡 | Détection automatique (Unix, DOS/IIS, `MLSD`) ; pas de choix manuel |
+| Choix de l'analyseur de listing | ✅ | Automatique, Unix ou DOS/IIS (`MLSD` est toujours lu comme tel) |
 | SSL : `PBSZ 0` | ✅ | |
-| SSL : chiffrer listings / transferts séparément | 🟡 | Un seul réglage « protéger les données » pour les deux |
+| SSL : chiffrer listings / transferts séparément | ✅ | |
 | SSL : FXP chiffré | ✅ | |
-| SFTP : clés privées | 🟡 | Une clé par site ; plusieurs clés pas encore |
+| SFTP : clés privées | ✅ | Plusieurs clés, essayées à tour de rôle |
 | Transfert : conversion de casse des noms | ⬜ | |
 | Transfert : XDupe | ⬜ | |
-| Transfert : méthode FXP (pas de `PASV` côté source, `PASV` côté cible) | 🟡 | Inversion automatique quand `PORT` est refusé ; pas de réglage fixe |
+| Transfert : méthode FXP (pas de `PASV` côté source, `PASV` côté cible) | ✅ | Par site ; inversion automatique quand `PORT` est refusé |
 | Transfert : forcer le mode actif | ⬜ | |
 | Transfert : taille du tampon TCP | ⬜ | |
 | Liste d'exclusion, priorités, règles « fichier existant » par site | ✅ | |
@@ -250,10 +250,10 @@ Résumé (284 sujets) : ✅ 101 · 🟡 37 · ⬜ 129 · ➖ 17.
 | Lier à une adresse IP locale | ✅ | Connexions directes (pas celle du proxy) |
 | Plage de ports locaux | ✅ | |
 | Ident : activer, nom, système, port | ✅ | |
-| Ident : seulement pendant la connexion | ⬜ | |
+| Ident : seulement pendant la connexion | ✅ | Les autres requêtes reçoivent `NO-USER` |
 | Maintien de connexion : commande, intervalle, arrêt, déconnexion, reconnexion après expulsion, commande aléatoire | ✅ | Global ou par site |
-| Proxy : liste de proxys nommés | 🟡 | Un proxy global et un proxy personnalisé par site |
-| Proxy : `NOOP` pendant les transferts, passif avec proxy | ⬜ | |
+| Proxy : liste de proxys nommés | ✅ | Page Proxy ; choisis par leur nom dans les fiches de site |
+| Proxy : `NOOP` pendant les transferts, passif avec proxy | ✅ | `NOOP` : page Connexion ; mode passif toujours utilisé à travers un proxy |
 | Proxy : contourner pour les adresses locales, exceptions | ✅ | |
 | Éditeur de proxy | ✅ | Intégré aux options et à la fiche du site |
 | Mode de listing : afficher les fichiers cachés (`LIST -a`) | ✅ | |

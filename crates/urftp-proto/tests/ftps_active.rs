@@ -63,7 +63,7 @@ async fn data_channels_reuse_the_tls_session() {
 #[tokio::test]
 async fn clear_data_channel_when_protection_disabled() {
     let srv = MockServer::start(MockConfig { tls: MockTls::Explicit, ..MockConfig::default() }).await;
-    let opts = TlsOptions { protect_data: false, ..tls(TlsVerify::AcceptAny) };
+    let opts = TlsOptions { protect_data: false, protect_listings: false, ..tls(TlsVerify::AcceptAny) };
     let c = roundtrip(&srv, config(Security::Explicit(opts))).await;
     assert!(c.is_secure() && !c.is_data_protected());
     assert!(srv.received().iter().any(|l| l == "PROT C"));
@@ -155,4 +155,17 @@ async fn active_mode_port_range_and_external_ip() {
     c.login("test", "secret").await.unwrap();
     let _ = c.list(None).await;
     assert!(srv.received().iter().any(|l| l.starts_with("PORT 203,0,113,9,")));
+}
+
+#[tokio::test]
+async fn listings_and_transfers_are_protected_separately() {
+    let srv = MockServer::start(MockConfig { tls: MockTls::Explicit, ..MockConfig::default() }).await;
+    let opts = TlsOptions { verify: TlsVerify::AcceptAny, protect_data: true, protect_listings: false, ..TlsOptions::default() };
+    roundtrip(&srv, config(Security::Explicit(opts))).await;
+    // Upload, listing, download.
+    let channels: Vec<bool> = srv.data_channels().into_iter().map(|(encrypted, _)| encrypted).collect();
+    assert_eq!(channels, [true, false, true]);
+    let cmds = srv.received();
+    let list = cmds.iter().position(|l| l.starts_with("MLSD") || l.starts_with("LIST")).unwrap();
+    assert_eq!(cmds[..list].iter().rev().find(|l| l.starts_with("PROT")).map(String::as_str), Some("PROT C"), "{cmds:?}");
 }

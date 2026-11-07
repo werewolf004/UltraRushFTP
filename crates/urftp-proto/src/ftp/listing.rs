@@ -86,9 +86,32 @@ impl RemoteEntry {
     }
 }
 
+/// Format of the `LIST` lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ListFormat {
+    /// Unix or DOS/IIS, recognised line by line.
+    #[default]
+    Auto,
+    Unix,
+    Dos,
+}
+
 /// Parses a complete `LIST` listing; skips `total N`, `.`, `..` and unknown lines.
 pub fn parse_list(text: &str) -> Vec<RemoteEntry> {
-    text.lines().filter_map(parse_list_line).filter(|e| !is_dot(&e.name)).collect()
+    parse_list_as(text, ListFormat::Auto)
+}
+
+/// Like [`parse_list`], with the line format forced.
+pub fn parse_list_as(text: &str, format: ListFormat) -> Vec<RemoteEntry> {
+    let parse = |l: &str| {
+        let l = l.trim_end_matches(['\r', '\n']);
+        match format {
+            ListFormat::Auto => parse_unix(l).or_else(|| parse_dos(l)),
+            ListFormat::Unix => parse_unix(l),
+            ListFormat::Dos => parse_dos(l),
+        }
+    };
+    text.lines().filter_map(parse).filter(|e| !is_dot(&e.name)).collect()
 }
 
 /// Parses a complete `MLSD` listing; skips `cdir`, `pdir`, `.` and `..`.
@@ -280,6 +303,15 @@ pub fn parse_mlsd_time(v: &str) -> Option<FtpTime> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn forced_format() {
+        let text = "-rw-r--r-- 1 o g 5 Jan 01 12:00 unix.txt\r\n01-02-24  10:30AM                  7 dos.txt\r\n";
+        let names = |f| parse_list_as(text, f).into_iter().map(|e| e.name).collect::<Vec<_>>();
+        assert_eq!(names(ListFormat::Auto), ["unix.txt", "dos.txt"]);
+        assert_eq!(names(ListFormat::Unix), ["unix.txt"]);
+        assert_eq!(names(ListFormat::Dos), ["dos.txt"]);
+    }
 
     #[test]
     fn dates_move_with_the_time_zone() {

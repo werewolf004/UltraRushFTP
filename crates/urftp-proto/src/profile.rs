@@ -6,10 +6,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use urftp_core::settings::{GlobalProxy, KeepAliveSettings, Settings};
-use urftp_core::site::{CertPolicy, ListCommand, ProxyChoice, ProxyType, Site, SiteProtocol, SiteProxy, TransferMode};
+use urftp_core::site::{CertPolicy, ListCommand, ListParser, ProxyChoice, ProxyType, Site, SiteProtocol, SiteProxy, TransferMode};
 
 use crate::engine::EngineOptions;
-use crate::ftp::{FtpConfig, Security, TlsOptions, TlsVerify};
+use crate::ftp::{FtpConfig, ListFormat, Security, TlsOptions, TlsVerify};
 use crate::keepalive::{KeepAlive, Reconnect, SessionPolicy, split_list};
 use crate::proxy::{ProxyConfig, ProxyKind, parse_exceptions};
 use crate::session::{Credentials, HostList, SiteProfile, SiteProtocol as ProfileProtocol, SiteRules};
@@ -111,6 +111,11 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
         ProxyChoice::Custom(p) => Some(proxy_config(p, false, "")),
         ProxyChoice::Global => global_proxy(&settings.proxy),
         ProxyChoice::Direct => None,
+        // A proxy removed from the list: the global setting applies.
+        ProxyChoice::Named(name) => match settings.named_proxy(name) {
+            Some(n) => Some(proxy_config(&n.proxy, false, "")),
+            None => global_proxy(&settings.proxy),
+        },
     };
     let own = &site.settings;
     let t = &settings.transfer;
@@ -125,6 +130,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             CertPolicy::Fingerprint(f) => TlsVerify::Fingerprint(f.clone()),
         },
         protect_data: site.protect_data,
+        protect_listings: site.listings_protected(),
         auth_ssl_fallback: true,
     };
     let net = &settings.network;
@@ -142,6 +148,12 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             port_fallback: settings.listing.port_fallback,
             time_offset_mins: site.listing.time_offset_mins,
             charset: charset(site),
+            list_format: match site.listing.parser {
+                ListParser::Auto => ListFormat::Auto,
+                ListParser::Unix => ListFormat::Unix,
+                ListParser::Dos => ListFormat::Dos,
+            },
+            noop_during_transfer: net.noop_during_transfers.then(|| Duration::from_secs(u64::from(net.noop_interval_secs.max(5)))),
             proxy: proxy.clone(),
             connect_timeout,
             io_timeout,
@@ -163,10 +175,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
                 bind_ip: net.bind(),
                 ..SftpConfig::default()
             },
-            key: site.ssh_key_file.as_ref().map(|p| SftpAuth::KeyFile {
-                path: PathBuf::from(p),
-                passphrase: (!site.password.is_empty()).then(|| site.password.clone()),
-            }),
+            key: sftp_keys(site),
         },
     };
     SiteProfile {
@@ -188,8 +197,28 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             resume: own.resume,
             upload_account: account(own.upload_account.as_ref()),
             download_account: account(own.download_account.as_ref()),
+            fxp_source_active: site.fxp_source_active,
+            fxp_target_passive: site.fxp_target_passive,
         },
         ident: None,
+    }
+}
+
+/// SSH keys of a site, tried in order (the password is their passphrase).
+fn sftp_keys(site: &Site) -> Option<SftpAuth> {
+    let passphrase = (!site.password.is_empty()).then(|| site.password.clone());
+    let mut keys: Vec<SftpAuth> = site
+        .ssh_key_file
+        .iter()
+        .chain(&site.ssh_more_keys)
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .map(|p| SftpAuth::KeyFile { path: PathBuf::from(p), passphrase: passphrase.clone() })
+        .collect();
+    match keys.len() {
+        0 => None,
+        1 => keys.pop(),
+        _ => Some(SftpAuth::Any(keys)),
     }
 }
 
@@ -216,6 +245,40 @@ pub fn engine_options(s: &Settings, download: &Arc<RateLimiter>, upload: &Arc<Ra
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn named_proxies_keys_and_protection() {
+        use urftp_core::settings::NamedProxy;
+        let mut settings = Settings::default();
+        settings
+            .proxies
+            .push(NamedProxy { name: "Office".into(), proxy: SiteProxy { host: "office.lan".into(), port: 3128, ..SiteProxy::default() } });
+        let site = Site {
+            proxy: ProxyChoice::Named("Office".into()),
+            protocol: SiteProtocol::FtpsExplicit,
+            protect_listings: Some(false),
+            ..Site::default()
+        };
+        let ProfileProtocol::Ftp(cfg) = site_profile(&site, &settings).protocol else { panic!() };
+        assert_eq!(cfg.proxy.as_ref().map(|p| p.host.as_str()), Some("office.lan"));
+        assert!(matches!(&cfg.security, Security::Explicit(o) if o.protect_data && !o.protect_listings));
+        let gone = Site { proxy: ProxyChoice::Named("Removed".into()), ..Site::default() };
+        let ProfileProtocol::Ftp(cfg) = site_profile(&gone, &settings).protocol else { panic!() };
+        assert!(cfg.proxy.is_none(), "unknown name: the global setting (disabled here)");
+
+        let keys = Site {
+            protocol: SiteProtocol::Sftp,
+            ssh_key_file: Some("a.ppk".into()),
+            ssh_more_keys: vec!["b.ppk".into(), " ".into()],
+            ..Site::default()
+        };
+        let ProfileProtocol::Sftp { key: Some(SftpAuth::Any(list)), .. } = site_profile(&keys, &settings).protocol else { panic!() };
+        assert_eq!(list.len(), 2, "blank entries ignored");
+
+        settings.network.noop_during_transfers = true;
+        let ProfileProtocol::Ftp(cfg) = site_profile(&Site::default(), &settings).protocol else { panic!() };
+        assert_eq!(cfg.noop_during_transfer, Some(Duration::from_secs(60)));
+    }
 
     #[test]
     fn listing_and_network_settings() {

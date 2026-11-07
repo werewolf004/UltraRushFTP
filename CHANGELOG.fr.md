@@ -12,6 +12,16 @@ la traduction.
 
 ### Ajouté
 
+- **Proxys nommés** (Options › Proxy), choisis par leur nom dans les fiches de site.
+- **`NOOP` pendant les transferts** (Options › Connexion), pour les proxys et routeurs qui
+  coupent une connexion de contrôle inactive.
+- **Listings chiffrés ou non, indépendamment des transferts** (fiche d'un site FTPS).
+- **Ident seulement pendant la connexion** (Options › Ident).
+- **Plusieurs clés SSH par site**, essayées à tour de rôle.
+- **Rôles FXP par site** : jamais `PASV` comme source, toujours `PASV` comme cible.
+- **Description du site**, **format du listing** (automatique, Unix, DOS/IIS) et **adresse
+  web** d'un site, avec *Copier l'adresse HTTP* dans le panneau distant.
+
 - **Réglages de listing** (Options › Connexion, et par site) : fichiers cachés (`LIST -a`),
   `MLSD` activé ou non, commande de listing personnalisée, `STAT -l` sur le canal de
   contrôle, retrait des espaces de tête, passage en mode actif quand le mode passif échoue.
@@ -50,6 +60,11 @@ la traduction.
   pour être testée contre le serveur de test.
 - Les messages d'erreur de la couche protocole sont désormais tous en anglais (certains
   étaient en français).
+
+### Corrigé
+
+- La barre de connexion rapide suit maintenant les options réseau, de listing et de
+  connexion anonyme.
 
 ## [0.2.0] - 2026-11-06
 

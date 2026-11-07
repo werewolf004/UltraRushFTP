@@ -11,8 +11,8 @@ use eframe::egui::{self, RichText};
 use urftp_core::import::{self, ImportResult, ImportWarning};
 use urftp_core::settings::Settings;
 use urftp_core::site::{
-    Account, Bookmark, CHARSETS, CertPolicy, IdentChoice, ListCommand, ProxyChoice, ProxyType, Site, SiteBook, SiteGroup, SiteListing,
-    SiteProtocol, SiteProxy, TransferMode,
+    Account, Bookmark, CHARSETS, CertPolicy, IdentChoice, ListCommand, ListParser, ProxyChoice, ProxyType, Site, SiteBook, SiteGroup,
+    SiteListing, SiteProtocol, SiteProxy, TransferMode,
 };
 use urftp_core::sitestore;
 
@@ -476,12 +476,21 @@ fn tree(
                     p if p.is_tls() => "🔒",
                     _ => "🌐",
                 };
-                let mut text = RichText::new(format!("{icon} {}", s.name));
+                let mut text = if s.description.trim().is_empty() {
+                    RichText::new(format!("{icon} {}", s.name))
+                } else {
+                    RichText::new(format!("{icon} {} — {}", s.name, s.description.trim()))
+                };
                 if !s.enabled {
                     text = text.weak().strikethrough();
                 }
                 ui.horizontal(|ui| {
-                    if ui.selectable_label(*sel == Selection::Site(s.id), text).on_hover_text(format!("{}:{}", s.host, s.port)).clicked() {
+                    let hover = if s.description.trim().is_empty() {
+                        format!("{}:{}", s.host, s.port)
+                    } else {
+                        format!("{}\n{}:{}", s.description.trim(), s.host, s.port)
+                    };
+                    if ui.selectable_label(*sel == Selection::Site(s.id), text).on_hover_text(hover).clicked() {
                         *clicked = Some(Selection::Site(s.id));
                     }
                     if let Some(p) = probes.get(&s.id) {
@@ -549,6 +558,9 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
             row(ui, &t!("common.name"), |ui, l| {
                 ui.add(theme::single_line(&mut s.name).desired_width(320.0)).labelled_by(l);
             });
+            row(ui, &t!("site.description"), |ui, l| {
+                ui.add(theme::single_line(&mut s.description).hint_text(t!("site.description_hint")).desired_width(320.0)).labelled_by(l);
+            });
             row(ui, &t!("site.protocol"), |ui, l| {
                 let before = s.protocol;
                 egui::ComboBox::from_id_salt("site-proto")
@@ -603,6 +615,10 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
     if s.protocol.is_tls() {
         section(ui, &t!("site.tls"), |ui| {
             ui.checkbox(&mut s.protect_data, t!("site.protect_data"));
+            let mut listings = s.listings_protected();
+            if ui.checkbox(&mut listings, t!("site.protect_listings")).changed() {
+                s.protect_listings = Some(listings);
+            }
             let label = match &s.cert {
                 CertPolicy::System => t!("site.cert_system"),
                 CertPolicy::AcceptAny => t!("site.cert_any"),
@@ -644,8 +660,28 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
                         *key = p.to_string_lossy().into_owned();
                     }
                 });
+                ui.label(RichText::new(t!("site.more_keys")).weak());
+                let mut remove = None;
+                for (i, k) in s.ssh_more_keys.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        let r = ui.add(theme::single_line(k).desired_width(360.0));
+                        theme::name(&r, t!("site.more_key", n = i + 2));
+                        if theme::icon_button(ui, "✕", t!("site.remove_key", n = i + 2)).clicked() {
+                            remove = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = remove {
+                    s.ssh_more_keys.remove(i);
+                }
+                if ui.button(t!("site.add_key")).clicked()
+                    && let Some(p) = rfd::FileDialog::new().set_title(t!("site.key_dialog")).pick_file()
+                {
+                    s.ssh_more_keys.push(p.to_string_lossy().into_owned());
+                }
             } else {
                 s.ssh_key_file = None;
+                s.ssh_more_keys.clear();
             }
             ui.label(RichText::new(t!("site.host_keys", n = s.ssh_host_keys.len())).weak());
             let mut remove = None;
@@ -689,17 +725,36 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
                 }
             });
         });
+        if s.protocol != SiteProtocol::Sftp {
+            ui.checkbox(&mut s.fxp_source_active, t!("site.fxp_source_active"));
+            ui.checkbox(&mut s.fxp_target_passive, t!("site.fxp_target_passive"));
+        }
     });
 
     if s.protocol != SiteProtocol::Sftp {
         section(ui, &t!("site.listing"), |ui| listing_ui(ui, &mut s.listing));
     }
 
+    section(ui, &t!("site.http"), |ui| {
+        egui::Grid::new("site-http").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+            row(ui, &t!("site.http_url"), |ui, l| {
+                ui.add(theme::single_line(&mut s.http.base_url).hint_text("https://www.example.com/files").desired_width(320.0))
+                    .labelled_by(l);
+            });
+            row(ui, &t!("site.http_root"), |ui, l| {
+                ui.add(theme::single_line(&mut s.http.ftp_root).hint_text("/").desired_width(200.0)).labelled_by(l);
+            });
+        });
+        ui.label(RichText::new(t!("site.http_note")).weak());
+    });
+
     section(ui, &t!("site.proxy_ident"), |ui| {
         let label = match &s.proxy {
             ProxyChoice::Global => t!("site.proxy_global"),
             ProxyChoice::Direct => t!("site.proxy_direct"),
             ProxyChoice::Custom(_) => t!("site.proxy_custom"),
+            ProxyChoice::Named(n) if global.named_proxy(n).is_some() => n.clone(),
+            ProxyChoice::Named(n) => t!("site.proxy_missing", name = n),
         };
         let proxy = egui::ComboBox::from_id_salt("site-proxy").selected_text(label).show_ui(ui, |ui| {
             if ui.selectable_label(s.proxy == ProxyChoice::Global, t!("site.proxy_global")).clicked() {
@@ -712,6 +767,12 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
                 && !matches!(s.proxy, ProxyChoice::Custom(_))
             {
                 s.proxy = ProxyChoice::Custom(SiteProxy { port: 1080, data_channel: true, ..SiteProxy::default() });
+            }
+            for n in &global.proxies {
+                let chosen = matches!(&s.proxy, ProxyChoice::Named(x) if *x == n.name);
+                if ui.selectable_label(chosen, &n.name).clicked() {
+                    s.proxy = ProxyChoice::Named(n.name.clone());
+                }
             }
         });
         theme::name(&proxy.response, t!("site.proxy"));
@@ -925,6 +986,22 @@ pub(crate) fn listing_ui(ui: &mut egui::Ui, l: &mut SiteListing) {
             if r.changed() {
                 l.time_offset_mins = (hours * 60.0).round() as i32;
             }
+        });
+        row(ui, &t!("site.list_parser"), |ui, lid| {
+            let label = |p: ListParser| match p {
+                ListParser::Auto => t!("site.parser_auto"),
+                ListParser::Unix => "Unix".to_string(),
+                ListParser::Dos => "DOS / IIS".to_string(),
+            };
+            egui::ComboBox::from_id_salt("site-list-parser")
+                .selected_text(label(l.parser))
+                .show_ui(ui, |ui| {
+                    for p in [ListParser::Auto, ListParser::Unix, ListParser::Dos] {
+                        ui.selectable_value(&mut l.parser, p, label(p));
+                    }
+                })
+                .response
+                .labelled_by(lid);
         });
         row(ui, &t!("site.charset"), |ui, lid| {
             let auto = t!("site.charset_utf8");

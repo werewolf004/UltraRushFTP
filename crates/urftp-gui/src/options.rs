@@ -10,7 +10,7 @@ use urftp_core::site::ProxyType;
 use urftp_core::skiplist::{RuleAction, RuleTarget};
 
 /// Conversions shared with the `urftp` tool.
-pub use urftp_proto::profile::{engine_options, global_proxy};
+pub use urftp_proto::profile::engine_options;
 
 use crate::theme;
 
@@ -214,7 +214,7 @@ impl OptionsWindow {
             Page::Exists => exists_ui(ui, &mut s.exists),
             Page::Skiplist => skiplist_ui(ui, &mut s.skiplist),
             Page::Priorities => priorities_ui(ui, &mut s.priorities),
-            Page::Proxy => proxy_ui(ui, &mut s.proxy),
+            Page::Proxy => proxy_ui(ui, &mut s.proxy, &mut s.proxies),
             Page::KeepAlive => keep_alive_ui(ui, &mut s.keep_alive),
             Page::Connection => connection_ui(ui, s),
             Page::NewSite => {
@@ -225,6 +225,7 @@ impl OptionsWindow {
             Page::Ident => {
                 let id = &mut s.ident;
                 ui.checkbox(&mut id.enabled, t!("options.ident_enable"));
+                ui.checkbox(&mut id.only_while_connecting, t!("options.ident_only_connecting"));
                 egui::Grid::new("opt-ident").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                     theme::grid_row(
                         ui,
@@ -287,6 +288,11 @@ fn connection_ui(ui: &mut egui::Ui, s: &mut Settings) {
     if n.port_min > 0 && n.port_range().is_none() {
         ui.colored_label(theme::colors(ui).error, format!("⚠ {}", t!("options.port_range_invalid")));
     }
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut n.noop_during_transfers, t!("options.noop_during_transfers"));
+        let r = ui.add_enabled(n.noop_during_transfers, egui::DragValue::new(&mut n.noop_interval_secs).range(5..=600).suffix(" s"));
+        theme::name(&r, t!("options.noop_interval"));
+    });
     ui.label(RichText::new(t!("options.active_note")).weak());
 }
 
@@ -500,7 +506,74 @@ pub(crate) fn keep_alive_ui(ui: &mut egui::Ui, k: &mut KeepAliveSettings) {
     ui.label(RichText::new(t!("options.ka_note")).weak());
 }
 
-fn proxy_ui(ui: &mut egui::Ui, g: &mut GlobalProxy) {
+/// Fields of a proxy (type, host, port, login, data channels).
+pub(crate) fn proxy_fields(ui: &mut egui::Ui, id: &str, p: &mut urftp_core::site::SiteProxy) {
+    egui::Grid::new(id).num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        ui.label(t!("common.type"));
+        ui.horizontal(|ui| {
+            for (k, l) in [
+                (ProxyType::Socks4, "SOCKS4"),
+                (ProxyType::Socks4a, "SOCKS4A"),
+                (ProxyType::Socks5, "SOCKS5"),
+                (ProxyType::HttpTunnel, "HTTP Tunnel"),
+            ] {
+                ui.radio_value(&mut p.kind, k, l);
+            }
+        });
+        ui.end_row();
+        let l = ui.label(t!("options.proxy_host_port"));
+        ui.horizontal(|ui| {
+            let h = ui.add(theme::single_line(&mut p.host).desired_width(200.0));
+            theme::name(&h, t!("common.host"));
+            ui.add(egui::DragValue::new(&mut p.port).range(1..=65535)).labelled_by(l.id);
+        });
+        ui.end_row();
+        theme::grid_row(ui, t!("common.user"), theme::single_line(&mut p.user).desired_width(160.0));
+        theme::grid_row(ui, t!("common.password"), theme::single_line(&mut p.password).password(true).desired_width(160.0));
+    });
+    ui.checkbox(&mut p.data_channel, t!("options.proxy_data"));
+}
+
+/// Proxies chosen by name in the site records.
+fn named_proxies_ui(ui: &mut egui::Ui, list: &mut Vec<urftp_core::settings::NamedProxy>) {
+    ui.strong(t!("options.named_proxies"));
+    ui.label(RichText::new(t!("options.named_proxies_note")).weak());
+    let mut remove = None;
+    for (i, n) in list.iter_mut().enumerate() {
+        ui.push_id(("named-proxy", i), |ui| {
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    theme::labelled(ui, t!("common.name"), theme::single_line(&mut n.name).desired_width(180.0));
+                    if theme::icon_button(ui, "✕", t!("options.remove_proxy", name = n.name)).clicked() {
+                        remove = Some(i);
+                    }
+                });
+                proxy_fields(ui, "named-proxy-grid", &mut n.proxy);
+            });
+        });
+    }
+    if let Some(i) = remove {
+        list.remove(i);
+    }
+    if ui.button(t!("options.add_proxy")).clicked() {
+        let mut k = list.len() + 1;
+        while list.iter().any(|p| p.name == format!("Proxy {k}")) {
+            k += 1;
+        }
+        list.push(urftp_core::settings::NamedProxy {
+            name: format!("Proxy {k}"),
+            proxy: urftp_core::site::SiteProxy { port: 1080, data_channel: true, ..Default::default() },
+        });
+    }
+}
+
+fn proxy_ui(ui: &mut egui::Ui, g: &mut GlobalProxy, named: &mut Vec<urftp_core::settings::NamedProxy>) {
+    proxy_global_ui(ui, g);
+    ui.add_space(12.0);
+    named_proxies_ui(ui, named);
+}
+
+fn proxy_global_ui(ui: &mut egui::Ui, g: &mut GlobalProxy) {
     ui.checkbox(&mut g.enabled, t!("options.proxy_enable"));
     ui.add_enabled_ui(g.enabled, |ui| {
         let p = &mut g.proxy;

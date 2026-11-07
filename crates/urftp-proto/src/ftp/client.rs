@@ -57,6 +57,11 @@ pub struct FtpConfig {
     pub charset: Option<&'static encoding_rs::Encoding>,
     /// Local address the control and data connections leave from.
     pub bind_ip: Option<IpAddr>,
+    /// Format of the `LIST` lines (automatic: Unix or DOS line by line).
+    pub list_format: listing::ListFormat,
+    /// Sends `NOOP` on the control channel at this interval during the transfers (proxies
+    /// and routers that drop an idle control connection).
+    pub noop_during_transfer: Option<Duration>,
 }
 
 impl Default for FtpConfig {
@@ -81,6 +86,8 @@ impl Default for FtpConfig {
             time_offset_mins: 0,
             charset: None,
             bind_ip: None,
+            list_format: listing::ListFormat::Auto,
+            noop_during_transfer: None,
         }
     }
 }
@@ -131,6 +138,8 @@ pub struct FtpClient {
     epsv_refused: bool,
     /// The passive mode failed and the connection switched to active mode.
     passive_failed: bool,
+    /// `NOOP` sent during a transfer whose reply has not been read yet.
+    pending_noops: usize,
     log: Option<LogSink>,
 }
 
@@ -218,6 +227,7 @@ impl FtpClient {
             current_type: None,
             epsv_refused: false,
             passive_failed: false,
+            pending_noops: 0,
             log,
         };
         let mut welcome = c.read_reply().await?;
@@ -335,7 +345,11 @@ impl FtpClient {
     pub async fn abort(&mut self) -> Result<()> {
         self.send("ABOR").await?;
         for _ in 0..3 {
-            let r = self.read_reply().await?;
+            let mut r = self.read_reply().await?;
+            while self.pending_noops > 0 && r.code == 200 {
+                self.pending_noops -= 1;
+                r = self.read_reply().await?;
+            }
             if r.is_completion() {
                 // A server that had just finished replies 226 (transfer) then 226 (ABOR):
                 // absorb the second reply when it arrives quickly.
@@ -348,6 +362,35 @@ impl FtpClient {
             if r.is_permanent_negative() && r.code != 426 {
                 return Ok(());
             }
+        }
+        Ok(())
+    }
+
+    /// Protection wanted for the data channel of a listing or of a transfer (`None`
+    /// without TLS on the control channel).
+    fn wanted_protection(&self, listing: bool) -> Option<bool> {
+        self.tls.as_ref()?;
+        let o = self.config.security.options()?;
+        Some(if listing { o.protect_listings } else { o.protect_data })
+    }
+
+    /// `PROT P` / `PROT C` as wanted for the next data channel.
+    async fn protect_for(&mut self, listing: bool) -> Result<()> {
+        match self.wanted_protection(listing) {
+            Some(p) => self.set_data_protection(p).await,
+            None => Ok(()),
+        }
+    }
+
+    /// Sends a `NOOP` when the transfer has lasted `interval` since the last one; its
+    /// reply is read with the end of the transfer.
+    async fn keep_control_alive(&mut self, last: &mut std::time::Instant) -> Result<()> {
+        if let Some(every) = self.config.noop_during_transfer
+            && last.elapsed() >= every
+        {
+            self.send("NOOP").await?;
+            self.pending_noops += 1;
+            *last = std::time::Instant::now();
         }
         Ok(())
     }
@@ -738,15 +781,28 @@ impl FtpClient {
         }
     }
 
+    /// Reads the end of the transfer, and the replies of the `NOOP` sent during it
+    /// (before or after the transfer reply, depending on the server).
     async fn finish_transfer(&mut self, cmd: &str) -> Result<()> {
-        let r = self.read_reply().await?;
+        let mut r = self.read_reply().await?;
+        while self.pending_noops > 0 && r.code == 200 {
+            self.pending_noops -= 1;
+            r = self.read_reply().await?;
+        }
+        while self.pending_noops > 0 {
+            let extra = self.read_reply().await?;
+            self.pending_noops -= 1;
+            if extra.code != 200 {
+                self.status(format!("Unexpected reply to NOOP: {extra}"));
+            }
+        }
         if r.is_completion() { Ok(()) } else { Err(FtpError::Unexpected { command: cmd.into(), reply: r }) }
     }
 
     /// Lists a directory (the current one when `dir` is `None`).
     pub async fn list(&mut self, dir: Option<&str>) -> Result<Vec<RemoteEntry>> {
         let (raw, mlsd) = self.list_raw(dir).await?;
-        let mut entries = if mlsd { listing::parse_mlsd(&raw) } else { listing::parse_list(&raw) };
+        let mut entries = if mlsd { listing::parse_mlsd(&raw) } else { listing::parse_list_as(&raw, self.config.list_format) };
         let offset = self.config.time_offset_mins;
         if offset != 0 {
             for e in &mut entries {
@@ -786,6 +842,7 @@ impl FtpClient {
         if !mlsd && cmd.get(..4).is_some_and(|v| v.eq_ignore_ascii_case("STAT")) {
             return Ok((self.list_on_control(&cmd).await?, false));
         }
+        self.protect_for(true).await?;
         self.set_type(TransferType::Ascii).await?;
         let pending = self.prepare_data(&cmd).await?;
         if !self.start_transfer(&cmd).await? {
@@ -819,6 +876,7 @@ impl FtpClient {
     {
         let name = self.enter_parent(remote).await?;
         let cmd = format!("RETR {name}");
+        self.protect_for(false).await?;
         self.set_type(TransferType::Binary).await?;
         let pending = self.prepare_data(&cmd).await?;
         if offset > 0 {
@@ -831,6 +889,7 @@ impl FtpClient {
         let io = self.config.io_timeout;
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
+        let mut last_noop = std::time::Instant::now();
         loop {
             let n = timeout(io, read_data(&mut data, &mut buf)).await?;
             if n == 0 {
@@ -839,6 +898,7 @@ impl FtpClient {
             timeout(io, out.write_all(&buf[..n])).await?;
             total += n as u64;
             progress(total);
+            self.keep_control_alive(&mut last_noop).await?;
         }
         drop(data);
         out.flush().await?;
@@ -854,6 +914,7 @@ impl FtpClient {
     {
         let name = self.enter_parent(remote).await?;
         let cmd = format!("STOR {name}");
+        self.protect_for(false).await?;
         self.set_type(TransferType::Binary).await?;
         let pending = self.prepare_data(&cmd).await?;
         if offset > 0 {
@@ -866,6 +927,7 @@ impl FtpClient {
         let io = self.config.io_timeout;
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
+        let mut last_noop = std::time::Instant::now();
         loop {
             let n = timeout(io, input.read(&mut buf)).await?;
             if n == 0 {
@@ -874,6 +936,7 @@ impl FtpClient {
             timeout(io, data.write_all(&buf[..n])).await?;
             total += n as u64;
             progress(total);
+            self.keep_control_alive(&mut last_noop).await?;
         }
         // Sends the end of stream (close_notify with TLS) but keeps the socket open until
         // the 226 reply: closing it at once would make the OS answer the last packets of

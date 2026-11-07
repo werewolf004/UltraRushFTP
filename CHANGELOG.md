@@ -11,6 +11,16 @@ GitHub release with the same tag.
 
 ### Added
 
+- **Named proxies** (Options › Proxy), chosen by name in the site records.
+- **`NOOP` during the transfers** (Options › Connection), for proxies and routers that drop
+  an idle control connection.
+- **Listings encrypted or not, apart from the transfers** (FTPS site record).
+- **Ident only while connecting** (Options › Ident).
+- **Several SSH keys per site**, tried in turn.
+- **FXP roles per site**: never `PASV` as source, always `PASV` as target.
+- **Site description**, **listing format** (automatic, Unix, DOS/IIS) and **web address**
+  of a site, with *Copy HTTP address* in the remote panel.
+
 - **Listing settings** (Options › Connection, and per site): hidden files (`LIST -a`),
   `MLSD` on or off, custom listing command, `STAT -l` on the control channel, removal of
   the leading spaces, switch to active mode when the passive mode fails.
@@ -43,6 +53,10 @@ GitHub release with the same tag.
 - The browsing connection of the panels moved from the interface to `urftp-proto::browse`
   so that it is tested against the test server.
 - Error messages of the protocol layer are now all in English (some were in French).
+
+### Fixed
+
+- The quick-connection bar now follows the network, listing and anonymous-login options.
 
 ## [0.2.0] - 2026-11-06
 

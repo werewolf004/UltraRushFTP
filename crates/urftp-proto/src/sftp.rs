@@ -41,6 +41,8 @@ pub enum SftpAuth {
         text: String,
         passphrase: Option<String>,
     },
+    /// Several methods tried in order until the server accepts one.
+    Any(Vec<SftpAuth>),
 }
 
 impl std::fmt::Debug for SftpAuth {
@@ -49,6 +51,7 @@ impl std::fmt::Debug for SftpAuth {
             SftpAuth::Password(_) => f.write_str("Password(****)"),
             SftpAuth::KeyFile { path, .. } => write!(f, "KeyFile({})", path.display()),
             SftpAuth::KeyText { .. } => f.write_str("KeyText(****)"),
+            SftpAuth::Any(list) => f.debug_list().entries(list).finish(),
         }
     }
 }
@@ -225,17 +228,42 @@ impl SftpClient {
         let fingerprint = seen.lock().clone().unwrap_or_default();
         status(format!("Server key: {fingerprint}"));
 
-        let result = match auth {
-            SftpAuth::Password(pass) => ssh.authenticate_password(user, pass).await,
-            SftpAuth::KeyFile { .. } | SftpAuth::KeyText { .. } => {
-                let key = load_key(auth)?;
-                let hash = ssh.best_supported_rsa_hash().await.map_err(ssh_err)?.flatten();
-                ssh.authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(key), hash)).await
+        let methods: Vec<&SftpAuth> = match auth {
+            SftpAuth::Any(list) => list.iter().collect(),
+            single => vec![single],
+        };
+        let mut accepted = false;
+        let mut key_error = None;
+        for (i, method) in methods.iter().enumerate() {
+            let result = match method {
+                SftpAuth::Password(pass) => ssh.authenticate_password(user, pass).await,
+                SftpAuth::KeyFile { .. } | SftpAuth::KeyText { .. } => {
+                    let key = match load_key(method) {
+                        Ok(k) => k,
+                        // An unreadable key: the next one may work.
+                        Err(e) if i + 1 < methods.len() => {
+                            status(format!("{method:?}: {e}"));
+                            key_error = Some(e);
+                            continue;
+                        }
+                        Err(e) => return Err(e),
+                    };
+                    let hash = ssh.best_supported_rsa_hash().await.map_err(ssh_err)?.flatten();
+                    ssh.authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(key), hash)).await
+                }
+                SftpAuth::Any(_) => return Err(SftpError::Key("nested authentication lists are not supported".into())),
+            }
+            .map_err(ssh_err)?;
+            if matches!(result, AuthResult::Success) {
+                accepted = true;
+                break;
+            }
+            if i + 1 < methods.len() {
+                status(format!("{method:?} refused by the server, trying the next one"));
             }
         }
-        .map_err(ssh_err)?;
-        if !matches!(result, AuthResult::Success) {
-            return Err(SftpError::AuthFailed);
+        if !accepted {
+            return Err(key_error.unwrap_or(SftpError::AuthFailed));
         }
 
         let channel = ssh.channel_open_session().await.map_err(ssh_err)?;
@@ -403,7 +431,7 @@ fn load_key(auth: &SftpAuth) -> Result<russh::keys::PrivateKey> {
             (std::fs::read_to_string(path).map_err(|e| SftpError::Key(format!("{}: {e}", path.display())))?, passphrase.as_deref())
         }
         SftpAuth::KeyText { text, passphrase } => (text.clone(), passphrase.as_deref()),
-        SftpAuth::Password(_) => return Err(SftpError::Key("password authentication has no key file".into())),
+        SftpAuth::Password(_) | SftpAuth::Any(_) => return Err(SftpError::Key("this authentication has no single key".into())),
     };
     russh::keys::decode_secret_key(&text, pass).map_err(|e| SftpError::Key(e.to_string()))
 }
