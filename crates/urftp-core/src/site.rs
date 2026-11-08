@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::exists::ExistsRules;
+use crate::exists::ExistsSet;
 use crate::queue::SiteLimits;
 use crate::settings::{KeepAliveSettings, MaskSetting, SkipSettings};
 
@@ -113,13 +113,137 @@ pub enum IdentChoice {
     Custom(String),
 }
 
-/// Login used instead of the main one for one direction of the transfers.
+/// Login used instead of the main one for one direction of the transfers ("Account" of
+/// FTPRush v2), possibly on another address.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Account {
+    /// Other address (empty: the one of the site).
+    pub host: String,
+    /// Port of that address (0: the one of the site).
+    pub port: u16,
     pub user: String,
     #[serde(with = "crate::secret::serde_secret")]
     pub password: String,
+}
+
+/// Resuming interrupted transfers ("Resume support" of FTPRush v2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResumeMode {
+    /// Resume; when the server refuses `REST`, follow the "existing file" rules (start again
+    /// from zero, by default).
+    #[default]
+    Auto,
+    /// Always resume: a refused `REST` fails the transfer.
+    Always,
+    /// Never resume: always start again from zero.
+    Never,
+}
+
+/// Reads the mode, or the `true` / `false` of the files written before 0.8.0.
+impl<'de> Deserialize<'de> for ResumeMode {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        enum Named {
+            Auto,
+            Always,
+            Never,
+        }
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Stored {
+            Old(bool),
+            Named(Named),
+        }
+        Ok(match Stored::deserialize(d)? {
+            Stored::Old(true) | Stored::Named(Named::Auto) => ResumeMode::Auto,
+            Stored::Old(false) | Stored::Named(Named::Never) => ResumeMode::Never,
+            Stored::Named(Named::Always) => ResumeMode::Always,
+        })
+    }
+}
+
+/// Capabilities a site may use when its server announces them (`FEAT`); one switched off
+/// is treated as not announced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeatureSwitches {
+    pub pret: bool,
+    /// `OPTS UTF8 ON` when the server announces `UTF8`.
+    pub utf8: bool,
+    pub mode_z: bool,
+    pub xcrc: bool,
+    pub mlsd: bool,
+    pub sscn: bool,
+    pub cpsv: bool,
+}
+
+impl Default for FeatureSwitches {
+    fn default() -> Self {
+        Self { pret: true, utf8: true, mode_z: true, xcrc: true, mlsd: true, sscn: true, cpsv: true }
+    }
+}
+
+impl FeatureSwitches {
+    /// `FEAT` names switched off.
+    pub fn disabled(&self) -> Vec<&'static str> {
+        [
+            (self.pret, "PRET"),
+            (self.utf8, "UTF8"),
+            (self.mode_z, "MODE Z"),
+            (self.xcrc, "XCRC"),
+            (self.mlsd, "MLST"),
+            (self.sscn, "SSCN"),
+            (self.cpsv, "CPSV"),
+        ]
+        .into_iter()
+        .filter(|(on, _)| !on)
+        .map(|(_, n)| n)
+        .collect()
+    }
+}
+
+/// Statistics of one site ("Statistics (this FTP server)" of FTPRush v2), in bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct SiteStats {
+    /// Last connection (`YYYY-MM-DD HH:MM:SS`, local time).
+    pub last_access: String,
+    pub connections: u64,
+    /// Uploaded to the site.
+    pub sent: u64,
+    /// Downloaded from the site.
+    pub received: u64,
+    /// FXP from the site to another one.
+    pub fxp_sent: u64,
+    /// FXP from another site to this one.
+    pub fxp_received: u64,
+}
+
+impl SiteStats {
+    pub fn total_sent(&self) -> u64 {
+        self.sent.saturating_add(self.fxp_sent)
+    }
+
+    pub fn total_received(&self) -> u64 {
+        self.received.saturating_add(self.fxp_received)
+    }
+}
+
+/// Folder of the site checked for new entries ("Notification" of the site properties).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SiteMonitor {
+    pub path: String,
+    pub interval_mins: u32,
+}
+
+impl Default for SiteMonitor {
+    fn default() -> Self {
+        Self { path: "/".into(), interval_mins: 10 }
+    }
 }
 
 /// Settings of a site that replace the global options ("Site properties" of FTPRush v2).
@@ -132,15 +256,31 @@ pub struct SiteSettings {
     pub connect_timeout_secs: Option<u32>,
     pub io_timeout_secs: Option<u32>,
     pub keep_alive: Option<KeepAliveSettings>,
-    /// Resume interrupted transfers (`REST`); off: always start again from zero.
-    pub resume: bool,
+    /// Resuming interrupted transfers (`REST`).
+    pub resume: ResumeMode,
     /// Send `FEAT` after the login (some old servers dislike it).
     pub send_feat: bool,
+    /// Capabilities used when announced (`None`: all of them).
+    pub features: Option<FeatureSwitches>,
     /// Client name sent with `CLNT` after the login (empty: not sent).
     pub client_name: String,
     pub skiplist: Option<SkipSettings>,
     pub priorities: Option<Vec<MaskSetting>>,
-    pub exists: Option<ExistsRules>,
+    /// "Existing file" rules per direction (`None`: the global ones).
+    pub exists: Option<ExistsSet>,
+    /// Case of the names uploaded, downloaded, copied by FXP (`None`: the global setting).
+    pub upload_case: Option<crate::NameCase>,
+    pub download_case: Option<crate::NameCase>,
+    pub fxp_case: Option<crate::NameCase>,
+    /// `SITE XDUPE` (`None`: the global setting).
+    pub xdupe: Option<bool>,
+    /// Lists the target folder again when an upload is refused without `XDUPE` names.
+    pub xdupe_refresh: Option<bool>,
+    /// `NOOP` on the control channel during the transfers (`None`: the global setting).
+    pub noop_during_transfer: Option<bool>,
+    /// Buffers of the data connections in KiB (`None`: the global setting).
+    pub send_buffer_kib: Option<u32>,
+    pub receive_buffer_kib: Option<u32>,
     /// Login for the uploads (`None`: the main one).
     pub upload_account: Option<Account>,
     /// Login for the downloads (`None`: the main one).
@@ -157,12 +297,21 @@ impl Default for SiteSettings {
             connect_timeout_secs: None,
             io_timeout_secs: None,
             keep_alive: None,
-            resume: true,
+            resume: ResumeMode::Auto,
             send_feat: true,
+            features: None,
             client_name: String::new(),
             skiplist: None,
             priorities: None,
             exists: None,
+            upload_case: None,
+            download_case: None,
+            fxp_case: None,
+            xdupe: None,
+            xdupe_refresh: None,
+            noop_during_transfer: None,
+            send_buffer_kib: None,
+            receive_buffer_kib: None,
             upload_account: None,
             download_account: None,
             dir_cache: None,
@@ -352,6 +501,23 @@ pub struct Site {
     /// FXP to this site: always `PASV` (this site listens).
     pub fxp_target_passive: bool,
     pub http: HttpMapping,
+    /// The login is sent in UTF-8 even when the site uses another character set.
+    pub utf8_username: bool,
+    /// UTF-8 is used even when the server does not announce it (`OPTS UTF8 ON` sent).
+    pub force_utf8: bool,
+    /// The server is behind NAT: the data connections always go to the address of the
+    /// control connection, whatever `PASV` answers.
+    pub behind_nat: bool,
+    /// `PBSZ 0` after the TLS login (some servers refuse it).
+    pub send_pbsz: bool,
+    /// Encrypted FXP from or to this site (`None`: automatic, `SSCN` or `CPSV`).
+    pub fxp_tls: Option<bool>,
+    /// The logs show the name of the site instead of "Left" / "Right", whatever the
+    /// global option.
+    pub log_site_name: bool,
+    /// New entries in the folders below are notified.
+    pub notify_new: bool,
+    pub monitors: Vec<SiteMonitor>,
 }
 
 impl Default for Site {
@@ -389,6 +555,14 @@ impl Default for Site {
             fxp_source_active: false,
             fxp_target_passive: false,
             http: HttpMapping::default(),
+            utf8_username: false,
+            force_utf8: false,
+            behind_nat: false,
+            send_pbsz: true,
+            fxp_tls: None,
+            log_site_name: false,
+            notify_new: false,
+            monitors: Vec::new(),
         }
     }
 }

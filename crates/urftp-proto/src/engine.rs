@@ -25,11 +25,12 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::{AbortHandle, JoinSet};
 
-use urftp_core::exists::{ExistsDecision, ExistsRules};
+use urftp_core::exists::{ExistsDecision, ExistsRules, ExistsSet};
 use urftp_core::itemopts::FolderEntry;
 use urftp_core::pattern::Pattern;
 use urftp_core::priority::PriorityList;
 use urftp_core::queue::{Endpoint, ItemId, ItemState, Load, Queue, QueueItem, SiteLimits};
+use urftp_core::site::ResumeMode;
 use urftp_core::skiplist::{Candidate, SkipList, SkipReason};
 use urftp_core::{NameCase, TransferKind, TransferMode};
 
@@ -55,7 +56,8 @@ pub struct EngineOptions {
     pub max_total: Option<u32>,
     pub skiplist: SkipList,
     pub priorities: PriorityList,
-    pub exists: ExistsRules,
+    /// "Existing file" rules per direction.
+    pub exists: ExistsSet,
     pub fxp: FxpOptions,
     /// Download speed (server → local), shared by every transfer.
     pub download_limit: Arc<RateLimiter>,
@@ -83,6 +85,10 @@ pub struct TransferRules {
     pub unlimited_local: bool,
     pub upload_case: NameCase,
     pub download_case: NameCase,
+    pub fxp_case: NameCase,
+    /// Lists the target folder again when an upload is refused without `XDUPE` names: a
+    /// file found there counts as a dupe.
+    pub xdupe_refresh: bool,
     /// `MODE Z` on, with the masks never compressed (`None`: off).
     pub mode_z: Option<Vec<Pattern>>,
     /// Downloads checked against the SFV file of their folder.
@@ -135,7 +141,7 @@ impl Default for EngineOptions {
             max_total: None,
             skiplist: SkipList::default(),
             priorities: PriorityList::default(),
-            exists: ExistsRules::default(),
+            exists: ExistsSet::default(),
             fxp: FxpOptions::default(),
             download_limit: RateLimiter::new(0),
             upload_limit: RateLimiter::new(0),
@@ -383,7 +389,19 @@ impl Engine {
     }
 
     fn exists_rules(&self, item: &QueueItem) -> ExistsRules {
-        self.target_rules(item).and_then(|r| r.exists).unwrap_or(self.opts.exists)
+        self.target_rules(item).and_then(|r| r.exists).unwrap_or(self.opts.exists).for_kind(item.kind())
+    }
+
+    /// When resuming fails, start again from zero? Not when the site always resumes.
+    fn restart_if_resume_fails(&self, item: &QueueItem) -> bool {
+        self.exists_rules(item).overwrite_if_resume_fails && self.target_rules(item).is_none_or(|r| r.resume != ResumeMode::Always)
+    }
+
+    /// Upload refused without `XDUPE` names: with the refresh asked, a target found anyway
+    /// counts as a dupe.
+    async fn dupe_after_refresh(&self, item: &QueueItem, s: &mut RemoteSession, dst: &str) -> bool {
+        let refresh = self.target_rules(item).and_then(|r| r.xdupe_refresh).unwrap_or(self.opts.rules.xdupe_refresh);
+        refresh && s.size_if_exists(dst).await.ok().flatten().is_some()
     }
 
     /// Retries and delay between them: the site setting, else the setting of the
@@ -408,7 +426,7 @@ impl Engine {
             return ExistsDecision::Transfer { offset: 0 };
         }
         match self.exists_rules(item).decide(size, target) {
-            ExistsDecision::Transfer { offset } if offset > 0 && !self.target_rules(item).is_none_or(|r| r.resume) => {
+            ExistsDecision::Transfer { offset } if offset > 0 && self.target_rules(item).is_some_and(|r| r.resume == ResumeMode::Never) => {
                 ExistsDecision::Transfer { offset: 0 }
             }
             d => d,
@@ -577,7 +595,12 @@ impl Engine {
 
     /// Target path with the case of the options on its last name.
     fn cased(&self, item: &QueueItem, path: &str) -> String {
-        let case = if item.kind() == TransferKind::Download { self.opts.rules.download_case } else { self.opts.rules.upload_case };
+        let own = self.target_rules(item);
+        let case = match item.kind() {
+            TransferKind::Download => own.and_then(|r| r.download_case).unwrap_or(self.opts.rules.download_case),
+            TransferKind::Upload => own.and_then(|r| r.upload_case).unwrap_or(self.opts.rules.upload_case),
+            TransferKind::Fxp => own.and_then(|r| r.fxp_case).unwrap_or(self.opts.rules.fxp_case),
+        };
         if case == NameCase::Keep {
             return path.to_string();
         }
@@ -716,7 +739,7 @@ impl Engine {
         let mut local = PathBuf::from(self.cased(item, &item.dst.path));
         let target = tokio::fs::metadata(&local).await.ok().map(|m| m.len());
         let data = self.data_options(item, rpath::split(src).1);
-        let overwrite_if_resume_fails = self.exists_rules(item).overwrite_if_resume_fails;
+        let overwrite_if_resume_fails = self.restart_if_resume_fails(item);
         let mut offset = match self.decide(item, size, target) {
             ExistsDecision::Transfer { offset } => offset,
             ExistsDecision::Skip => return Ok(Outcome::Skipped(SkipReason::AlreadyPresent)),
@@ -789,7 +812,7 @@ impl Engine {
             return Ok(Outcome::Skipped(SkipReason::Dupe));
         }
         let target = s.size_if_exists(&dst).await?;
-        let overwrite_if_resume_fails = self.exists_rules(item).overwrite_if_resume_fails;
+        let overwrite_if_resume_fails = self.restart_if_resume_fails(item);
         let data = self.data_options(item, &name);
         let mut offset = match self.decide(item, Some(size), target) {
             // ASCII: the sizes differ with the line ends, resuming would damage the file.
@@ -815,6 +838,10 @@ impl Engine {
             match s.stor_with(&dst, offset, &mut r, |n| self.progress(id, offset + n, Some(size)), data).await {
                 Err(e) if offset > 0 && e.is_resume_refused() && overwrite_if_resume_fails => offset = 0,
                 Err(e) if self.record_dupes(&site, &dst, &e) => return Ok(Outcome::Skipped(SkipReason::Dupe)),
+                Err(e) if offset == 0 && self.dupe_after_refresh(item, s, &dst).await => {
+                    drop(e);
+                    return Ok(Outcome::Skipped(SkipReason::Dupe));
+                }
                 Err(e) => return Err(e),
                 Ok(n) => {
                     if self.opts.rules.use_xcrc
@@ -885,6 +912,13 @@ impl Engine {
         };
         let mut opts = FxpOptions { offset, ..self.opts.fxp.clone() };
         let rules = |site: &Option<String>| site.as_deref().and_then(|s| self.sites.get(s)).map(|p| &p.profile.rules);
+        // Encrypted FXP: a site that refuses it wins, then one that asks for it.
+        let tls = [rules(&item.src.site), rules(&item.dst.site)].into_iter().flatten().filter_map(|r| r.fxp_tls).min();
+        match tls {
+            Some(false) => opts.security = crate::ftp::FxpSecurity::Clear,
+            Some(true) if opts.security == crate::ftp::FxpSecurity::Clear => opts.security = crate::ftp::FxpSecurity::Auto,
+            _ => {}
+        }
         let source_active = rules(&item.src.site).is_some_and(|r| r.fxp_source_active);
         let target_passive = rules(&item.dst.site).is_some_and(|r| r.fxp_target_passive);
         if source_active || target_passive {

@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18.
+Summary (287 topics): ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 
 ## Main window and menus
 
@@ -174,26 +174,27 @@ Summary (284 topics): ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18.
 | Several host:port entries | ✅ | Rotation on failure, the address that worked is used first |
 | Port, user, password, anonymous | ✅ | |
 | Passive mode, active fallback when `PASV` fails | ✅ | Fallback enabled on the Connection page |
-| Server behind NAT (use the host address for `PASV`) | ✅ | Automatic when `PASV` returns a private address |
-| Time zone | ✅ | Offset added to the listing dates (FTP) |
+| Server behind NAT (use the host address for `PASV`) | ✅ | Option of the site; also automatic when `PASV` returns a private address |
+| UTF-8 login, forced UTF-8 | ✅ | Per site (FTP) |
+| Time zone | ✅ | Server time zone (UTC−12 to +14) or offset added to the listing dates (FTP) |
 | Maximum simultaneous transfers (0 = browsing connection) | ✅ | |
 | Remote and local paths | ✅ | |
 | Description (short text for menus, notes) | ✅ | Shown next to the name in the site tree |
 | Bookmarks | ✅ | |
 | HTTP URL mapping, copy HTTP URL | ✅ | Remote panel: right-click → Copy HTTP address |
-| Display: site name instead of [1]/[2] in the log | ✅ | Options › Interface |
+| Display: site name instead of [1]/[2] in the log | ✅ | Per site, or for every site in Options › Interface |
 | Connection: global or custom retries and timeouts | ✅ | |
-| Resume support: auto / yes / no | ✅ | On (the server's refusal is detected) or off per site |
+| Resume support: auto / yes / no | ✅ | Per site |
 | Keep alive per site | ✅ | |
-| `FEAT` per site | ✅ | |
+| `FEAT` per site | ✅ | Capabilities used chosen per site (`PRET`, UTF-8, `MODE Z`, `XCRC`, `MLSD`, `SSCN`, `CPSV`) |
 | `PRET` | ✅ | Used when announced |
 | UTF-8 | ✅ | `OPTS UTF8 ON` when announced |
 | `CLNT` | ✅ | Client name per site |
-| Compression `MODE Z` | 🟡 | Global setting (Advanced transfer), not per site |
-| `XCRC` check after transfer | 🟡 | Global setting (Advanced transfer), not per site |
+| Compression `MODE Z` | ✅ | Global setting (Advanced transfer), switched off per site |
+| `XCRC` check after transfer | ✅ | Global setting (Advanced transfer), switched off per site |
 | `MLSD` | ✅ | |
 | `SSCN` / `CPSV` for encrypted FXP | ✅ | |
-| Account: different logins for uploads and downloads | ✅ | Browsing keeps the main login |
+| Account: different logins for uploads and downloads | ✅ | With an address and port of their own; browsing keeps the main login |
 | Ident: global or custom name | ✅ | Answered while the site connects |
 | Proxy: global, bypass, custom; data channel | ✅ | |
 | List mode: `STAT -l` | ✅ | Read on the control channel |
@@ -203,18 +204,20 @@ Summary (284 topics): ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18.
 | Directory cache per site | ✅ | Global setting, or yes / no in the site record |
 | Directory charset (non-UTF-8 servers) | ✅ | Commands, replies and listings; 14 character sets |
 | Listing parser choice | ✅ | Automatic, Unix or DOS/IIS (`MLSD` is always read as such) |
-| SSL: `PBSZ 0` | ✅ | |
+| SSL: `PBSZ 0` | ✅ | Can be switched off per site |
 | SSL: encrypt listings / transfers separately | ✅ | |
-| SSL: encrypted FXP | ✅ | |
+| SSL: encrypted FXP | ✅ | Automatic, never or always per site |
 | SFTP: private keys | ✅ | Several keys, tried in turn |
-| Transfer: file-name case conversion | 🟡 | Global setting (Advanced transfer), not per site |
-| Transfer: XDupe | 🟡 | Global setting (Advanced transfer), not per site |
+| Transfer: file-name case conversion | ✅ | Upload, download and FXP; global or per site |
+| Transfer: XDupe | ✅ | Global or per site, with the refresh when XDUPE returns nothing |
+| Transfer: `NOOP` during the transfers | ✅ | Global or per site |
 | Transfer: FXP method (no `PASV` as source, `PASV` as target) | ✅ | Per site; automatic reversal when `PORT` is refused |
 | Transfer: force active mode | ✅ | Transfer mode of the site record; for every site in Advanced transfer |
-| Transfer: TCP buffer size | 🟡 | Global setting (Advanced transfer), not per site |
-| Skip list, priority, file-exists rules per site | ✅ | |
-| Event notification: monitor folders for new items | ✅ | Options › Notifications; a connection of its own at each check |
-| Statistics of this server | ⬜ | Global and session statistics exist |
+| Transfer: TCP buffer size | ✅ | Global, or send and receive buffers per site |
+| Skip list, priority, file-exists rules per site | ✅ | "Existing file" rules per direction (upload, download, FXP), also globally |
+| Skip list export / import | ✅ | JSON, or a text file with one mask per line |
+| Event notification: monitor folders for new items | ✅ | In the site record or Options › Notifications; a connection of its own at each check |
+| Statistics of this server | ✅ | Last access, connections, sent / received / FXP; copy and reset of the totals |
 
 ## Options
 

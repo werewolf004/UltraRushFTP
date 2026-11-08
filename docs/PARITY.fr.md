@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18.
+Résumé (287 sujets) : ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 
 ## Fenêtre principale et menus
 
@@ -174,26 +174,27 @@ Résumé (284 sujets) : ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18.
 | Plusieurs entrées hôte:port | ✅ | Rotation en cas d'échec, l'adresse qui a marché sert en premier |
 | Port, utilisateur, mot de passe, anonyme | ✅ | |
 | Mode passif, repli actif quand `PASV` échoue | ✅ | Repli activé dans la page Connexion |
-| Serveur derrière un NAT (adresse de l'hôte pour `PASV`) | ✅ | Automatique quand `PASV` renvoie une adresse privée |
-| Fuseau horaire | ✅ | Décalage ajouté aux dates des listings (FTP) |
+| Serveur derrière un NAT (adresse de l'hôte pour `PASV`) | ✅ | Option du site ; automatique aussi quand `PASV` renvoie une adresse privée |
+| Identifiant en UTF-8, UTF-8 forcé | ✅ | Par site (FTP) |
+| Fuseau horaire | ✅ | Fuseau du serveur (UTC−12 à +14) ou décalage ajouté aux dates des listings (FTP) |
 | Transferts simultanés maximum (0 = connexion de navigation) | ✅ | |
 | Chemins distant et local | ✅ | |
 | Description (texte court pour les menus, notes) | ✅ | Affichée à côté du nom dans l'arbre des sites |
 | Signets | ✅ | |
 | Correspondance d'URL HTTP, copier l'URL HTTP | ✅ | Panneau distant : clic droit → Copier l'adresse HTTP |
-| Affichage : nom du site au lieu de [1]/[2] dans le journal | ✅ | Options › Interface |
+| Affichage : nom du site au lieu de [1]/[2] dans le journal | ✅ | Par site, ou pour tous dans Options › Interface |
 | Connexion : essais et délais globaux ou propres au site | ✅ | |
-| Reprise : auto / oui / non | ✅ | Active (le refus du serveur est détecté) ou désactivée par site |
+| Reprise : auto / oui / non | ✅ | Par site |
 | Maintien de connexion par site | ✅ | |
-| `FEAT` par site | ✅ | |
+| `FEAT` par site | ✅ | Fonctions utilisées choisies par site (`PRET`, UTF-8, `MODE Z`, `XCRC`, `MLSD`, `SSCN`, `CPSV`) |
 | `PRET` | ✅ | Utilisé quand le serveur l'annonce |
 | UTF-8 | ✅ | `OPTS UTF8 ON` quand le serveur l'annonce |
 | `CLNT` | ✅ | Nom du client par site |
-| Compression `MODE Z` | 🟡 | Réglage global (Transfert avancé), pas par site |
-| Vérification `XCRC` après transfert | 🟡 | Réglage global (Transfert avancé), pas par site |
+| Compression `MODE Z` | ✅ | Réglage global (Transfert avancé), désactivable par site |
+| Vérification `XCRC` après transfert | ✅ | Réglage global (Transfert avancé), désactivable par site |
 | `MLSD` | ✅ | |
 | `SSCN` / `CPSV` pour le FXP chiffré | ✅ | |
-| Comptes : identifiants différents pour envois et téléchargements | ✅ | La navigation garde le compte principal |
+| Comptes : identifiants différents pour envois et téléchargements | ✅ | Avec une adresse et un port à eux ; la navigation garde le compte principal |
 | Ident : nom global ou propre au site | ✅ | Répondu pendant la connexion du site |
 | Proxy : global, contourné, personnalisé ; canal de données | ✅ | |
 | Mode de listing : `STAT -l` | ✅ | Lu sur le canal de contrôle |
@@ -203,18 +204,20 @@ Résumé (284 sujets) : ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18.
 | Cache des dossiers par site | ✅ | Réglage global, ou oui / non dans la fiche du site |
 | Jeu de caractères des dossiers (serveurs non UTF-8) | ✅ | Commandes, réponses et listings ; 14 jeux de caractères |
 | Choix de l'analyseur de listing | ✅ | Automatique, Unix ou DOS/IIS (`MLSD` est toujours lu comme tel) |
-| SSL : `PBSZ 0` | ✅ | |
+| SSL : `PBSZ 0` | ✅ | Désactivable par site |
 | SSL : chiffrer listings / transferts séparément | ✅ | |
-| SSL : FXP chiffré | ✅ | |
+| SSL : FXP chiffré | ✅ | Automatique, jamais ou toujours par site |
 | SFTP : clés privées | ✅ | Plusieurs clés, essayées à tour de rôle |
-| Transfert : conversion de casse des noms | 🟡 | Réglage global (Transfert avancé), pas par site |
-| Transfert : XDupe | 🟡 | Réglage global (Transfert avancé), pas par site |
+| Transfert : conversion de casse des noms | ✅ | Envoi, réception et FXP ; global ou par site |
+| Transfert : XDupe | ✅ | Global ou par site, avec la relecture quand XDUPE ne renvoie rien |
+| Transfert : `NOOP` pendant les transferts | ✅ | Global ou par site |
 | Transfert : méthode FXP (pas de `PASV` côté source, `PASV` côté cible) | ✅ | Par site ; inversion automatique quand `PORT` est refusé |
 | Transfert : forcer le mode actif | ✅ | Mode de transfert de la fiche ; pour tous les sites dans Transfert avancé |
-| Transfert : taille du tampon TCP | 🟡 | Réglage global (Transfert avancé), pas par site |
-| Liste d'exclusion, priorités, règles « fichier existant » par site | ✅ | |
-| Notification d'événements : surveiller des dossiers | ✅ | Options › Notifications ; une connexion à part à chaque vérification |
-| Statistiques de ce serveur | ⬜ | Statistiques globales et de session disponibles |
+| Transfert : taille du tampon TCP | ✅ | Global, ou tampons d'envoi et de réception par site |
+| Liste d'exclusion, priorités, règles « fichier existant » par site | ✅ | Règles « fichier existant » par sens (envoi, réception, FXP), aussi en global |
+| Export / import de la liste d'exclusion | ✅ | JSON, ou fichier texte d'un masque par ligne |
+| Notification d'événements : surveiller des dossiers | ✅ | Dans la fiche du site ou Options › Notifications ; une connexion à part à chaque vérification |
+| Statistiques de ce serveur | ✅ | Dernier accès, connexions, envoyé / reçu / FXP ; copie et remise à zéro des totaux |
 
 ## Options
 

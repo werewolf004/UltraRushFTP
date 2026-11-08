@@ -141,8 +141,14 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             security,
             // "Force active mode for transfers" of the options applies to every site.
             active_mode: site.transfer_mode == TransferMode::Active || settings.transfer.force_active,
-            xdupe: settings.transfer.xdupe,
-            tcp_buffer: (settings.transfer.tcp_buffer_kib > 0).then(|| settings.transfer.tcp_buffer_kib as usize * 1024),
+            xdupe: own.xdupe.unwrap_or(settings.transfer.xdupe),
+            send_buffer: buffer(own.send_buffer_kib, settings.transfer.tcp_buffer_kib),
+            receive_buffer: buffer(own.receive_buffer_kib, settings.transfer.tcp_buffer_kib),
+            disabled_features: own.features.map(|f| f.disabled().into_iter().map(String::from).collect()).unwrap_or_default(),
+            utf8_login: site.utf8_username,
+            force_utf8: site.force_utf8,
+            pasv_use_server_ip: site.behind_nat,
+            send_pbsz: site.send_pbsz,
             active_external_ip: net.external(),
             active_port_range: net.port_range(),
             bind_ip: net.bind(),
@@ -151,13 +157,16 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             trim_list_spaces: site.listing.trim_spaces,
             port_fallback: settings.listing.port_fallback,
             time_offset_mins: site.listing.time_offset_mins,
-            charset: charset(site),
+            charset: if site.force_utf8 { None } else { charset(site) },
             list_format: match site.listing.parser {
                 ListParser::Auto => ListFormat::Auto,
                 ListParser::Unix => ListFormat::Unix,
                 ListParser::Dos => ListFormat::Dos,
             },
-            noop_during_transfer: net.noop_during_transfers.then(|| Duration::from_secs(u64::from(net.noop_interval_secs.max(5)))),
+            noop_during_transfer: own
+                .noop_during_transfer
+                .unwrap_or(net.noop_during_transfers)
+                .then(|| Duration::from_secs(u64::from(net.noop_interval_secs.max(5)))),
             proxy: proxy.clone(),
             connect_timeout,
             io_timeout,
@@ -204,8 +213,13 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             priorities: own.priorities.as_ref().map(|p| Settings::priorities_of(p)),
             exists: own.exists,
             resume: own.resume,
-            upload_account: account(own.upload_account.as_ref()),
-            download_account: account(own.download_account.as_ref()),
+            upload_case: own.upload_case,
+            download_case: own.download_case,
+            fxp_case: own.fxp_case,
+            xdupe_refresh: own.xdupe_refresh,
+            fxp_tls: site.fxp_tls,
+            upload_account: account(own.upload_account.as_ref(), site.port),
+            download_account: account(own.download_account.as_ref(), site.port),
             fxp_source_active: site.fxp_source_active,
             fxp_target_passive: site.fxp_target_passive,
         },
@@ -231,9 +245,19 @@ fn sftp_keys(site: &Site) -> Option<SftpAuth> {
     }
 }
 
-/// A separate account, when its login is filled in.
-fn account(a: Option<&urftp_core::site::Account>) -> Option<Credentials> {
-    a.filter(|a| !a.user.trim().is_empty()).map(|a| Credentials { user: a.user.trim().to_string(), password: a.password.clone() })
+/// A separate account, when its login is filled in, with its own address when given.
+fn account(a: Option<&urftp_core::site::Account>, site_port: u16) -> Option<Credentials> {
+    a.filter(|a| !a.user.trim().is_empty()).map(|a| Credentials {
+        user: a.user.trim().to_string(),
+        password: a.password.clone(),
+        address: (!a.host.trim().is_empty()).then(|| (a.host.trim().to_string(), if a.port == 0 { site_port } else { a.port })),
+    })
+}
+
+/// Buffer size in bytes: the site's, else the global one (0: the system's).
+fn buffer(own_kib: Option<u32>, global_kib: u32) -> Option<usize> {
+    let kib = own_kib.unwrap_or(global_kib);
+    (kib > 0).then(|| kib as usize * 1024)
 }
 
 /// Transfer rules from the options.
@@ -248,6 +272,8 @@ pub fn transfer_rules(s: &Settings) -> TransferRules {
         unlimited_local: t.unlimited_local,
         upload_case: t.upload_case,
         download_case: t.download_case,
+        fxp_case: t.fxp_case,
+        xdupe_refresh: t.xdupe_refresh,
         mode_z: t.mode_z.then(|| mask_list(&t.mode_z_exceptions)),
         check_sfv: t.check_sfv,
         use_xcrc: t.use_xcrc,
@@ -317,6 +343,39 @@ mod tests {
         settings.network.noop_during_transfers = true;
         let ProfileProtocol::Ftp(cfg) = site_profile(&Site::default(), &settings).protocol else { panic!() };
         assert_eq!(cfg.noop_during_transfer, Some(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn site_properties_reach_the_connection() {
+        use urftp_core::site::{Account, FeatureSwitches, SiteListing};
+        let mut settings = Settings::default();
+        settings.transfer.tcp_buffer_kib = 64;
+        settings.transfer.xdupe = true;
+        let mut site = Site {
+            port: 2121,
+            utf8_username: true,
+            force_utf8: true,
+            behind_nat: true,
+            send_pbsz: false,
+            fxp_tls: Some(false),
+            listing: SiteListing { charset: "windows-1252".into(), ..SiteListing::default() },
+            ..Site::default()
+        };
+        site.settings.features = Some(FeatureSwitches { pret: false, cpsv: false, ..FeatureSwitches::default() });
+        site.settings.receive_buffer_kib = Some(0);
+        site.settings.xdupe = Some(false);
+        site.settings.noop_during_transfer = Some(true);
+        site.settings.upload_account = Some(Account { host: "up.example".into(), port: 0, user: "u".into(), password: "p".into() });
+        let p = site_profile(&site, &settings);
+        let ProfileProtocol::Ftp(cfg) = &p.protocol else { panic!() };
+        assert!(cfg.utf8_login && cfg.force_utf8 && cfg.pasv_use_server_ip && !cfg.send_pbsz && !cfg.xdupe);
+        assert!(cfg.charset.is_none(), "forced UTF-8 replaces the character set");
+        assert_eq!((cfg.send_buffer, cfg.receive_buffer), (Some(64 * 1024), None));
+        assert_eq!(cfg.disabled_features, ["PRET", "CPSV"]);
+        assert!(cfg.noop_during_transfer.is_some());
+        assert_eq!(p.rules.fxp_tls, Some(false));
+        let up = p.with_account(crate::session::Account::Upload);
+        assert_eq!((up.host.as_str(), up.port, up.user.as_str()), ("up.example", 2121, "u"));
     }
 
     #[test]
@@ -413,7 +472,12 @@ mod tests {
         use urftp_core::site::{Account, SiteSettings};
         let g = Settings::default();
         let p = site_profile(&Site::default(), &g);
-        assert!(p.rules.retries.is_none() && p.rules.skiplist.is_none() && p.rules.exists.is_none() && p.rules.resume);
+        assert!(
+            p.rules.retries.is_none()
+                && p.rules.skiplist.is_none()
+                && p.rules.exists.is_none()
+                && p.rules.resume == urftp_core::site::ResumeMode::Auto
+        );
         assert!(p.rules.upload_account.is_none());
 
         let own = SiteSettings {
@@ -422,19 +486,19 @@ mod tests {
             connect_timeout_secs: Some(11),
             io_timeout_secs: Some(22),
             keep_alive: Some(KeepAliveSettings { enabled: false, ..KeepAliveSettings::default() }),
-            resume: false,
+            resume: urftp_core::site::ResumeMode::Never,
             send_feat: false,
             client_name: " UltraRushFTP ".into(),
             priorities: Some(Vec::new()),
-            upload_account: Some(Account { user: "up".into(), password: "x".into() }),
-            download_account: Some(Account { user: " ".into(), password: "x".into() }),
+            upload_account: Some(Account { user: "up".into(), password: "x".into(), ..Account::default() }),
+            download_account: Some(Account { user: " ".into(), password: "x".into(), ..Account::default() }),
             ..SiteSettings::default()
         };
         let p = site_profile(&Site { settings: own, ..Site::default() }, &g);
         assert_eq!((p.rules.retries, p.rules.retry_delay), (Some(7), Some(Duration::from_secs(1))));
         assert!(p.session.keep_alive.is_none(), "own keep alive: off");
         assert_eq!((p.session.reconnect.attempts, p.session.reconnect.delay), (7, Duration::from_secs(1)));
-        assert!(!p.rules.resume && p.rules.priorities.is_some());
+        assert!(p.rules.resume == urftp_core::site::ResumeMode::Never && p.rules.priorities.is_some());
         assert_eq!(p.rules.upload_account.as_ref().map(|c| c.user.as_str()), Some("up"));
         assert!(p.rules.download_account.is_none(), "an account without login is ignored");
         let ProfileProtocol::Ftp(cfg) = &p.protocol else { panic!() };

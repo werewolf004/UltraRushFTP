@@ -181,7 +181,13 @@ async fn run(
             FxpSecurity::Sscn => Method::Sscn,
             FxpSecurity::Cpsv => Method::Cpsv,
             _ if passive.features().has("SSCN") => Method::Sscn,
-            _ => Method::Cpsv,
+            _ if passive.allows("CPSV") => Method::Cpsv,
+            _ => {
+                let msg = "encrypted FXP impossible: SSCN is not announced and CPSV is switched off, transferring in clear";
+                src.status(msg);
+                dst.status(msg);
+                Method::Plain
+            }
         }
     } else {
         if want {
@@ -203,10 +209,11 @@ async fn run(
     if method == Method::Sscn {
         match passive.raw("SSCN ON").await? {
             r if r.is_completion() => *sscn_on = true,
-            r => {
+            r if passive.allows("CPSV") => {
                 passive.status(format!("SSCN refused ({r}): trying CPSV"));
                 method = Method::Cpsv;
             }
+            r => return Err(Attempt::Failed(FtpError::Unexpected { command: "SSCN ON".into(), reply: r })),
         }
     }
 

@@ -40,11 +40,13 @@ pub async fn connect_from(host: &str, port: u16, bind: Option<IpAddr>) -> io::Re
 }
 
 /// Send and receive buffers of a data connection (`None`: left to the system).
-pub fn set_buffers(tcp: &TcpStream, size: Option<usize>) -> io::Result<()> {
-    if let Some(n) = size {
-        let s = socket2::SockRef::from(tcp);
-        s.set_recv_buffer_size(n)?;
+pub fn set_buffers(tcp: &TcpStream, send: Option<usize>, receive: Option<usize>) -> io::Result<()> {
+    let s = socket2::SockRef::from(tcp);
+    if let Some(n) = send {
         s.set_send_buffer_size(n)?;
+    }
+    if let Some(n) = receive {
+        s.set_recv_buffer_size(n)?;
     }
     Ok(())
 }

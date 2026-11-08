@@ -2,6 +2,7 @@
 //! commands, queue, sites, statistics. Used by the script console and by `rushmirc.dll`
 //! (`RushScript`, `Invoke`).
 
+use std::collections::BTreeMap;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -22,7 +23,14 @@ struct Totals {
     download: u64,
     upload: u64,
     fxp: u64,
+    /// Per site of the site manager (by its id).
+    sites: BTreeMap<u64, urftp_core::site::SiteStats>,
 }
+
+/// Bytes of one frame: direction, count, sites the files come from and go to.
+pub(super) type Traffic = (TransferKind, u64, Option<String>, Option<String>);
+
+use crate::sites::StatsView;
 
 /// Bytes transferred: stored totals (`stats.json`), current session, rates.
 pub(super) struct Stats {
@@ -76,9 +84,11 @@ impl Stats {
         Self { totals, session: [0; 3], window: [0; 2], window_start: Instant::now(), bw: [0.0; 2], dirty, last_save: Instant::now() }
     }
 
-    /// Counts the traffic of one frame and updates the rates (one-second window).
-    pub(super) fn record(&mut self, traffic: &[(TransferKind, u64)]) {
-        for &(kind, n) in traffic {
+    /// Counts the traffic of one frame and updates the rates (one-second window); `site_id`
+    /// finds the site manager record of a site name.
+    pub(super) fn record(&mut self, traffic: &[Traffic], site_id: impl Fn(&str) -> Option<u64>) {
+        for (kind, n, src, dst) in traffic {
+            let (kind, n) = (*kind, *n);
             if n == 0 {
                 continue;
             }
@@ -91,6 +101,20 @@ impl Stats {
             self.session[i] += n;
             if i < 2 {
                 self.window[i] += n;
+            }
+            let mut add = |name: &Option<String>, f: fn(&mut urftp_core::site::SiteStats) -> &mut u64| {
+                if let Some(id) = name.as_deref().and_then(&site_id) {
+                    let v = f(self.totals.sites.entry(id).or_default());
+                    *v = v.saturating_add(n);
+                }
+            };
+            match kind {
+                TransferKind::Download => add(src, |s| &mut s.received),
+                TransferKind::Upload => add(dst, |s| &mut s.sent),
+                TransferKind::Fxp => {
+                    add(src, |s| &mut s.fxp_sent);
+                    add(dst, |s| &mut s.fxp_received);
+                }
             }
             self.dirty = true;
         }
@@ -122,6 +146,39 @@ impl Stats {
 
     pub(super) fn bandwidth(&self) -> (f64, f64) {
         (self.bw[0], self.bw[1])
+    }
+
+    /// A connection to a site of the site manager succeeded.
+    pub(super) fn connected(&mut self, site: u64) {
+        let (y, mo, d, h, mi, s) = urftp_sys::win::local_time();
+        let st = self.totals.sites.entry(site).or_default();
+        st.connections += 1;
+        st.last_access = format!("{y:04}-{mo:02}-{d:02} {h:02}:{mi:02}:{s:02}");
+        self.dirty = true;
+    }
+
+    /// "Default" of the site statistics: back to zero.
+    pub(super) fn reset_site(&mut self, site: u64) {
+        self.totals.sites.remove(&site);
+        self.dirty = true;
+    }
+
+    /// "Default" of the statistics of every site: totals back to zero from today.
+    pub(super) fn reset_totals(&mut self) {
+        let sites = std::mem::take(&mut self.totals.sites);
+        self.totals = Totals { start_date: today(), sites, ..Totals::default() };
+        self.dirty = true;
+    }
+
+    pub(super) fn view(&self) -> StatsView {
+        let days = parse_date(&today()).zip(parse_date(&self.totals.start_date)).map_or(0, |(a, b)| a - b);
+        StatsView {
+            sites: self.totals.sites.clone(),
+            since: self.totals.start_date.clone(),
+            days: days.max(0),
+            total: [self.totals.download, self.totals.upload, self.totals.fxp],
+            session: self.session,
+        }
     }
 }
 
@@ -872,9 +929,33 @@ mod tests {
             dirty: false,
             last_save: Instant::now(),
         };
-        st.record(&[(TransferKind::Download, 1024 * 1024), (TransferKind::Upload, 10), (TransferKind::Fxp, 5)]);
-        assert_eq!(st.session, [1024 * 1024, 10, 5]);
+        let site = |n: &str| Some(n.to_string());
+        let ids = |n: &str| match n {
+            "A" => Some(1),
+            "B" => Some(2),
+            _ => None,
+        };
+        st.record(
+            &[
+                (TransferKind::Download, 1024 * 1024, site("A"), None),
+                (TransferKind::Upload, 10, None, site("A")),
+                (TransferKind::Fxp, 5, site("A"), site("B")),
+                (TransferKind::Upload, 7, None, site("quick")),
+            ],
+            ids,
+        );
+        assert_eq!(st.session, [1024 * 1024, 17, 5]);
+        let a = &st.totals.sites[&1];
+        assert_eq!((a.received, a.sent, a.fxp_sent, a.fxp_received), (1024 * 1024, 10, 5, 0));
+        assert_eq!((a.total_sent(), st.totals.sites[&2].total_received()), (15, 5));
+        assert_eq!(st.totals.sites.len(), 2, "a site out of the site manager is not kept");
         assert_eq!(mb(st.totals.download), Value::Str("1.00".into()));
+        st.connected(1);
+        assert_eq!(st.totals.sites[&1].connections, 1);
+        st.reset_site(2);
+        assert!(!st.totals.sites.contains_key(&2));
+        st.reset_totals();
+        assert_eq!((st.totals.upload, st.totals.start_date.len(), st.totals.sites.len()), (0, 10, 1));
         st.dirty = false; // no disk write during the test
     }
 }

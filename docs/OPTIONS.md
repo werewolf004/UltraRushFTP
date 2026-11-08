@@ -255,12 +255,16 @@ FXP is not limited: its data does not go through this computer.
 
 ![Existing file](images/options-existing-file.en.png)
 
+Three sets of rules: **Upload**, **Download** and **FXP (FTP to FTP)**.
+
 | Case | Default | Choices |
 |---|---|---|
 | The target is smaller | Resume | Resume, Skip, Rename ("name (1)"), Overwrite, Ask |
 | The target has the same size | Skip | same |
 | The target is larger | Rename | same |
-| Start over if resuming is refused | on | Overwrite when the server refuses `REST` |
+| Start over if resuming is refused | on | Overwrite when the server refuses `REST` (every direction) |
+
+The rules of an older version apply to the three directions.
 
 ### Skipped files
 
@@ -272,6 +276,7 @@ FXP is not limited: its data does not go through this computer.
 | Skip 0-byte files | off | — |
 | Do not create empty folders | off | — |
 | Rules | none | Applied in order, the first match decides: **Skip** or **Allow**, mask (wildcard `*` `?`, or regular expression with *regex*), target (files, folders, both), directions (upload ⬆, download ⬇, FXP ↔), *path* = the mask applies to the full path (also written `%W%mask`) |
+| Export… / Import… | — | The rules as a JSON file; *Import* also reads a text file with one mask per line (lines starting with `#` ignored) and adds the rules |
 
 ### Priorities
 
@@ -366,10 +371,11 @@ record). The host, the other addresses, the bookmarks and the trusted keys are a
 |---|---|---|
 | Transfer mode | Automatic | Automatic: ASCII for the files of the ASCII list, binary for the others; or always binary / always ASCII. *Edit…* in the queue sets the mode of one item |
 | ASCII files | `*.txt;*.nfo;*.diz;*.sfv;*.md5;*.htm;*.html;*.ini;*.log;*.m3u;*.cue;*.xml;*.csv` | Masks of the ASCII list |
-| Case of the uploaded / downloaded names | Unchanged | lower case or UPPER CASE for the names created on the target |
+| Case of the uploaded / downloaded names, name case in FXP | Unchanged | lower case or UPPER CASE for the names created on the target |
 | Never resume ASCII files | on | Their size changes with the line ends: transferred again from the start |
 | Active mode (PORT) for every site | off | Data connections in active mode whatever the site says |
 | XDUPE | off | `SITE XDUPE 3` after login; the dupes listed in a refused upload are skipped, and the next ones of the folder are not even tried |
+| List the folder again when XDUPE returns nothing | off | An upload refused without `X-DUPE` names: when the target exists after all (`SIZE`), the file is skipped as a dupe |
 | Compress the transfers (MODE Z) | off | When the server announces `MODE Z`; never for the masks of *Never compressed* (archives, video, pictures by default) |
 | TCP buffer of the data connections (KiB) | 0 (system) | Send and receive buffers |
 | Roll back before resuming a download (KiB) | 0 | The end of a partial file is cut off before resuming |
@@ -474,11 +480,16 @@ must be started again. The passwords of a backup only work for the same Windows 
 | Description | empty | Short text shown next to the name in the site tree |
 | Protocol | FTP | FTP, FTPS (explicit), FTPS (implicit), SFTP; the port follows (21, 990, 22) |
 | Host, port | — / 21 | Name or IP address; when a name has IPv6 and IPv4 addresses both are tried ("happy eyeballs") |
+| Forced UTF-8 | off | FTP: `OPTS UTF8 ON` is sent and the names are read in UTF-8 even when the server does not announce `UTF8` (replaces the character set) |
+| Send the login in UTF-8 | off | FTP: `USER` and `PASS` in UTF-8 when the site uses another character set |
+| The server is behind NAT | off | FTP: the data connections always go to the address of the server, whatever `PASV` answers (otherwise only when `PASV` gives a private address for a public server) |
 | Other addresses | none | `host:port` (or `[IPv6]:port`), one per line: tried in turn when the main address cannot be reached or refuses the login; the address that worked is used first next time |
 | User, password, anonymous | — | Password encrypted with DPAPI; with an SSH key it is the passphrase |
 | Site enabled | on | A disabled site cannot be connected (`RushApp.FTP.DisableSite`) |
 | Also encrypt transfers (PROT P) | on | FTPS: encrypted data channels of the transfers |
 | Also encrypt listings (PROT P) | like the transfers | FTPS: encrypted data channels of the listings |
+| Send PBSZ 0 after the TLS login | on | FTPS: off for the servers that refuse it |
+| Encrypted FXP (FTP to FTP) | Automatic | Automatic (`SSCN` when announced, otherwise `CPSV`), Do not use (clear data channel between the servers), Use |
 | Certificate | Verify with the Windows authorities | or Accept any certificate (not recommended), or Trusted certificate (SHA-256 fingerprint, filled in when you trust a server) |
 | Private key | none | SFTP: OpenSSH, PEM or PuTTY `.ppk` key file |
 | Other keys | none | SFTP: tried in turn when the server refuses the previous one; the password is the passphrase of every key |
@@ -493,6 +504,9 @@ must be started again. The passwords of a backup only work for the same Windows 
 | Ident name specific to this site | off | Answered by the Ident server while the site connects (the server must be enabled) |
 | Bookmarks | none | Name, remote folder, local folder; used by `RS_BOOKMARK` in scripts |
 | Notes | empty | Free text |
+| Logs: the name of the site instead of Left / Right | off | Whatever the option of the Interface page |
+| Notify the new folders and files, folders | off, none | Folders of the site listed again at their interval (minutes); the new names are notified as set in Options › Notifications (same as the monitored folders there) |
+| Statistics | — | This server: last access, connections, uploaded, downloaded, FXP from and to it, totals (*Reset this server*). Every server since the first use: totals and average per day (*Copy*, *Reset every server*). This session: totals (*Copy the session*). Kept in `stats.json` |
 | Web address: address of the folder, remote folder served there | empty, `/` | For *Copy HTTP address*: `https://www.example.com/files` and `/pub` turn `/pub/a b.zip` into `https://www.example.com/files/a%20b.zip` |
 
 **Listing** (FTP and FTPS):
@@ -500,6 +514,7 @@ must be started again. The passwords of a backup only work for the same Windows 
 | Field | Default | Notes |
 |---|---|---|
 | Listing command | Global setting | Global setting (Connection page), `STAT -l` (on the control channel, no data connection) or a custom command |
+| Server time zone | Unknown / do not change | UTC−12:00 to UTC+14:00: fills in the offset below from the local time zone |
 | Time zone offset | 0 h | Hours (quarters allowed) added to the dates of the listings, for a server in another time zone |
 | Character set | UTF-8 (automatic) | For the servers that do not use UTF-8: windows-1252, ISO-8859-1/2/15, windows-1250/1251, KOI8-R, Shift_JIS, EUC-JP, GBK, gb18030, Big5, EUC-KR, IBM866. Names, paths and replies are converted; `OPTS UTF8 ON` is then not sent, and a name the set cannot write is refused |
 | Remove the spaces at the start of the listing lines | off | For servers whose `LIST` lines start with spaces (always done for `STAT`) |
@@ -513,13 +528,15 @@ site*, *Separate accounts*). A setting left unticked follows the global option.
 | Field | Default | Notes |
 |---|---|---|
 | Own retries and timeouts | off | Retries, delay between retries, connection and reply timeouts; they start from the global values (Transfers page) |
-| Resume interrupted transfers | on | Off: a partial file is always transferred again from zero (no `REST`) |
+| Resuming interrupted transfers | Automatic | Automatic: resume, and follow *Start over if resuming is refused* when the server refuses `REST`; Yes: always resume (a refused `REST` fails the transfer); No: always from zero |
 | Directory cache | Global setting | Yes / No replaces *Keep the listings of the folders visited* for this site |
 | Ask the server its features (FEAT) | on | FTP: off for old servers that dislike `FEAT` (`MLSD`, `PRET`, `UTF8` are then not detected) |
+| Choose the capabilities used | off (all) | FTP: `PRET`, UTF-8 (`OPTS UTF8`), `MODE Z`, `XCRC`, `MLSD`, `SSCN`, `CPSV`; one unticked is not used even when the server announces it |
 | Client name (CLNT) | empty | FTP: sent with `CLNT` after the login (empty: not sent) |
+| Transfers specific to this site | Global setting | FTP: case of the uploaded, downloaded and FXP names; XDUPE; List the folder again when XDUPE returns nothing; NOOP during the transfers; send and receive buffers (KiB) |
 | Own keep alive and reconnection | off | Same fields as the Keep alive page |
-| Own skip list / priorities / "existing file" rules | off | Same fields as the matching pages; the skip list and the priorities of the site the files come from apply, the "existing file" rules, the retries and the resume setting of the site they go to |
-| Account for uploads / for downloads | off | Login and password used by the transfers in this direction (and the folders created or listed for them); browsing keeps the main login |
+| Own skip list / priorities / "existing file" rules | off | Same fields as the matching pages (the "existing file" rules per direction); the skip list and the priorities of the site the files come from apply, the "existing file" rules, the retries and the resume setting of the site they go to |
+| Account for uploads / for downloads | off | Address and port (empty: those of the site), login and password used by the transfers in this direction (and the folders created or listed for them); browsing keeps the main login |
 
 **Connect** (site manager): hold `Shift` for a ghost login (`!user`: the server closes
 the other sessions of the account) and `Ctrl` for `-password` (glftpd and others: no

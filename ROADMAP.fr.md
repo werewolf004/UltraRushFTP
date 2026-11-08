@@ -54,7 +54,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (287 sujets : ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites

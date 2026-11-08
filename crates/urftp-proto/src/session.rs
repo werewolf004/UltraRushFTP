@@ -4,9 +4,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use urftp_core::exists::ExistsRules;
+use urftp_core::NameCase;
+use urftp_core::exists::ExistsSet;
 use urftp_core::priority::PriorityList;
 use urftp_core::queue::SiteLimits;
+use urftp_core::site::ResumeMode;
 use urftp_core::skiplist::SkipList;
 
 use crate::ftp::{DataOptions, FtpClient, FtpConfig, FtpError, LogLine, LogSink, RemoteEntry, Reply, path};
@@ -48,11 +50,13 @@ pub struct SiteProfile {
 pub struct Credentials {
     pub user: String,
     pub password: String,
+    /// Other address of the account (`None`: the one of the site).
+    pub address: Option<(String, u16)>,
 }
 
 impl std::fmt::Debug for Credentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Credentials({}, ****)", self.user)
+        write!(f, "Credentials({}, ****, {:?})", self.user, self.address)
     }
 }
 
@@ -67,9 +71,17 @@ pub struct SiteRules {
     pub retry_delay: Option<Duration>,
     pub skiplist: Option<SkipList>,
     pub priorities: Option<PriorityList>,
-    pub exists: Option<ExistsRules>,
-    /// Resume interrupted transfers; off: always start again from zero.
-    pub resume: bool,
+    pub exists: Option<ExistsSet>,
+    /// Resuming interrupted transfers.
+    pub resume: ResumeMode,
+    /// Case of the target names, per direction (`None`: the engine's).
+    pub upload_case: Option<NameCase>,
+    pub download_case: Option<NameCase>,
+    pub fxp_case: Option<NameCase>,
+    /// Lists the target again when an upload is refused without `XDUPE` names.
+    pub xdupe_refresh: Option<bool>,
+    /// Encrypted FXP from or to this site (`None`: the engine's setting).
+    pub fxp_tls: Option<bool>,
     /// Login for the uploads (and the folders created for them).
     pub upload_account: Option<Credentials>,
     /// Login for the downloads (and the listings of the folders downloaded).
@@ -88,7 +100,12 @@ impl Default for SiteRules {
             skiplist: None,
             priorities: None,
             exists: None,
-            resume: true,
+            resume: ResumeMode::Auto,
+            upload_case: None,
+            download_case: None,
+            fxp_case: None,
+            xdupe_refresh: None,
+            fxp_tls: None,
             upload_account: None,
             download_account: None,
             fxp_source_active: false,
@@ -150,6 +167,11 @@ impl SiteProfile {
         if let Some(c) = creds {
             p.user = c.user.clone();
             p.password = c.password.clone();
+            if let Some((host, port)) = &c.address {
+                p.host = host.clone();
+                p.port = *port;
+                p.hosts = HostList::default();
+            }
         }
         p
     }

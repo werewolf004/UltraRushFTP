@@ -671,12 +671,13 @@ impl Container {
         }
     }
 
-    /// Displayed title; `pos` = position of the tab (1, 2, 3...), renumbered on close.
+    /// Displayed title: the name of the site connected (as in the site manager), or
+    /// `pos` = position of the tab (1, 2, 3...), renumbered on close.
     fn title(&self, pos: usize) -> String {
         let remote = [&self.sides[1], &self.sides[0]]
             .into_iter()
             .chain(self.parked[1].iter().chain(self.parked[0].iter()))
-            .find_map(|s| if let Side::Remote(r) = s { Some(r.profile.host.clone()) } else { None });
+            .find_map(|s| if let Side::Remote(r) = s { Some(r.profile.name.clone()) } else { None });
         remote.unwrap_or_else(|| t!("tabs.default_title", n = pos))
     }
 
@@ -738,7 +739,7 @@ impl Container {
 
     /// `log_paths`: source and target of each item in the log. `invalidate`: the cached
     /// listing of the folder a transfer wrote into is forgotten.
-    fn poll(&mut self, log_paths: bool, invalidate: bool) -> Vec<(TransferKind, u64)> {
+    fn poll(&mut self, log_paths: bool, invalidate: bool) -> Vec<rushapp::Traffic> {
         let mut done = Vec::new();
         self.background.retain(|rx| match rx.try_recv() {
             Ok(m) => {
@@ -777,10 +778,10 @@ impl Container {
             match e {
                 EngineEvent::Progress { id, bytes, total } => {
                     let before = self.progress.insert(id, (bytes, total)).map_or(0, |(b, _)| b);
-                    let kind = self.queue.lock().get(id).map(QueueItem::kind);
+                    let item = self.queue.lock().get(id).map(|i| (i.kind(), i.src.site.clone(), i.dst.site.clone()));
                     // FXP does not go through this computer: it does not count in the rates.
-                    if let Some(k @ (TransferKind::Upload | TransferKind::Download)) = kind {
-                        traffic.push((k, bytes.saturating_sub(before)));
+                    if let Some((k @ (TransferKind::Upload | TransferKind::Download), src, dst)) = item {
+                        traffic.push((k, bytes.saturating_sub(before), src, dst));
                     }
                 }
                 EngineEvent::Started { id } if log_paths => {
@@ -788,8 +789,8 @@ impl Container {
                     self.push_transfer(0, LogKind::Status, t!("log.item_started", paths = paths));
                 }
                 EngineEvent::Done { id, bytes } => {
-                    if self.queue.lock().get(id).map(QueueItem::kind) == Some(TransferKind::Fxp) {
-                        traffic.push((TransferKind::Fxp, bytes));
+                    if let Some(i) = self.queue.lock().get(id).filter(|i| i.kind() == TransferKind::Fxp) {
+                        traffic.push((TransferKind::Fxp, bytes, i.src.site.clone(), i.dst.site.clone()));
                     }
                     let dst = self.queue.lock().get(id).map(|i| i.dst.clone());
                     if invalidate && let Some(Endpoint { site: Some(site), path }) = dst {
@@ -3095,7 +3096,7 @@ impl eframe::App for UltraRushApp {
         let log_paths = self.options.settings.transfer.log_paths;
         let browse = &self.options.settings.browse;
         let invalidate = browse.dir_cache && browse.update_cache_on_transfer;
-        let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(|t| t.poll(log_paths, invalidate)).collect();
+        let traffic: Vec<rushapp::Traffic> = self.tabs.iter_mut().flat_map(|t| t.poll(log_paths, invalidate)).collect();
         for t in &mut self.tabs {
             t.poll_edits(&self.options.settings.browse, &self.rt, ctx);
         }
@@ -3107,7 +3108,8 @@ impl eframe::App for UltraRushApp {
                 self.tabs[a].push_log(0, LogKind::Error, t!("log.log_file_failed", error = e));
             }
         }
-        self.stats.record(&traffic);
+        let book = &self.sites.book;
+        self.stats.record(&traffic, |name| book.find_by_name(name).map(|s| s.id));
         self.check_queue_end(ctx);
         self.forward_raw_replies();
         self.pump_scripts(ctx);
@@ -3174,6 +3176,9 @@ impl eframe::App for UltraRushApp {
         actions.append(&mut menu_actions);
         let entries = self.site_entries();
         let bookmarks = self.panel_bookmarks();
+        // Sites whose logs always show their name ("Display" of the site record).
+        let named_sites: Vec<String> =
+            self.sites.book.all_sites().into_iter().map(|(_, s)| s).filter(|s| s.log_site_name).map(|s| s.name.clone()).collect();
         egui::CentralPanel::default().show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
             let running = tab.engine.is_some();
@@ -3181,7 +3186,7 @@ impl eframe::App for UltraRushApp {
             let parked_remote = [0, 1].map(|s| matches!(tab.parked[s], Some(Side::Remote(_))));
             let paused = tab.paused();
             let ui_opts = &self.options.settings.interface;
-            let log_view = (ui_opts.log_site_names, ui_opts.log_times);
+            let log_view = (ui_opts.log_site_names, ui_opts.log_times, &named_sites[..]);
             let double_click = ui_opts.double_click_file;
             let dark = self.dark;
             let highlights = look::highlights(ui_opts, dark);
@@ -3240,7 +3245,16 @@ impl eframe::App for UltraRushApp {
         self.guard_windows();
         self.script_dialogs(&ctx);
         self.unlock_dialog(&ctx);
+        if self.sites.open {
+            self.sites.stats = self.stats.view();
+        }
         self.sites.show(&ctx, &self.options.settings);
+        for r in std::mem::take(&mut self.sites.stats_reset) {
+            match r {
+                sites::StatsReset::Site(id) => self.stats.reset_site(id),
+                sites::StatsReset::All => self.stats.reset_totals(),
+            }
+        }
         if self.options.show(&ctx) {
             self.apply_settings(&ctx);
         }
@@ -3280,8 +3294,8 @@ struct PaneViewer<'a> {
     list_rect: &'a mut [Option<egui::Rect>; 2],
     /// Bookmarks of the site of each panel.
     bookmarks: &'a [Vec<String>; 2],
-    /// The logs show (site names, times).
-    log_view: (bool, bool),
+    /// The logs show (site names, times, sites always named).
+    log_view: (bool, bool, &'a [String]),
     /// Double-click on a file.
     double_click: urftp_core::settings::FileDoubleClick,
     /// Colours of the names matching masks.
@@ -3946,7 +3960,7 @@ impl PaneViewer<'_> {
 
     fn log_pane(&mut self, ui: &mut egui::Ui, channel: LogChannel) {
         let p = theme::colors(ui);
-        let (names, times) = self.log_view;
+        let (names, times, named) = self.log_view;
         let (custom, size) = self.log_look;
         egui::ScrollArea::vertical().id_salt(("log", channel as u8)).auto_shrink(false).stick_to_bottom(true).show(ui, |ui| {
             for e in self.log.iter().filter(|e| e.channel == channel) {
@@ -3957,7 +3971,7 @@ impl PaneViewer<'_> {
                     LogKind::Error => 3,
                 };
                 let color = custom.map_or([p.command, p.success, p.status, p.error][k], |c| c[k]);
-                let mut text = RichText::new(logs::line_text(e, names, times)).monospace().color(color);
+                let mut text = RichText::new(logs::line_text(e, names || named.contains(&e.site), times)).monospace().color(color);
                 if size > 0 {
                     text = text.size(size as f32);
                 }

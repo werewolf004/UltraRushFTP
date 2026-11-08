@@ -38,6 +38,11 @@ impl Features {
         self.map.get(&name.to_ascii_uppercase()).map(String::as_str)
     }
 
+    /// Forgets a feature (switched off for the site): it is then treated as not announced.
+    pub fn remove(&mut self, name: &str) {
+        self.map.remove(&name.to_ascii_uppercase());
+    }
+
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.map.keys().map(String::as_str)
     }

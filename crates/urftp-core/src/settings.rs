@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::exists::ExistsRules;
+use crate::exists::ExistsSet;
 use crate::pattern::Pattern;
 use crate::priority::PriorityList;
 use crate::site::{Site, SiteProxy};
@@ -31,6 +31,25 @@ impl MaskSetting {
     pub fn compile(&self) -> Result<Pattern, regex::Error> {
         if self.regex { Pattern::regex(&self.mask) } else { Ok(Pattern::wildcard(&self.mask)) }
     }
+}
+
+/// Skip-list rules read from a file: the JSON written by [`skip_rules_to_text`], or one mask
+/// per line (lines starting with `#` ignored), each becoming a rule skipping files and
+/// folders.
+pub fn skip_rules_from_text(text: &str) -> Vec<SkipRuleSetting> {
+    if let Ok(rules) = serde_json::from_str::<Vec<SkipRuleSetting>>(text) {
+        return rules;
+    }
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| SkipRuleSetting { mask: MaskSetting { mask: l.to_string(), regex: false }, ..SkipRuleSetting::default() })
+        .collect()
+}
+
+/// Skip-list rules as a file (JSON, read back by [`skip_rules_from_text`]).
+pub fn skip_rules_to_text(rules: &[SkipRuleSetting]) -> String {
+    serde_json::to_string_pretty(rules).unwrap_or_default()
 }
 
 /// Skip-list rule as stored.
@@ -144,6 +163,10 @@ pub struct TransferSettings {
     /// Case of the uploaded / downloaded names.
     pub upload_case: crate::NameCase,
     pub download_case: crate::NameCase,
+    /// Case of the names copied by FXP.
+    pub fxp_case: crate::NameCase,
+    /// Lists the target folder again when an upload is refused without `XDUPE` names.
+    pub xdupe_refresh: bool,
     /// `SITE XDUPE 3`: dupes listed by the server are skipped.
     pub xdupe: bool,
     /// `MODE Z` (compressed data) when the server has it.
@@ -249,6 +272,8 @@ impl Default for TransferSettings {
             unlimited_local: false,
             upload_case: crate::NameCase::Keep,
             download_case: crate::NameCase::Keep,
+            fxp_case: crate::NameCase::Keep,
+            xdupe_refresh: false,
             xdupe: false,
             mode_z: false,
             mode_z_exceptions: DEFAULT_MODE_Z_EXCEPTIONS.into(),
@@ -467,7 +492,8 @@ pub struct Settings {
     /// A connection opens a new tab when the right panel is already connected.
     pub new_tab_when_busy: bool,
     pub transfer: TransferSettings,
-    pub exists: ExistsRules,
+    /// "Existing file" rules per direction.
+    pub exists: ExistsSet,
     pub skiplist: SkipSettings,
     pub priorities: Vec<MaskSetting>,
     pub proxy: GlobalProxy,
@@ -908,7 +934,7 @@ impl Default for Settings {
             language: LanguageSetting::System,
             new_tab_when_busy: true,
             transfer: TransferSettings::default(),
-            exists: ExistsRules::default(),
+            exists: ExistsSet::default(),
             skiplist: SkipSettings::default(),
             // As on scene sites: the .sfv then the .nfo go first.
             priorities: vec![MaskSetting::wildcard("*.sfv"), MaskSetting::wildcard("*.nfo")],
@@ -999,6 +1025,37 @@ impl Settings {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn skip_rules_files() {
+        let rules = skip_rules_from_text(
+            "# FTPRush list
+*sample*
+
+  *.nfo 
+",
+        );
+        assert_eq!(rules.iter().map(|r| r.mask.mask.as_str()).collect::<Vec<_>>(), ["*sample*", "*.nfo"]);
+        assert!(rules.iter().all(|r| !r.mask.regex && r.action == RuleAction::Skip));
+        let back = skip_rules_from_text(&skip_rules_to_text(&rules));
+        assert_eq!(back, rules);
+    }
+
+    #[test]
+    fn site_records_of_earlier_versions_still_read() {
+        use crate::site::{ResumeMode, SiteSettings};
+        let old: SiteSettings = serde_json::from_str(r#"{"resume": false}"#).unwrap();
+        assert_eq!(old.resume, ResumeMode::Never);
+        let old: SiteSettings = serde_json::from_str(r#"{"resume": true}"#).unwrap();
+        assert_eq!(old.resume, ResumeMode::Auto);
+        let new: SiteSettings =
+            serde_json::from_str(&serde_json::to_string(&SiteSettings { resume: ResumeMode::Always, ..SiteSettings::default() }).unwrap())
+                .unwrap();
+        assert_eq!(new.resume, ResumeMode::Always);
+        let f = crate::site::FeatureSwitches { mlsd: false, mode_z: false, ..Default::default() };
+        assert_eq!(f.disabled(), ["MODE Z", "MLST"]);
+    }
+
     use super::*;
 
     #[test]

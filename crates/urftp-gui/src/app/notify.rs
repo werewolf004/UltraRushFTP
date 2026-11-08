@@ -86,6 +86,11 @@ impl UltraRushApp {
     fn take_tab_events(&mut self) {
         let events: Vec<(NotifyEvent, String)> = self.tabs.iter_mut().flat_map(|t| std::mem::take(&mut t.events)).collect();
         let queue_end = events.iter().any(|(e, _)| *e == NotifyEvent::QueueFinished);
+        for (_, name) in events.iter().filter(|(e, _)| *e == NotifyEvent::Connected) {
+            if let Some(id) = self.sites.book.find_by_name(name).map(|s| s.id) {
+                self.stats.connected(id);
+            }
+        }
         for (e, text) in events {
             self.notify_event(e, text);
         }
@@ -170,7 +175,16 @@ impl UltraRushApp {
 
     /// Lists the monitored folders that are due, on connections of their own.
     fn run_monitors(&mut self, ctx: &egui::Context) {
-        let list: Vec<FolderMonitor> = self.options.settings.notify.monitors.clone();
+        // The folders of the options, then those of the site records.
+        let mut list: Vec<FolderMonitor> = self.options.settings.notify.monitors.clone();
+        for site in self.sites.book.all_sites().into_iter().map(|(_, s)| s).filter(|s| s.notify_new) {
+            list.extend(site.monitors.iter().map(|m| FolderMonitor {
+                enabled: true,
+                site: site.name.clone(),
+                path: m.path.clone(),
+                interval_mins: m.interval_mins,
+            }));
+        }
         self.notifier.monitors.resize_with(list.len(), MonitorState::default);
         let mut found = Vec::new();
         for (i, m) in list.iter().enumerate() {

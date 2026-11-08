@@ -262,12 +262,16 @@ Le FXP n'est pas limité : ses données ne passent pas par cet ordinateur.
 
 ![Fichier existant](images/options-existing-file.fr.png)
 
+Trois jeux de règles : **Envoi**, **Réception** et **FXP (FTP à FTP)**.
+
 | Cas | Défaut | Choix |
 |---|---|---|
 | La cible est plus petite | Reprendre | Reprendre, Ignorer, Renommer (« nom (1) »), Écraser, Demander |
 | La cible a la même taille | Ignorer | idem |
 | La cible est plus grande | Renommer | idem |
-| Recommencer depuis le début si la reprise est refusée | oui | Écrase quand le serveur refuse `REST` |
+| Recommencer depuis le début si la reprise est refusée | oui | Écrase quand le serveur refuse `REST` (tous les sens) |
+
+Les règles d'une version précédente s'appliquent aux trois sens.
 
 ### Fichiers ignorés
 
@@ -279,6 +283,7 @@ Le FXP n'est pas limité : ses données ne passent pas par cet ordinateur.
 | Ignorer les fichiers de 0 octet | non | — |
 | Ne pas créer les dossiers vides | non | — |
 | Règles | aucune | Appliquées dans l'ordre, la première qui correspond décide : **Ignorer** ou **Autoriser**, masque (joker `*` `?`, ou expression régulière avec *regex*), cible (fichiers, dossiers, les deux), sens (envoi ⬆, téléchargement ⬇, FXP ↔), *chemin* = le masque porte sur le chemin complet (s'écrit aussi `%W%masque`) |
+| Exporter… / Importer… | — | Les règles dans un fichier JSON ; *Importer* lit aussi un fichier texte d'un masque par ligne (lignes commençant par `#` ignorées) et ajoute les règles |
 
 ### Priorités
 
@@ -374,10 +379,11 @@ les clés de confiance restent toujours vides. *Valeurs par défaut* remet le mo
 |---|---|---|
 | Mode de transfert | Automatique | Automatique : ASCII pour les fichiers de la liste ASCII, binaire pour les autres ; ou toujours binaire / toujours ASCII. *Modifier…* dans la file règle le mode d'un élément |
 | Fichiers ASCII | `*.txt;*.nfo;*.diz;*.sfv;*.md5;*.htm;*.html;*.ini;*.log;*.m3u;*.cue;*.xml;*.csv` | Masques de la liste ASCII |
-| Casse des noms envoyés / téléchargés | Inchangée | minuscules ou MAJUSCULES pour les noms créés sur la cible |
+| Casse des noms envoyés / téléchargés, casse des noms en FXP | Inchangée | minuscules ou MAJUSCULES pour les noms créés sur la cible |
 | Ne jamais reprendre les fichiers ASCII | activé | Leur taille change avec les fins de ligne : retransférés depuis le début |
 | Mode actif (PORT) pour tous les sites | désactivé | Connexions de données en mode actif quel que soit le réglage du site |
 | XDUPE | désactivé | `SITE XDUPE 3` après la connexion ; les doublons listés dans un envoi refusé sont ignorés, et les suivants du dossier ne sont même pas essayés |
+| Relire le dossier quand XDUPE ne renvoie rien | désactivé | Un envoi refusé sans noms `X-DUPE` : si la cible existe malgré tout (`SIZE`), le fichier est ignoré comme doublon |
 | Compresser les transferts (MODE Z) | désactivé | Quand le serveur annonce `MODE Z` ; jamais pour les masques de *Jamais compressés* (archives, vidéo, images par défaut) |
 | Tampon TCP des connexions de données (Kio) | 0 (système) | Tampons d'envoi et de réception |
 | Recul avant de reprendre un téléchargement (Kio) | 0 | La fin d'un fichier partiel est coupée avant la reprise |
@@ -484,11 +490,16 @@ que pour le même compte Windows.
 | Description | vide | Texte court affiché à côté du nom dans l'arbre des sites |
 | Protocole | FTP | FTP, FTPS explicite, FTPS implicite, SFTP ; le port suit (21, 990, 22) |
 | Hôte, port | — / 21 | Nom ou adresse IP ; quand un nom a des adresses IPv6 et IPv4, les deux sont essayées (« happy eyeballs ») |
+| UTF-8 forcé | non | FTP : `OPTS UTF8 ON` est envoyé et les noms sont lus en UTF-8 même si le serveur n'annonce pas `UTF8` (remplace le jeu de caractères) |
+| Envoyer l'identifiant en UTF-8 | non | FTP : `USER` et `PASS` en UTF-8 quand le site utilise un autre jeu de caractères |
+| Le serveur est derrière un NAT | non | FTP : les connexions de données vont toujours à l'adresse du serveur, quoi que réponde `PASV` (sinon seulement quand `PASV` donne une adresse privée pour un serveur public) |
 | Autres adresses | aucune | `hôte:port` (ou `[IPv6]:port`), une par ligne : essayées à tour de rôle quand l'adresse principale ne répond pas ou refuse la connexion ; celle qui a marché sert en premier la fois suivante |
 | Utilisateur, mot de passe, anonyme | — | Mot de passe chiffré par DPAPI ; avec une clé SSH, c'est sa phrase de passe |
 | Site activé | oui | Un site désactivé ne peut pas être connecté (`RushApp.FTP.DisableSite`) |
 | Chiffrer aussi les transferts (PROT P) | oui | FTPS : canaux de données des transferts chiffrés |
 | Chiffrer aussi les listings (PROT P) | comme les transferts | FTPS : canaux de données des listings chiffrés |
+| Envoyer PBSZ 0 après l'authentification TLS | oui | FTPS : à désactiver pour les serveurs qui le refusent |
+| FXP chiffré (FTP à FTP) | Automatique | Automatique (`SSCN` quand il est annoncé, sinon `CPSV`), Ne pas utiliser (canal de données en clair entre les serveurs), Utiliser |
 | Certificat | Vérifier avec les autorités Windows | ou Accepter tout certificat (déconseillé), ou Certificat approuvé (empreinte SHA-256, remplie quand on approuve un serveur) |
 | Clé privée | aucune | SFTP : fichier de clé OpenSSH, PEM ou PuTTY `.ppk` |
 | Autres clés | aucune | SFTP : essayées à tour de rôle quand le serveur refuse la précédente ; le mot de passe est la phrase secrète de chaque clé |
@@ -503,6 +514,9 @@ que pour le même compte Windows.
 | Nom Ident propre à ce site | non | Répondu par le serveur Ident pendant la connexion du site (le serveur doit être activé) |
 | Signets | aucun | Nom, dossier distant, dossier local ; utilisés par `RS_BOOKMARK` dans les scripts |
 | Notes | vide | Texte libre |
+| Journaux : le nom du site au lieu de Gauche / Droite | non | Quelle que soit l'option de la page Interface |
+| Notifier les nouveaux dossiers et fichiers, dossiers | non, aucun | Dossiers du site relus à leur intervalle (minutes) ; les nouveaux noms sont notifiés comme le règle Options › Notifications (comme les dossiers surveillés de cette page) |
+| Statistiques | — | Ce serveur : dernier accès, connexions, envoyé, reçu, FXP depuis et vers lui, totaux (*Remettre ce serveur à zéro*). Tous les serveurs depuis la première utilisation : totaux et moyenne par jour (*Copier*, *Remettre tous les serveurs à zéro*). Cette session : totaux (*Copier la session*). Gardées dans `stats.json` |
 | Adresse web : adresse du dossier, dossier distant servi à cette adresse | vide, `/` | Pour *Copier l'adresse HTTP* : `https://www.example.com/files` et `/pub` transforment `/pub/a b.zip` en `https://www.example.com/files/a%20b.zip` |
 
 **Listing** (FTP et FTPS) :
@@ -510,6 +524,7 @@ que pour le même compte Windows.
 | Champ | Défaut | Remarques |
 |---|---|---|
 | Commande de listing | Réglage global | Réglage global (page Connexion), `STAT -l` (sur le canal de contrôle, sans connexion de données) ou une commande personnalisée |
+| Fuseau horaire du serveur | Inconnu / ne pas modifier | UTC−12:00 à UTC+14:00 : remplit le décalage ci-dessous d'après le fuseau local |
 | Décalage horaire | 0 h | Heures (quarts d'heure possibles) ajoutées aux dates des listings, pour un serveur dans un autre fuseau horaire |
 | Jeu de caractères | UTF-8 (automatique) | Pour les serveurs qui n'utilisent pas UTF-8 : windows-1252, ISO-8859-1/2/15, windows-1250/1251, KOI8-R, Shift_JIS, EUC-JP, GBK, gb18030, Big5, EUC-KR, IBM866. Noms, chemins et réponses sont convertis ; `OPTS UTF8 ON` n'est alors pas envoyé, et un nom que le jeu ne sait pas écrire est refusé |
 | Retirer les espaces en début de ligne du listing | non | Pour les serveurs dont les lignes de `LIST` commencent par des espaces (toujours fait pour `STAT`) |
@@ -523,13 +538,15 @@ que pour le même compte Windows.
 | Champ | Défaut | Remarques |
 |---|---|---|
 | Essais et délais propres au site | non | Nombre d'essais, délai entre deux essais, délais de connexion et de réponse ; ils partent des valeurs globales (page Transferts) |
-| Reprendre les transferts interrompus | oui | Désactivé : un fichier partiel est toujours retransféré depuis zéro (pas de `REST`) |
+| Reprise des transferts interrompus | Détection auto | Détection auto : reprendre, et suivre *Recommencer depuis le début si la reprise est refusée* quand le serveur refuse `REST` ; Oui : toujours reprendre (un `REST` refusé fait échouer le transfert) ; Non : toujours depuis zéro |
 | Cache des dossiers | Réglage global | Oui / Non remplace *Garder les listings des dossiers visités* pour ce site |
 | Demander ses fonctions au serveur (FEAT) | oui | FTP : à désactiver pour les vieux serveurs qui n'aiment pas `FEAT` (`MLSD`, `PRET`, `UTF8` ne sont alors pas détectés) |
+| Choisir les fonctions utilisées | non (toutes) | FTP : `PRET`, UTF-8 (`OPTS UTF8`), `MODE Z`, `XCRC`, `MLSD`, `SSCN`, `CPSV` ; une fonction décochée n'est pas utilisée même si le serveur l'annonce |
 | Nom du client (CLNT) | vide | FTP : envoyé par `CLNT` après la connexion (vide : pas envoyé) |
+| Transferts propres au site | Réglage global | FTP : casse des noms envoyés, téléchargés et en FXP ; XDUPE ; Relire le dossier quand XDUPE ne renvoie rien ; NOOP pendant les transferts ; tampons d'envoi et de réception (Kio) |
 | Maintien de connexion et reconnexion propres au site | non | Mêmes champs que la page Maintien de connexion |
-| Liste d'exclusion / priorités / règles « fichier existant » propres au site | non | Mêmes champs que les pages correspondantes ; la liste d'exclusion et les priorités du site d'où viennent les fichiers s'appliquent, les règles « fichier existant », les essais et la reprise du site où ils vont |
-| Compte pour les envois / pour les téléchargements | non | Identifiant et mot de passe utilisés par les transferts dans ce sens (et les dossiers créés ou listés pour eux) ; la navigation garde le compte principal |
+| Liste d'exclusion / priorités / règles « fichier existant » propres au site | non | Mêmes champs que les pages correspondantes (les règles « fichier existant » par sens) ; la liste d'exclusion et les priorités du site d'où viennent les fichiers s'appliquent, les règles « fichier existant », les essais et la reprise du site où ils vont |
+| Compte pour les envois / pour les téléchargements | non | Adresse et port (vides : ceux du site), identifiant et mot de passe utilisés par les transferts dans ce sens (et les dossiers créés ou listés pour eux) ; la navigation garde le compte principal |
 
 **Connecter** (gestionnaire de sites) : `Maj` enfoncée pour une connexion fantôme
 (`!user` : le serveur ferme les autres sessions du compte) et `Ctrl` pour `-motdepasse`

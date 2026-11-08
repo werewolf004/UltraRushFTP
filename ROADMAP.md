@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18). The
+[docs/PARITY.md](docs/PARITY.md) (287 topics: ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites

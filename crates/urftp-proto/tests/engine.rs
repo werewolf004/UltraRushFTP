@@ -235,7 +235,7 @@ async fn file_exists_rules_skip_resume_and_rename() {
             q.push(Endpoint::remote("A", format!("/{n}.bin")), Endpoint::local(local(&dir.join(format!("{n}.bin")))), false, None, None)
         })
         .collect();
-    let r = engine(q, vec![site("A", srv.addr.port(), 1)], EngineOptions { exists: ExistsRules::default(), ..opts() });
+    let r = engine(q, vec![site("A", srv.addr.port(), 1)], EngineOptions { exists: urftp_core::exists::ExistsSet::default(), ..opts() });
     r.engine.run().await;
 
     assert!(matches!(state(&r.engine, ids[0]), ItemState::Skipped(_)));
@@ -660,7 +660,7 @@ async fn transfer_rules_ascii_case_disk_dupes_compression_and_local_speed() {
         larger: ExistsAction::Overwrite,
         ..ExistsRules::default()
     };
-    let r = engine(q, vec![xsite], EngineOptions { exists: overwrite, ..opts() });
+    let r = engine(q, vec![xsite], EngineOptions { exists: urftp_core::exists::ExistsSet::all(overwrite), ..opts() });
     r.engine.run().await;
     assert_eq!(state(&r.engine, ids[0]), ItemState::Skipped(urftp_core::skiplist::SkipReason::Dupe));
     assert_eq!(state(&r.engine, ids[1]), ItemState::Skipped(urftp_core::skiplist::SkipReason::Dupe));

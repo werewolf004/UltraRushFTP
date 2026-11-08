@@ -111,7 +111,10 @@ async fn the_target_site_existing_file_rules_apply() {
     let dir = temp_dir();
     std::fs::write(dir.join("same.bin"), payload(50)).unwrap();
     // Globally "same size: skip"; this site overwrites.
-    let rules = SiteRules { exists: Some(ExistsRules { same: ExistsAction::Overwrite, ..ExistsRules::default() }), ..SiteRules::default() };
+    let rules = SiteRules {
+        exists: Some(urftp_core::exists::ExistsSet::all(ExistsRules { same: ExistsAction::Overwrite, ..ExistsRules::default() })),
+        ..SiteRules::default()
+    };
     let mut q = Queue::new();
     let id = q.push(Endpoint::remote("A", "/same.bin"), Endpoint::local(local(&dir.join("same.bin"))), false, None, None);
     let e = run(q, vec![site("A", srv.addr.port(), rules)], opts()).await;
@@ -133,7 +136,9 @@ async fn without_resume_a_partial_file_starts_again_from_zero() {
     std::fs::write(dir.join("big.bin"), vec![0xEE; 4_000]).unwrap();
     let mut q = Queue::new();
     let id = q.push(Endpoint::remote("A", "/big.bin"), Endpoint::local(local(&dir.join("big.bin"))), false, None, None);
-    let e = run(q, vec![site("A", srv.addr.port(), SiteRules { resume: false, ..SiteRules::default() })], opts()).await;
+    let e =
+        run(q, vec![site("A", srv.addr.port(), SiteRules { resume: urftp_core::site::ResumeMode::Never, ..SiteRules::default() })], opts())
+            .await;
     assert_eq!(state(&e, id), ItemState::Done);
     assert_eq!(std::fs::read(dir.join("big.bin")).unwrap(), data);
     assert!(!srv.received().iter().any(|l| l.starts_with("REST")), "no REST sent");
@@ -146,7 +151,7 @@ async fn uploads_and_downloads_use_their_own_accounts() {
     srv.fs.lock().unwrap().files.insert("/down.bin".into(), payload(300));
     let dir = temp_dir();
     std::fs::write(dir.join("up.bin"), payload(200)).unwrap();
-    let creds = Credentials { user: "transfer".into(), password: "pw".into() };
+    let creds = Credentials { user: "transfer".into(), password: "pw".into(), address: None };
     let rules = SiteRules { upload_account: Some(creds.clone()), download_account: Some(creds), ..SiteRules::default() };
     let mut q = Queue::new();
     let down = q.push(Endpoint::remote("A", "/down.bin"), Endpoint::local(local(&dir.join("down.bin"))), false, None, None);

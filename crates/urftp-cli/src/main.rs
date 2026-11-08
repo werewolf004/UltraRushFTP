@@ -198,7 +198,12 @@ async fn run_queue(ctx: &Ctx, sites: Vec<SiteProfile>, src: Endpoint, dst: Endpo
     let mut opts = engine_options(s, &dl, &ul);
     opts.log = ctx.log_sink().map(TransferLog);
     if let Some(a) = ctx.opts.exists {
-        opts.exists = ExistsRules { smaller: a, same: a, larger: a, ..opts.exists };
+        let set = |r: ExistsRules| ExistsRules { smaller: a, same: a, larger: a, ..r };
+        opts.exists = urftp_core::exists::ExistsSet {
+            upload: set(opts.exists.upload),
+            download: set(opts.exists.download),
+            fxp: set(opts.exists.fxp),
+        };
     }
     let (tx, mut rx) = unbounded_channel();
     let engine = Engine::new(queue.clone(), sites, opts, Some(tx));

@@ -10,6 +10,31 @@ la traduction.
 
 ## [Non publié]
 
+Propriétés des sites aussi complètes que celles de FTPRush v2.
+
+### Ajouté
+
+- **Fiche de site** : UTF-8 forcé, identifiant envoyé en UTF-8, serveur derrière un NAT
+  (connexions de données vers l'adresse du serveur), `PBSZ 0` désactivable, FXP chiffré
+  automatique / jamais / toujours, fuseau horaire du serveur, reprise Détection auto / Oui
+  / Non, les fonctions utilisées quand elles sont annoncées (`PRET`, UTF-8, `MODE Z`,
+  `XCRC`, `MLSD`, `SSCN`, `CPSV`), transferts du site (casse des noms à l'envoi, à la
+  réception et en FXP, XDUPE, NOOP pendant les transferts, tampons d'envoi et de
+  réception), une adresse et un port pour les comptes séparés, le nom du site dans les
+  journaux, les dossiers surveillés du site, et les **statistiques du serveur** (dernier
+  accès, connexions, envoyé, reçu, FXP depuis et vers lui ; copie et remise à zéro des
+  totaux).
+- **Règles « fichier existant » par sens** (envoi, réception, FXP), dans les options et par
+  site ; les règles des versions précédentes s'appliquent aux trois.
+- Casse des noms en FXP et *Relire le dossier quand XDUPE ne renvoie rien* (Transfert
+  avancé).
+- **Exporter… / Importer…** de la liste d'exclusion (JSON, ou un masque par ligne).
+
+### Modifié
+
+- Un onglet connecté à un site du gestionnaire porte le nom du site au lieu de son
+  adresse.
+
 ## [0.7.0] - 2026-11-08
 
 Scripts (bloc K).

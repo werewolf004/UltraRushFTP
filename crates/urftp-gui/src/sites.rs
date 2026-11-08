@@ -66,8 +66,29 @@ pub enum Probe {
 /// Results of the availability tests, written by the network tasks.
 pub type Probes = Arc<Mutex<HashMap<u64, Probe>>>;
 
+/// Statistics shown in the site manager (given by the application each frame).
+#[derive(Debug, Clone, Default)]
+pub struct StatsView {
+    pub sites: std::collections::BTreeMap<u64, urftp_core::site::SiteStats>,
+    /// Date of first use and days since then.
+    pub since: String,
+    pub days: i64,
+    /// Download, upload, FXP: since `since` and during this session.
+    pub total: [u64; 3],
+    pub session: [u64; 3],
+}
+
+/// "Default" buttons of the statistics, done by the application.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatsReset {
+    Site(u64),
+    All,
+}
+
 pub struct SiteManager {
     pub open: bool,
+    pub stats: StatsView,
+    pub stats_reset: Vec<StatsReset>,
     pub book: SiteBook,
     path: PathBuf,
     selection: Selection,
@@ -128,6 +149,8 @@ impl SiteManager {
             probes: Probes::default(),
             list_mode: false,
             list_sort: 0,
+            stats: StatsView::default(),
+            stats_reset: Vec::new(),
         }
     }
 
@@ -444,7 +467,7 @@ impl SiteManager {
                 let probe = self.probes.lock().get(&id).cloned();
                 let Some(site) = self.book.find_mut(id) else { return };
                 let before = site.clone();
-                site_form(ui, site, show_password, probe.as_ref(), settings);
+                site_form(ui, site, show_password, probe.as_ref(), settings, &self.stats, &mut self.stats_reset);
                 if *site != before {
                     self.dirty = true;
                     self.last_change = ui.input(|i| i.time);
@@ -639,7 +662,15 @@ fn optional_limit(ui: &mut egui::Ui, value: &mut Option<u32>, label: egui::Id, n
     });
 }
 
-fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: Option<&Probe>, global: &Settings) {
+fn site_form(
+    ui: &mut egui::Ui,
+    s: &mut Site,
+    show_password: &mut bool,
+    probe: Option<&Probe>,
+    global: &Settings,
+    stats: &StatsView,
+    reset: &mut Vec<StatsReset>,
+) {
     ui.heading(format!("{} {}", if s.protocol == SiteProtocol::Sftp { "🔑" } else { "🌐" }, s.name));
     ui.add_space(4.0);
     section(ui, &t!("site.connection"), |ui| {
@@ -691,6 +722,15 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
             row(ui, &t!("site.active"), |ui, _| {
                 ui.checkbox(&mut s.enabled, t!("site.enabled"));
             });
+            if s.protocol != SiteProtocol::Sftp {
+                row(ui, &t!("site.server_options"), |ui, _| {
+                    ui.vertical(|ui| {
+                        ui.checkbox(&mut s.force_utf8, t!("site.force_utf8"));
+                        ui.checkbox(&mut s.utf8_username, t!("site.utf8_username"));
+                        ui.checkbox(&mut s.behind_nat, t!("site.behind_nat")).on_hover_text(t!("site.behind_nat_tip"));
+                    });
+                });
+            }
         });
         if let Some(p) = probe {
             let (mark, detail) = probe_mark(ui, p);
@@ -731,6 +771,13 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
                 let r = ui.add(theme::single_line(fp).hint_text(t!("site.fingerprint_hint")).desired_width(f32::INFINITY));
                 theme::name(&r, t!("site.fingerprint"));
             }
+            ui.checkbox(&mut s.send_pbsz, t!("site.send_pbsz"));
+            ui.label(t!("site.fxp_tls"));
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut s.fxp_tls, None, t!("site.fxp_tls_auto"));
+                ui.radio_value(&mut s.fxp_tls, Some(false), t!("site.fxp_tls_off"));
+                ui.radio_value(&mut s.fxp_tls, Some(true), t!("site.fxp_tls_on"));
+            });
         });
     }
 
@@ -937,9 +984,162 @@ fn site_form(ui: &mut egui::Ui, s: &mut Site, show_password: &mut bool, probe: O
         }
     });
 
+    section(ui, &t!("site.display"), |ui| {
+        ui.checkbox(&mut s.log_site_name, t!("site.log_site_name"));
+    });
+
+    section(ui, &t!("site.notification"), |ui| {
+        ui.checkbox(&mut s.notify_new, t!("site.notify_new"));
+        ui.label(RichText::new(t!("site.notify_note")).weak());
+        let mut remove = None;
+        egui::Grid::new("site-monitors").num_columns(3).spacing([8.0, 4.0]).show(ui, |ui| {
+            for (i, m) in s.monitors.iter_mut().enumerate() {
+                let r = ui.add_enabled(s.notify_new, theme::single_line(&mut m.path).hint_text("/").desired_width(260.0));
+                theme::name(&r, t!("site.monitor_path", n = i + 1));
+                let r = ui.add_enabled(s.notify_new, egui::DragValue::new(&mut m.interval_mins).range(1..=1440).suffix(" min"));
+                theme::name(&r, t!("site.monitor_interval", n = i + 1));
+                if theme::icon_button(ui, "✕", t!("site.monitor_remove", n = i + 1)).clicked() {
+                    remove = Some(i);
+                }
+                ui.end_row();
+            }
+        });
+        if let Some(i) = remove {
+            s.monitors.remove(i);
+        }
+        if ui.add_enabled(s.notify_new, egui::Button::new(t!("site.monitor_add"))).clicked() {
+            s.monitors.push(urftp_core::site::SiteMonitor::default());
+        }
+    });
+
     section(ui, &t!("site.notes"), |ui| {
         let r = ui.add(egui::TextEdit::multiline(&mut s.notes).desired_rows(3).desired_width(f32::INFINITY));
         theme::name(&r, t!("site.notes"));
+    });
+
+    section(ui, &t!("site.statistics"), |ui| stats_ui(ui, s.id, stats, reset));
+}
+
+/// Bytes as FTPRush shows them in its statistics (`G byte(s)` and so on, localized).
+fn stat_size(n: u64) -> String {
+    theme::human_size(n)
+}
+
+/// Statistics of the site, of every site and of the session ("Statistics" page).
+fn stats_ui(ui: &mut egui::Ui, id: u64, v: &StatsView, reset: &mut Vec<StatsReset>) {
+    let st = v.sites.get(&id).cloned().unwrap_or_default();
+    ui.label(RichText::new(t!("site.stats_site")).strong());
+    egui::Grid::new("site-stats").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+        let never = t!("site.stats_never");
+        for (label, value) in [
+            (t!("site.stats_last"), if st.last_access.is_empty() { never } else { st.last_access.clone() }),
+            (t!("site.stats_connections"), st.connections.to_string()),
+            (t!("site.stats_sent"), stat_size(st.sent)),
+            (t!("site.stats_received"), stat_size(st.received)),
+            (t!("site.stats_fxp_sent"), stat_size(st.fxp_sent)),
+            (t!("site.stats_fxp_received"), stat_size(st.fxp_received)),
+            (t!("site.stats_total_sent"), stat_size(st.total_sent())),
+            (t!("site.stats_total_received"), stat_size(st.total_received())),
+        ] {
+            ui.label(label);
+            ui.label(value);
+            ui.end_row();
+        }
+    });
+    if ui.button(t!("site.stats_reset_site")).clicked() {
+        reset.push(StatsReset::Site(id));
+    }
+    ui.add_space(8.0);
+    let per_day = |n: u64| stat_size(n / u64::try_from(v.days.max(1)).unwrap_or(1));
+    let lines = |values: [u64; 3], average: bool| -> Vec<String> {
+        let [down, up, fxp] = values;
+        [(t!("site.stats_total_sent"), up), (t!("site.stats_total_received"), down), (t!("site.stats_total_fxp"), fxp)]
+            .into_iter()
+            .map(|(label, n)| {
+                if average {
+                    t!("site.stats_line_average", label = label, size = stat_size(n), average = per_day(n))
+                } else {
+                    t!("site.stats_line", label = label, size = stat_size(n))
+                }
+            })
+            .collect()
+    };
+    ui.label(RichText::new(t!("site.stats_all", since = v.since)).strong());
+    let all = lines(v.total, true);
+    for l in &all {
+        ui.label(l);
+    }
+    ui.horizontal(|ui| {
+        if ui.button(t!("site.stats_copy")).on_hover_text(t!("site.stats_copy_all")).clicked() {
+            ui.ctx().copy_text(all.join("\n"));
+        }
+        if ui.button(t!("site.stats_reset_all")).clicked() {
+            reset.push(StatsReset::All);
+        }
+    });
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("site.stats_session")).strong());
+    let session = lines(v.session, false);
+    for l in &session {
+        ui.label(l);
+    }
+    if ui.button(t!("site.stats_copy_session")).clicked() {
+        ui.ctx().copy_text(session.join("\n"));
+    }
+}
+
+/// Combo "global setting / yes / no".
+fn tri(ui: &mut egui::Ui, id: &str, label: &str, v: &mut Option<bool>) {
+    ui.horizontal(|ui| {
+        let l = ui.label(label);
+        let text = |v: Option<bool>| match v {
+            None => t!("site.use_global"),
+            Some(true) => t!("common.yes"),
+            Some(false) => t!("common.no"),
+        };
+        let combo = egui::ComboBox::from_id_salt(id).selected_text(text(*v)).show_ui(ui, |ui| {
+            for x in [None, Some(true), Some(false)] {
+                ui.selectable_value(v, x, text(x));
+            }
+        });
+        combo.response.labelled_by(l.id);
+    });
+}
+
+/// Case of the names for one direction: global setting, unchanged, lower or upper case.
+fn case_choice(ui: &mut egui::Ui, id: &str, label: &str, v: &mut Option<urftp_core::NameCase>) {
+    use urftp_core::NameCase as C;
+    ui.horizontal(|ui| {
+        let l = ui.label(label);
+        let text = |v: Option<C>| match v {
+            None => t!("site.use_global"),
+            Some(C::Keep) => t!("case.keep"),
+            Some(C::Lower) => t!("case.lower"),
+            Some(C::Upper) => t!("case.upper"),
+        };
+        let combo = egui::ComboBox::from_id_salt(id).selected_text(text(*v)).width(180.0).show_ui(ui, |ui| {
+            for x in [None, Some(C::Keep), Some(C::Lower), Some(C::Upper)] {
+                ui.selectable_value(v, x, text(x));
+            }
+        });
+        combo.response.labelled_by(l.id);
+    });
+}
+
+/// Buffer size of the site, or the global one.
+fn buffer_choice(ui: &mut egui::Ui, label: &str, v: &mut Option<u32>, global: u32) {
+    ui.horizontal(|ui| {
+        let mut own = v.is_some();
+        let c = ui.checkbox(&mut own, label);
+        if c.changed() {
+            *v = own.then_some(global);
+        }
+        let mut kib = v.unwrap_or(global);
+        let r = ui.add_enabled(own, egui::DragValue::new(&mut kib).range(0..=65_536).speed(8).suffix(" KiB"));
+        theme::name(&r, label);
+        if own {
+            *v = Some(kib);
+        }
     });
 }
 
@@ -960,6 +1160,17 @@ fn account_ui(ui: &mut egui::Ui, value: &mut Option<Account>, label: String, sho
         *value = on.then(Account::default);
     }
     if let Some(a) = value {
+        ui.horizontal(|ui| {
+            ui.add_space(24.0);
+            let r = ui.add(theme::single_line(&mut a.host).hint_text(t!("site.account_host")).desired_width(150.0));
+            theme::name(&r, format!("{label} — {}", t!("site.account_host")));
+            let mut port = if a.port == 0 { 21 } else { a.port };
+            let r = ui.add(egui::DragValue::new(&mut port).range(1..=65535));
+            theme::name(&r, format!("{label} — {}", t!("common.port")));
+            if r.changed() {
+                a.port = port;
+            }
+        });
         ui.horizontal(|ui| {
             ui.add_space(24.0);
             let r = ui.add(theme::single_line(&mut a.user).hint_text(t!("common.user")).desired_width(150.0));
@@ -1003,9 +1214,40 @@ fn own_settings(ui: &mut egui::Ui, s: &mut Site, global: &Settings, show_passwor
                 }
             });
         }
-        ui.checkbox(&mut o.resume, t!("site.resume"));
+        ui.horizontal(|ui| {
+            use urftp_core::site::ResumeMode as M;
+            ui.label(t!("site.resume"));
+            ui.radio_value(&mut o.resume, M::Auto, t!("site.resume_auto"));
+            ui.radio_value(&mut o.resume, M::Always, t!("common.yes"));
+            ui.radio_value(&mut o.resume, M::Never, t!("common.no"));
+        });
         if is_ftp {
             ui.checkbox(&mut o.send_feat, t!("site.send_feat"));
+            if o.send_feat
+                && let Some(f) = own(ui, &mut o.features, &urftp_core::site::FeatureSwitches::default(), t!("site.own_features"))
+            {
+                ui.indent("site-feat", |ui| {
+                    egui::Grid::new("site-feat-grid").num_columns(4).spacing([16.0, 4.0]).show(ui, |ui| {
+                        for (i, (v, label)) in [
+                            (&mut f.pret, t!("site.feat_pret")),
+                            (&mut f.utf8, t!("site.feat_utf8")),
+                            (&mut f.mode_z, t!("site.feat_mode_z")),
+                            (&mut f.xcrc, "XCRC".to_string()),
+                            (&mut f.mlsd, "MLSD".to_string()),
+                            (&mut f.sscn, "SSCN".to_string()),
+                            (&mut f.cpsv, "CPSV".to_string()),
+                        ]
+                        .into_iter()
+                        .enumerate()
+                        {
+                            ui.checkbox(v, label);
+                            if i % 4 == 3 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+                });
+            }
             ui.horizontal(|ui| {
                 theme::labelled(
                     ui,
@@ -1033,6 +1275,22 @@ fn own_settings(ui: &mut egui::Ui, s: &mut Site, global: &Settings, show_passwor
         }
     });
 
+    if is_ftp {
+        section(ui, &t!("site.own_transfer"), |ui| {
+            let t = &global.transfer;
+            ui.label(RichText::new(t!("site.case_section")).strong());
+            case_choice(ui, "site-case-up", &t!("options.adv_upload_case"), &mut o.upload_case);
+            case_choice(ui, "site-case-down", &t!("options.adv_download_case"), &mut o.download_case);
+            case_choice(ui, "site-case-fxp", &t!("options.adv_fxp_case"), &mut o.fxp_case);
+            ui.add_space(4.0);
+            tri(ui, "site-xdupe", &t!("options.adv_xdupe"), &mut o.xdupe);
+            tri(ui, "site-xdupe-refresh", &t!("options.adv_xdupe_refresh"), &mut o.xdupe_refresh);
+            tri(ui, "site-noop", &t!("site.noop_during_transfer"), &mut o.noop_during_transfer);
+            buffer_choice(ui, &t!("site.send_buffer"), &mut o.send_buffer_kib, t.tcp_buffer_kib);
+            buffer_choice(ui, &t!("site.receive_buffer"), &mut o.receive_buffer_kib, t.tcp_buffer_kib);
+        });
+    }
+
     section(ui, &t!("site.own_queue"), |ui| {
         if let Some(k) = own(ui, &mut o.skiplist, &global.skiplist, t!("site.own_skiplist")) {
             ui.indent("site-own-skip", |ui| crate::options::skiplist_ui(ui, k));
@@ -1050,6 +1308,14 @@ fn own_settings(ui: &mut egui::Ui, s: &mut Site, global: &Settings, show_passwor
         account_ui(ui, &mut o.upload_account, t!("site.upload_account"), *show_password);
         account_ui(ui, &mut o.download_account, t!("site.download_account"), *show_password);
     });
+}
+
+/// Offset of the local time from UTC, in minutes (rounded to a quarter of an hour).
+fn local_utc_offset_mins() -> i32 {
+    let (y, mo, d, h, mi, s) = urftp_sys::win::local_time();
+    let local = urftp_core::browsing::parse_datetime(&format!("{y:04}-{mo:02}-{d:02} {h:02}:{mi:02}:{s:02}"));
+    let utc = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    local.map_or(0, |l| (((l - utc) as f64 / 900.0).round() * 15.0) as i32)
 }
 
 /// Listing settings of a site (FTP): command, spaces, time zone, character set.
@@ -1082,6 +1348,27 @@ pub(crate) fn listing_ui(ui: &mut egui::Ui, l: &mut SiteListing) {
                     theme::name(&r, t!("site.list_custom"));
                 }
             });
+        });
+        row(ui, &t!("site.time_zone"), |ui, lid| {
+            // The server's zone gives the offset with the local one.
+            let local = local_utc_offset_mins();
+            let label = |zone: Option<i32>| match zone {
+                None => t!("site.time_zone_unknown"),
+                Some(m) => format!("UTC{}{:02}:{:02}", if m < 0 { '-' } else { '+' }, m.abs() / 60, m.abs() % 60),
+            };
+            let current = (l.time_offset_mins != 0).then(|| local - l.time_offset_mins);
+            let combo = egui::ComboBox::from_id_salt("site-tz").selected_text(label(current)).width(160.0).show_ui(ui, |ui| {
+                if ui.selectable_label(current.is_none(), label(None)).clicked() {
+                    l.time_offset_mins = 0;
+                }
+                for half in -24..=28 {
+                    let zone = half * 30;
+                    if ui.selectable_label(current == Some(zone), label(Some(zone))).clicked() {
+                        l.time_offset_mins = local - zone;
+                    }
+                }
+            });
+            combo.response.labelled_by(lid);
         });
         row(ui, &t!("site.time_offset"), |ui, lid| {
             let mut hours = f64::from(l.time_offset_mins) / 60.0;

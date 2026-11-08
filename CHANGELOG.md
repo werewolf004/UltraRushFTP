@@ -9,6 +9,30 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Site properties as complete as those of FTPRush v2.
+
+### Added
+
+- **Site record**: forced UTF-8, login sent in UTF-8, server behind NAT (data connections
+  to the address of the server), `PBSZ 0` that can be switched off, encrypted FXP
+  automatic / never / always, server time zone, resume Automatic / Yes / No, the
+  capabilities used when announced (`PRET`, UTF-8, `MODE Z`, `XCRC`, `MLSD`, `SSCN`,
+  `CPSV`), transfers of the site (name case for uploads, downloads and FXP, XDUPE, NOOP
+  during the transfers, send and receive buffers), an address and port for the separate
+  accounts, the site name in the logs, monitored folders of the site, and the
+  **statistics of the server** (last access, connections, sent, received, FXP from and
+  to it; copy and reset of the totals).
+- **"Existing file" rules per direction** (upload, download, FXP), in the options and per
+  site; the rules of earlier versions apply to the three.
+- Name case in FXP and *List the folder again when XDUPE returns nothing* (Advanced
+  transfer).
+- Skip list **Export… / Import…** (JSON, or one mask per line).
+
+### Changed
+
+- A tab connected to a site of the site manager is named after the site instead of its
+  address.
+
 ## [0.7.0] - 2026-11-08
 
 Scripting (block K).

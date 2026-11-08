@@ -160,3 +160,32 @@ async fn noop_keeps_the_control_connection_alive_during_transfers() {
     let noops = srv.received().iter().filter(|l| *l == "NOOP").count();
     assert!(noops >= 2, "NOOP sent during the transfers: {noops}");
 }
+
+#[tokio::test]
+async fn features_switched_off_for_the_site_are_not_used() {
+    let srv = MockServer::start(MockConfig { pret: true, mode_z: true, ..MockConfig::default() }).await;
+    srv.fs.lock().unwrap().files.insert("/f.bin".into(), vec![1; 10]);
+    let off = ["PRET", "MLST", "UTF8", "MODE Z"].map(String::from).to_vec();
+    let mut c = connect(&srv, FtpConfig { disabled_features: off, ..FtpConfig::default() }).await;
+    assert!(!c.features().has("PRET") && !c.features().has("MLST") && !c.allows("MODE Z") && c.allows("XCRC"));
+    assert_eq!(names(&c.list(None).await.unwrap()), ["f.bin"]);
+    let received = srv.received();
+    assert!(!received.iter().any(|l| l.starts_with("PRET") || l.starts_with("MLSD") || l.starts_with("OPTS UTF8")), "{received:?}");
+    assert!(received.iter().any(|l| l == "LIST"), "{received:?}");
+}
+
+#[tokio::test]
+async fn utf8_login_reaches_a_latin1_server_in_utf8() {
+    // A Latin-1 server: the login written in UTF-8 reaches it as two Latin-1 characters.
+    let srv = MockServer::start(MockConfig { latin1: true, ..plain() }).await;
+    let latin1 = encoding_rs::Encoding::for_label(b"ISO-8859-1");
+    for utf8 in [false, true] {
+        let mut c =
+            FtpClient::connect("127.0.0.1", srv.addr.port(), FtpConfig { charset: latin1, utf8_login: utf8, ..FtpConfig::default() })
+                .await
+                .unwrap();
+        let _ = c.login("tést", "secret").await;
+    }
+    let users: Vec<String> = srv.received().into_iter().filter(|l| l.starts_with("USER")).collect();
+    assert_eq!(users, ["USER tést", "USER tÃ©st"]);
+}

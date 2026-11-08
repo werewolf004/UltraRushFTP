@@ -678,7 +678,7 @@ fn connection_bar_connects_the_panel_and_switches_to_local_and_back() {
     let tab = &ui.app().tabs[0];
     assert!(matches!(tab.sides[0], Side::Local(_)));
     assert!(matches!(&tab.parked[0], Some(Side::Remote(r)) if r.site_id == Some(id)));
-    assert_eq!(tab.title(1), "127.0.0.1", "the tab keeps the name of its connection");
+    assert_eq!(tab.title(1), "Bar site", "the tab keeps the name of the site of its connection");
 
     // And back to the connection.
     ui.harness.get_by_label(&t!("conn.to_remote", site = "Bar site")).click();

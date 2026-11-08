@@ -64,8 +64,21 @@ pub struct FtpConfig {
     pub noop_during_transfer: Option<Duration>,
     /// Sends `SITE XDUPE 3` after login: the server lists the dupes when it refuses an upload.
     pub xdupe: bool,
-    /// Send and receive buffer of the data connections, in bytes (`None`: the system's).
-    pub tcp_buffer: Option<usize>,
+    /// Send and receive buffers of the data connections, in bytes (`None`: the system's).
+    pub send_buffer: Option<usize>,
+    pub receive_buffer: Option<usize>,
+    /// Capabilities not used even when announced (`PRET`, `UTF8`, `MODE Z`, `XCRC`,
+    /// `MLST`, `SSCN`, `CPSV`).
+    pub disabled_features: Vec<String>,
+    /// `USER` and `PASS` are sent in UTF-8 whatever the character set of the site.
+    pub utf8_login: bool,
+    /// `OPTS UTF8 ON` is sent even when the server does not announce `UTF8`.
+    pub force_utf8: bool,
+    /// The data connections always go to the address of the control connection (server
+    /// behind NAT), whatever `PASV` answers.
+    pub pasv_use_server_ip: bool,
+    /// `PBSZ 0` after the TLS login.
+    pub send_pbsz: bool,
 }
 
 impl Default for FtpConfig {
@@ -93,7 +106,13 @@ impl Default for FtpConfig {
             list_format: listing::ListFormat::Auto,
             noop_during_transfer: None,
             xdupe: false,
-            tcp_buffer: None,
+            send_buffer: None,
+            receive_buffer: None,
+            disabled_features: Vec::new(),
+            utf8_login: false,
+            force_utf8: false,
+            pasv_use_server_ip: false,
+            send_pbsz: true,
         }
     }
 }
@@ -427,14 +446,19 @@ impl FtpClient {
     }
 
     pub(super) async fn send(&mut self, cmd: &str) -> Result<()> {
+        self.send_with(cmd, self.encoding()).await
+    }
+
+    /// Sends a command written in `encoding` (UTF-8 logins of a site using another set).
+    async fn send_with(&mut self, cmd: &str, encoding: &'static encoding_rs::Encoding) -> Result<()> {
         if cmd.contains(['\r', '\n']) {
             return Err(FtpError::InvalidArgument("line break not allowed in an FTP command".into()));
         }
-        let (bytes, _, unmappable) = self.encoding().encode(cmd);
+        let (bytes, _, unmappable) = encoding.encode(cmd);
         if unmappable {
             return Err(FtpError::InvalidArgument(format!(
                 "the command contains characters the {} character set cannot write",
-                self.encoding().name()
+                encoding.name()
             )));
         }
         self.emit(LogLine::Command(mask(cmd)));
@@ -451,6 +475,19 @@ impl FtpClient {
     pub async fn raw(&mut self, cmd: &str) -> Result<Reply> {
         self.send(cmd).await?;
         self.read_reply().await
+    }
+
+    /// `USER` / `PASS`: in UTF-8 when the site asks for it.
+    async fn login_command(&mut self, cmd: &str) -> Result<Reply> {
+        let encoding = if self.config.utf8_login { encoding_rs::UTF_8 } else { self.encoding() };
+        self.send_with(cmd, encoding).await?;
+        self.read_reply().await
+    }
+
+    /// May this capability be used (not switched off for the site)? Whether the server
+    /// announces it is checked apart.
+    pub fn allows(&self, feature: &str) -> bool {
+        !self.config.disabled_features.iter().any(|d| d.eq_ignore_ascii_case(feature))
     }
 
     /// Sends a command and requires a 2xx reply.
@@ -476,10 +513,10 @@ impl FtpClient {
 
     /// `USER` / `PASS` authentication, then `FEAT`, `OPTS UTF8 ON` and `PWD`.
     pub async fn login(&mut self, user: &str, pass: &str) -> Result<()> {
-        let r = self.raw(&format!("USER {user}")).await?;
+        let r = self.login_command(&format!("USER {user}")).await?;
         let r = match r.code {
             230 => r,
-            331 => self.raw(&format!("PASS {pass}")).await?,
+            331 => self.login_command(&format!("PASS {pass}")).await?,
             _ => return Err(FtpError::Unexpected { command: format!("USER {user}"), reply: r }),
         };
         if !r.is_completion() {
@@ -487,7 +524,9 @@ impl FtpClient {
         }
         if self.tls.is_some() {
             let protect = self.config.security.options().is_some_and(|o| o.protect_data);
-            self.ok("PBSZ 0").await?;
+            if self.config.send_pbsz {
+                self.ok("PBSZ 0").await?;
+            }
             self.ok(if protect { "PROT P" } else { "PROT C" }).await?;
             self.prot_p = protect;
         }
@@ -499,7 +538,7 @@ impl FtpClient {
             let _ = self.raw(&format!("CLNT {}", name.trim())).await?;
         }
         // A forced character set: the server must not switch to UTF-8.
-        if self.features.has("UTF8") && self.config.charset.is_none_or(|c| c == encoding_rs::UTF_8) {
+        if (self.features.has("UTF8") || self.config.force_utf8) && self.config.charset.is_none_or(|c| c == encoding_rs::UTF_8) {
             // Failure does not matter: some servers are already in UTF-8.
             let _ = self.raw("OPTS UTF8 ON").await?;
         }
@@ -516,6 +555,9 @@ impl FtpClient {
     pub async fn refresh_features(&mut self) -> Result<&Features> {
         let r = self.raw("FEAT").await?;
         self.features = if r.code == 211 { Features::parse(&r) } else { Features::default() };
+        for name in self.config.disabled_features.clone() {
+            self.features.remove(&name);
+        }
         Ok(&self.features)
     }
 
@@ -683,7 +725,7 @@ impl FtpClient {
                     )));
                 }
                 tcp.set_nodelay(true)?;
-                crate::net::set_buffers(&tcp, self.config.tcp_buffer)?;
+                crate::net::set_buffers(&tcp, self.config.send_buffer, self.config.receive_buffer)?;
                 Box::new(tcp)
             }
         };
@@ -747,7 +789,7 @@ impl FtpClient {
                 let r = self.expect("PASV", |r| r.code == 227).await?;
                 let (ip, port) = parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("unreadable PASV reply: {r}")))?;
                 let ip = IpAddr::V4(ip);
-                if self.config.pasv_fix_private_ip && needs_fix(ip, self.server_ip) {
+                if self.config.pasv_use_server_ip || (self.config.pasv_fix_private_ip && needs_fix(ip, self.server_ip)) {
                     let t = self.server_target(port);
                     self.status(format!("PASV returns {ip}: using {}", t.host(&self.host)));
                     t
@@ -758,7 +800,7 @@ impl FtpClient {
         };
         let tcp = self.connect_data(target).await?;
         tcp.set_nodelay(true)?;
-        crate::net::set_buffers(&tcp, self.config.tcp_buffer)?;
+        crate::net::set_buffers(&tcp, self.config.send_buffer, self.config.receive_buffer)?;
         Ok(Box::new(tcp))
     }
 
@@ -897,7 +939,7 @@ impl FtpClient {
     async fn set_mode(&mut self, compress: bool) -> Result<bool> {
         // `FEAT` lists it as ` MODE Z`: the feature `MODE` with the parameter `Z`.
         let announced = self.features.param("MODE").is_some_and(|p| p.split_whitespace().any(|m| m.eq_ignore_ascii_case("Z")));
-        let z = compress && announced;
+        let z = compress && announced && self.allows("MODE Z");
         if z != self.mode_z {
             self.expect(if z { "MODE Z" } else { "MODE S" }, |r| r.code == 200).await?;
             self.mode_z = z;
@@ -1081,6 +1123,9 @@ impl FtpClient {
     /// CRC32 of a remote file computed by the server (`XCRC`); `None` when the server does
     /// not know the command.
     pub async fn xcrc(&mut self, remote: &str) -> Result<Option<u32>> {
+        if !self.allows("XCRC") {
+            return Ok(None);
+        }
         let name = self.enter_parent(remote).await?;
         let r = self.raw(&format!("XCRC {name}")).await?;
         if !r.is_completion() {

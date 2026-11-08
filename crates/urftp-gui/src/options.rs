@@ -4,7 +4,7 @@ use std::time::Duration;
 use urftp_i18n::{Lang, t};
 
 use eframe::egui::{self, RichText};
-use urftp_core::exists::{ExistsAction, ExistsRules};
+use urftp_core::exists::{ExistsAction, ExistsRules, ExistsSet};
 use urftp_core::settings::{
     GlobalProxy, KeepAliveSettings, LanguageSetting, MaskSetting, QueueAtStart, QueueEnd, Settings, SkipRuleSetting, SkipSettings,
 };
@@ -438,28 +438,73 @@ fn mask_field(ui: &mut egui::Ui, m: &mut MaskSetting, width: f32, name: &str) {
 }
 
 /// "Existing file" rules (options page, and site record when the site has its own).
-pub(crate) fn exists_ui(ui: &mut egui::Ui, e: &mut ExistsRules) {
-    egui::Grid::new("opt-exists").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-        for (label, action) in [
-            (t!("options.exists_smaller"), &mut e.smaller),
-            (t!("options.exists_same"), &mut e.same),
-            (t!("options.exists_larger"), &mut e.larger),
-        ] {
-            let l = ui.label(&label);
-            exists_combo(ui, &label, action).labelled_by(l.id);
-            ui.end_row();
+/// "Existing file" rules for the uploads, the downloads and FXP (options page, and site
+/// record when the site has its own).
+pub(crate) fn exists_ui(ui: &mut egui::Ui, e: &mut ExistsSet) {
+    use urftp_core::TransferKind as K;
+    for (i, (kind, title)) in
+        [(K::Upload, t!("options.exists_upload")), (K::Download, t!("options.exists_download")), (K::Fxp, t!("options.exists_fxp"))]
+            .into_iter()
+            .enumerate()
+    {
+        ui.label(RichText::new(&title).strong());
+        let r = e.get_mut(kind);
+        egui::Grid::new(("opt-exists", i)).num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+            for (label, action) in [
+                (t!("options.exists_smaller"), &mut r.smaller),
+                (t!("options.exists_same"), &mut r.same),
+                (t!("options.exists_larger"), &mut r.larger),
+            ] {
+                let l = ui.label(&label);
+                exists_combo(ui, &format!("{title} — {label}"), action).labelled_by(l.id);
+                ui.end_row();
+            }
+        });
+        ui.add_space(6.0);
+    }
+    let mut restart = e.upload.overwrite_if_resume_fails;
+    if ui.checkbox(&mut restart, t!("options.exists_restart")).changed() {
+        for k in [K::Upload, K::Download, K::Fxp] {
+            e.get_mut(k).overwrite_if_resume_fails = restart;
         }
-    });
-    ui.add_space(6.0);
-    ui.checkbox(&mut e.overwrite_if_resume_fails, t!("options.exists_restart"));
+    }
     if ui.button(t!("common.defaults")).clicked() {
-        *e = ExistsRules::default();
+        *e = ExistsSet::all(ExistsRules::default());
     }
 }
 
 /// Skip list (options page, and site record when the site has its own).
 pub(crate) fn skiplist_ui(ui: &mut egui::Ui, k: &mut SkipSettings) {
     ui.checkbox(&mut k.enabled, t!("options.skip_enable"));
+    ui.horizontal(|ui| {
+        let note = ui.id().with("skip-file-note");
+        if ui.button(t!("options.skip_export")).clicked()
+            && let Some(p) = rfd::FileDialog::new().set_file_name("skiplist.json").add_filter("JSON", &["json"]).save_file()
+        {
+            let msg = match std::fs::write(&p, urftp_core::settings::skip_rules_to_text(&k.rules)) {
+                Ok(()) => t!("options.skip_exported", n = k.rules.len(), path = p.display()),
+                Err(e) => t!("options.skip_file_failed", error = e),
+            };
+            ui.data_mut(|d| d.insert_temp(note, msg));
+        }
+        if ui.button(t!("options.skip_import")).clicked()
+            && let Some(p) = rfd::FileDialog::new().add_filter("JSON / texte", &["json", "txt"]).pick_file()
+        {
+            let msg = match std::fs::read_to_string(&p) {
+                Ok(text) => {
+                    let rules = urftp_core::settings::skip_rules_from_text(&text);
+                    let n = rules.len();
+                    k.rules.extend(rules);
+                    t!("options.skip_imported", n = n)
+                }
+                Err(e) => t!("options.skip_file_failed", error = e),
+            };
+            ui.data_mut(|d| d.insert_temp(note, msg));
+        }
+        if let Some(msg) = ui.data(|d| d.get_temp::<String>(note)) {
+            ui.label(RichText::new(msg).weak());
+        }
+    });
     ui.checkbox(&mut k.skip_zero_byte_files, t!("options.skip_zero"));
     ui.checkbox(&mut k.skip_empty_dirs, t!("options.skip_empty_dirs"));
     ui.add_space(6.0);
@@ -1154,9 +1199,11 @@ fn advanced_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings
         combo.response.labelled_by(l.id);
         ui.end_row();
         theme::grid_row(ui, t!("options.adv_ascii_masks"), theme::single_line(&mut t.ascii_masks).desired_width(360.0));
-        for (label, value, salt) in
-            [(t!("options.adv_upload_case"), &mut t.upload_case, "up"), (t!("options.adv_download_case"), &mut t.download_case, "down")]
-        {
+        for (label, value, salt) in [
+            (t!("options.adv_upload_case"), &mut t.upload_case, "up"),
+            (t!("options.adv_download_case"), &mut t.download_case, "down"),
+            (t!("options.adv_fxp_case"), &mut t.fxp_case, "fxp"),
+        ] {
             let l = ui.label(label);
             let combo =
                 egui::ComboBox::from_id_salt(("opt-adv-case", salt)).selected_text(case_label(*value)).width(180.0).show_ui(ui, |ui| {
@@ -1174,6 +1221,7 @@ fn advanced_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings
     ui.label(RichText::new(t!("options.adv_data_section")).strong());
     ui.checkbox(&mut t.force_active, t!("options.adv_force_active"));
     ui.checkbox(&mut t.xdupe, t!("options.adv_xdupe"));
+    ui.add_enabled(t.xdupe, egui::Checkbox::new(&mut t.xdupe_refresh, t!("options.adv_xdupe_refresh")));
     ui.checkbox(&mut t.mode_z, t!("options.adv_mode_z"));
     egui::Grid::new("opt-adv-data").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
         let l = ui.label(t!("options.adv_mode_z_except"));
