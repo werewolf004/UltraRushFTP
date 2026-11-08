@@ -38,6 +38,7 @@ mod favorites;
 mod fileops;
 pub(crate) mod input;
 mod logs;
+mod look;
 mod notify;
 mod raw;
 mod rushapp;
@@ -51,7 +52,7 @@ mod ui_tests;
 
 // ====================================================================== model
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 enum Pane {
     Left,
     Right,
@@ -130,9 +131,10 @@ impl Default for Sort {
 }
 
 impl Sort {
-    /// Click on a column: same column = reverse order, other column = ascending.
+    /// Click on a column: same column = reverse order, other column = ascending (or
+    /// descending for the size and the date with "largest / newest first").
     fn toggle(self, col: SortCol) -> Self {
-        if self.col == col { Self { col, asc: !self.asc } } else { Self { col, asc: true } }
+        if self.col == col { Self { col, asc: !self.asc } } else { Self { col, asc: !(look::desc_first() && col != SortCol::Name) } }
     }
 }
 
@@ -144,8 +146,10 @@ fn time_key(t: FtpTime) -> i64 {
 }
 
 fn sort_rows(rows: &mut [FileRow], s: Sort) {
+    let dirs_first = look::dirs_first();
     rows.sort_by(|a, b| {
-        b.is_dir.cmp(&a.is_dir).then_with(|| {
+        let dirs = if dirs_first { b.is_dir.cmp(&a.is_dir) } else { std::cmp::Ordering::Equal };
+        dirs.then_with(|| {
             let o = match s.col {
                 SortCol::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
                 SortCol::Size => a.size.cmp(&b.size),
@@ -1290,6 +1294,12 @@ pub struct UltraRushApp {
     /// The next queue removals were confirmed.
     queue_remove_confirmed: bool,
     notifier: notify::Notifier,
+    /// Saved layouts of the panels.
+    layouts: Vec<look::SavedLayout>,
+    /// Name being typed for a layout to save.
+    layout_name: Option<String>,
+    /// The zoom of the options was applied (first frame).
+    zoom_applied: bool,
 }
 
 /// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
@@ -1399,6 +1409,7 @@ impl UltraRushApp {
         options::apply_language(options.settings.language);
         set_download_dir(&options.settings.download_dir);
         logs::configure(&options.settings.interface);
+        look::configure(&options.settings.interface);
         let dl = options.settings.transfer.download_limit_kib * 1024;
         let ul = options.settings.transfer.upload_limit_kib * 1024;
         let mut app = Self {
@@ -1449,6 +1460,9 @@ impl UltraRushApp {
             exit_confirmed: false,
             queue_remove_confirmed: false,
             notifier: notify::Notifier::default(),
+            layouts: look::load_layouts(),
+            layout_name: None,
+            zoom_applied: false,
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -1608,6 +1622,8 @@ impl UltraRushApp {
         let s = &self.options.settings;
         set_download_dir(&s.download_dir);
         logs::configure(&s.interface);
+        look::configure(&s.interface);
+        ctx.set_zoom_factor(s.interface.zoom_percent.clamp(50, 300) as f32 / 100.0);
         let before = urftp_i18n::language();
         options::apply_language(s.language);
         if urftp_i18n::language() != before {
@@ -1658,7 +1674,11 @@ impl UltraRushApp {
     }
 
     fn new_tab(&mut self) {
-        self.tabs.push(Container::new(self.next_id));
+        let mut tab = Container::new(self.next_id);
+        if let Some(dock) = self.new_tab_layout() {
+            tab.dock = dock;
+        }
+        self.tabs.push(tab);
         self.next_id += 1;
         self.active = self.tabs.len() - 1;
     }
@@ -2315,6 +2335,8 @@ impl UltraRushApp {
                 raw::commands_menu(ui, &commands, &mut actions);
             });
             ui.menu_button(t!("menu.view"), |ui| {
+                self.layouts_menu(ui);
+                ui.separator();
                 if ui.button(if self.dark { t!("menu.light_theme") } else { t!("menu.dark_theme") }).clicked() {
                     self.dark = !self.dark;
                     theme::apply(ui.ctx(), self.dark);
@@ -3077,6 +3099,9 @@ impl eframe::App for UltraRushApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if !std::mem::replace(&mut self.zoom_applied, true) {
+            ctx.set_zoom_factor(self.options.settings.interface.zoom_percent.clamp(50, 300) as f32 / 100.0);
+        }
         self.check_exit(&ctx);
         self.notify_ui(&ctx);
         // Starts Ident on the first frame, then whenever its settings change.
@@ -3108,7 +3133,11 @@ impl eframe::App for UltraRushApp {
         let mut menu_actions = Vec::new();
         egui::Panel::top("top").show(ui, |ui| menu_actions = self.top_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
-        egui::Panel::top("tabs").show(ui, |ui| self.tab_strip(ui));
+        if self.options.settings.interface.tabs_bottom {
+            egui::Panel::bottom("tabs").show(ui, |ui| self.tab_strip(ui));
+        } else {
+            egui::Panel::top("tabs").show(ui, |ui| self.tab_strip(ui));
+        }
 
         let mut actions = self.keyboard(&ctx);
         actions.append(&mut menu_actions);
@@ -3123,6 +3152,9 @@ impl eframe::App for UltraRushApp {
             let ui_opts = &self.options.settings.interface;
             let log_view = (ui_opts.log_site_names, ui_opts.log_times);
             let double_click = ui_opts.double_click_file;
+            let dark = self.dark;
+            let highlights = look::highlights(ui_opts, dark);
+            let log_look = (look::log_colors(ui_opts, dark), ui_opts.log_text_size);
             let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, tools, .. } = tab;
             let mut viewer = PaneViewer {
                 sides,
@@ -3144,6 +3176,8 @@ impl eframe::App for UltraRushApp {
                 bookmarks: &bookmarks,
                 log_view,
                 double_click,
+                highlights: &highlights,
+                log_look,
             };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
@@ -3159,6 +3193,7 @@ impl eframe::App for UltraRushApp {
         self.tools_ui(&ctx);
         self.raw_dialog_window(&ctx);
         self.confirm_dialog(&ctx);
+        self.layout_dialog(&ctx);
         self.manual_window(&ctx);
         self.watch_clipboard(&ctx);
         self.saved_queue_dialog(&ctx);
@@ -3213,6 +3248,10 @@ struct PaneViewer<'a> {
     log_view: (bool, bool),
     /// Double-click on a file.
     double_click: urftp_core::settings::FileDoubleClick,
+    /// Colours of the names matching masks.
+    highlights: &'a [(String, egui::Color32)],
+    /// Colours (command, reply, status, error) and text size of the logs.
+    log_look: (Option<[egui::Color32; 4]>, u32),
 }
 
 /// A site of the site manager, for the connection menus.
@@ -3453,7 +3492,10 @@ impl PaneViewer<'_> {
                         let marked = marks.contains(&f.name);
                         row.col(|ui| {
                             let icon = if f.is_dir { "📁" } else { "📄" };
-                            let text = RichText::new(format!("{icon} {}", f.name));
+                            let mut text = RichText::new(format!("{icon} {}", f.name));
+                            if let Some((_, c)) = self.highlights.iter().find(|(m, _)| urftp_core::browsing::mask_matches(m, &f.name)) {
+                                text = text.color(*c);
+                            }
                             // Marked: bold and underlined, not told by colour alone.
                             ui.label(if marked { text.strong().underline() } else { text });
                         });
@@ -3837,15 +3879,21 @@ impl PaneViewer<'_> {
     fn log_pane(&mut self, ui: &mut egui::Ui, channel: LogChannel) {
         let p = theme::colors(ui);
         let (names, times) = self.log_view;
+        let (custom, size) = self.log_look;
         egui::ScrollArea::vertical().id_salt(("log", channel as u8)).auto_shrink(false).stick_to_bottom(true).show(ui, |ui| {
             for e in self.log.iter().filter(|e| e.channel == channel) {
-                let color = match e.kind {
-                    LogKind::Command => p.command,
-                    LogKind::Reply => p.success,
-                    LogKind::Status => p.status,
-                    LogKind::Error => p.error,
+                let k = match e.kind {
+                    LogKind::Command => 0,
+                    LogKind::Reply => 1,
+                    LogKind::Status => 2,
+                    LogKind::Error => 3,
                 };
-                ui.label(RichText::new(logs::line_text(e, names, times)).monospace().color(color));
+                let color = custom.map_or([p.command, p.success, p.status, p.error][k], |c| c[k]);
+                let mut text = RichText::new(logs::line_text(e, names, times)).monospace().color(color);
+                if size > 0 {
+                    text = text.size(size as f32);
+                }
+                ui.label(text);
             }
         });
     }

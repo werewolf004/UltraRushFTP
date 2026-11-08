@@ -654,6 +654,40 @@ pub struct InterfaceSettings {
     pub confirm_close_tab: bool,
     /// Ask before removing items from the queue.
     pub confirm_queue_remove: bool,
+    /// Size of the whole interface, in percent.
+    pub zoom_percent: u32,
+    /// Text size of the logs (0: the size of the theme).
+    pub log_text_size: u32,
+    /// Names shown in colour when they match masks.
+    pub highlights: Vec<Highlight>,
+    /// The colours of the log lines below replace the ones of the theme.
+    pub custom_log_colors: bool,
+    /// Command, reply, status and error colours (`#RRGGBB`) of each theme.
+    pub log_colors_dark: Vec<String>,
+    pub log_colors_light: Vec<String>,
+    /// Folders are listed before the files.
+    pub dirs_first: bool,
+    /// A first click on the size or date column sorts the largest / newest first.
+    pub sort_desc_first: bool,
+    /// Tabs below the panels instead of above.
+    pub tabs_bottom: bool,
+    /// Saved layout given to new tabs (empty: the default layout).
+    pub default_layout: String,
+}
+
+/// Colour of the names matching masks, for each theme (`#RRGGBB`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Highlight {
+    pub masks: String,
+    pub dark: String,
+    pub light: String,
+}
+
+impl Default for Highlight {
+    fn default() -> Self {
+        Self { masks: "*.nfo;*.sfv".into(), dark: "#E8B33C".into(), light: "#7A5200".into() }
+    }
 }
 
 /// What a double-click on a file does.
@@ -684,6 +718,16 @@ impl Default for InterfaceSettings {
             confirm_exit: true,
             confirm_close_tab: true,
             confirm_queue_remove: false,
+            zoom_percent: 100,
+            log_text_size: 0,
+            highlights: Vec::new(),
+            custom_log_colors: false,
+            log_colors_dark: vec!["#6FA8FF".into(), "#4CC37A".into(), "#9AA3B2".into(), "#F58A8A".into()],
+            log_colors_light: vec!["#1D4FA8".into(), "#1B6434".into(), "#4A5260".into(), "#A32020".into()],
+            dirs_first: true,
+            sort_desc_first: false,
+            tabs_bottom: false,
+            default_layout: String::new(),
         }
     }
 }

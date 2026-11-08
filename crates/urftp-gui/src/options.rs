@@ -694,6 +694,8 @@ pub(crate) fn interface_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::Inte
     ui.checkbox(&mut s.watch_clipboard, t!("options.ui_watch_clipboard"));
     ui.add_enabled(s.watch_clipboard, egui::Checkbox::new(&mut s.clipboard_auto, t!("options.ui_clipboard_auto")));
     ui.add_space(8.0);
+    display_ui(ui, s);
+    ui.add_space(8.0);
     ui.label(RichText::new(t!("options.ui_mouse_section")).strong());
     ui.horizontal(|ui| {
         use urftp_core::settings::FileDoubleClick as D;
@@ -798,6 +800,89 @@ fn notifications_ui(ui: &mut egui::Ui, n: &mut urftp_core::settings::NotifySetti
         n.monitors.push(FolderMonitor::default());
     }
     ui.label(RichText::new(t!("options.nt_monitor_note")).weak());
+}
+
+/// A colour field `#RRGGBB` with a sample and its contrast against the list backgrounds of
+/// the theme (WCAG AA asks for 4.5:1).
+fn color_field(ui: &mut egui::Ui, value: &mut String, dark: bool, name: &str) {
+    let r = ui.add(theme::single_line(value).desired_width(80.0).font(egui::TextStyle::Monospace));
+    theme::name(&r, name.to_string());
+    match theme::parse_color(value) {
+        Some(c) => {
+            let ratio = theme::list_contrast(c, dark);
+            let ok = ratio >= 4.5;
+            let mark = if ok { "✔" } else { "⚠" };
+            let p = theme::colors(ui);
+            ui.label(RichText::new("■■").color(c));
+            ui.label(RichText::new(format!("{mark} {ratio:.1}:1")).color(if ok { p.success } else { p.warning }))
+                .on_hover_text(t!("options.look_contrast_hint"));
+        }
+        None => {
+            ui.colored_label(theme::colors(ui).error, t!("options.look_bad_color"));
+            ui.label("");
+        }
+    }
+}
+
+/// Size, sort, tabs, highlights and log colours.
+fn display_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettings) {
+    ui.label(RichText::new(t!("options.look_section")).strong());
+    egui::Grid::new("opt-look").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        theme::grid_row(ui, t!("options.look_zoom"), egui::DragValue::new(&mut s.zoom_percent).range(50..=300).suffix(" %"));
+        theme::grid_row(ui, t!("options.look_log_size"), egui::DragValue::new(&mut s.log_text_size).range(0..=40));
+        theme::grid_row(ui, t!("options.look_default_layout"), theme::single_line(&mut s.default_layout).desired_width(160.0));
+    });
+    ui.checkbox(&mut s.tabs_bottom, t!("options.look_tabs_bottom"));
+    ui.checkbox(&mut s.dirs_first, t!("options.look_dirs_first"));
+    ui.checkbox(&mut s.sort_desc_first, t!("options.look_desc_first"));
+    ui.add_space(6.0);
+    ui.label(RichText::new(t!("options.look_highlights")).strong());
+    let mut remove = None;
+    egui::Grid::new("opt-highlights").num_columns(8).spacing([8.0, 6.0]).show(ui, |ui| {
+        ui.label(RichText::new(t!("options.browse_masks")).weak());
+        ui.label(RichText::new(t!("options.look_dark")).weak());
+        ui.label("");
+        ui.label("");
+        ui.label(RichText::new(t!("options.look_light")).weak());
+        ui.end_row();
+        for (i, h) in s.highlights.iter_mut().enumerate() {
+            let r = ui.add(theme::single_line(&mut h.masks).desired_width(140.0));
+            theme::name(&r, format!("{} {}", t!("options.browse_masks"), i + 1));
+            color_field(ui, &mut h.dark, true, &format!("{} {}", t!("options.look_dark"), i + 1));
+            color_field(ui, &mut h.light, false, &format!("{} {}", t!("options.look_light"), i + 1));
+            if theme::icon_button(ui, "✕", t!("common.remove")).clicked() {
+                remove = Some(i);
+            }
+            ui.end_row();
+        }
+    });
+    if let Some(i) = remove {
+        s.highlights.remove(i);
+    }
+    if ui.button(t!("options.browse_add")).clicked() {
+        s.highlights.push(urftp_core::settings::Highlight::default());
+    }
+    ui.add_space(6.0);
+    ui.checkbox(&mut s.custom_log_colors, t!("options.look_log_colors"));
+    if s.custom_log_colors {
+        s.log_colors_dark.resize(4, String::new());
+        s.log_colors_light.resize(4, String::new());
+        egui::Grid::new("opt-log-colors").num_columns(7).spacing([8.0, 6.0]).show(ui, |ui| {
+            ui.label("");
+            ui.label(RichText::new(t!("options.look_dark")).weak());
+            ui.label("");
+            ui.label("");
+            ui.label(RichText::new(t!("options.look_light")).weak());
+            ui.end_row();
+            for (i, k) in ["options.look_command", "options.look_reply", "options.look_status", "options.look_error"].iter().enumerate() {
+                let label = urftp_i18n::text(k).to_string();
+                ui.label(&label);
+                color_field(ui, &mut s.log_colors_dark[i], true, &format!("{label} ({})", t!("options.look_dark")));
+                color_field(ui, &mut s.log_colors_light[i], false, &format!("{label} ({})", t!("options.look_light")));
+                ui.end_row();
+            }
+        });
+    }
 }
 
 /// Shortcut manager: the keys of each command, the conflicts.

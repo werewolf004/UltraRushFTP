@@ -1281,3 +1281,32 @@ fn events_show_a_pop_up_and_go_to_the_system_log() {
     let log: Vec<String> = ui.app().tabs[0].log.iter().filter(|e| e.channel == super::LogChannel::System).map(|e| e.text.clone()).collect();
     assert!(log.iter().any(|l| l.ends_with("3 item(s) done")) && log.iter().any(|l| l.ends_with("Demo")), "{log:?}");
 }
+
+#[test]
+fn layouts_are_saved_and_given_to_new_tabs_and_sort_options_apply() {
+    let mut ui = Ui::start(Lang::En, true);
+    // A layout with the queue alone at the bottom.
+    let mut dock = egui_dock::DockState::new(vec![super::Pane::Left]);
+    let surface = dock.main_surface_mut();
+    let [top, _] = surface.split_below(egui_dock::NodeIndex::root(), 0.7, vec![super::Pane::Queue]);
+    surface.split_right(top, 0.5, vec![super::Pane::Right]);
+    ui.app().tabs[0].dock = dock;
+    ui.app().save_layout("Queue only");
+    assert!(urftp_core::sitestore::data_dir().join("layouts.json").exists());
+    ui.app().options.settings.interface.default_layout = "Queue only".into();
+    ui.app().new_tab();
+    ui.run();
+    let tabs: Vec<super::Pane> = ui.app().tabs.last().unwrap().dock.iter_all_tabs().map(|(_, t)| *t).collect();
+    assert!(!tabs.contains(&super::Pane::Log), "the new tab took the saved layout: {tabs:?}");
+    ui.app().layouts.clear();
+    let _ = std::fs::remove_file(urftp_core::sitestore::data_dir().join("layouts.json"));
+
+    // Largest first on the first click of the size column.
+    let s = urftp_core::settings::InterfaceSettings { sort_desc_first: true, dirs_first: false, ..Default::default() };
+    super::look::configure(&s);
+    ui.app().active = 0;
+    act(&mut ui, super::Action::Sort(0, super::SortCol::Size));
+    let rows = ui.left_rows();
+    super::look::configure(&urftp_core::settings::InterfaceSettings::default());
+    assert_eq!(rows.first().map(String::as_str), Some("beta.bin"), "{rows:?}");
+}

@@ -22,7 +22,7 @@ urftp-script.workspace = true
 urftp-sys.workspace = true
 urftp-i18n.workspace = true
 eframe = "0.36"
-egui_dock = "0.21.1"
+egui_dock = { version = "0.21.1", features = ["serde"] }
 egui_extras = "0.36"
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "fs", "time"] }
 rfd = "0.17.2"

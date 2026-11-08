@@ -234,24 +234,47 @@ pub fn human_size(n: u64) -> String {
     if i == 0 { format!("{n} {}", units[0]) } else { format!("{v:.1} {}", units[i]).replace('.', text("units.decimal")) }
 }
 
+/// WCAG 2.2 relative luminance of an opaque sRGB colour.
+fn luminance(c: Color32) -> f64 {
+    let lin = |v: u8| {
+        let v = f64::from(v) / 255.0;
+        if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+    };
+    0.2126 * lin(c.r()) + 0.7152 * lin(c.g()) + 0.0722 * lin(c.b())
+}
+
+/// WCAG 2.2 contrast ratio, from 1 to 21.
+pub fn contrast(a: Color32, b: Color32) -> f64 {
+    let (la, lb) = (luminance(a), luminance(b));
+    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+}
+
+/// Colour written `#RRGGBB` (or `RRGGBB`).
+pub fn parse_color(text: &str) -> Option<Color32> {
+    let h = text.trim().trim_start_matches('#');
+    if h.len() != 6 {
+        return None;
+    }
+    let v = u32::from_str_radix(h, 16).ok()?;
+    Some(Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8))
+}
+
+/// Backgrounds a text colour of the lists and logs must stand out from in a theme: the
+/// panel and the striped rows (selected rows keep the text colour of the theme's
+/// selection check).
+pub fn list_backgrounds(dark: bool) -> [Color32; 2] {
+    let v = visuals(dark);
+    [v.panel_fill, v.faint_bg_color]
+}
+
+/// Lowest contrast of a text colour against the list backgrounds of a theme.
+pub fn list_contrast(c: Color32, dark: bool) -> f64 {
+    list_backgrounds(dark).iter().map(|&b| contrast(c, b)).fold(f64::INFINITY, f64::min)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Color32, palette, visuals};
-
-    /// WCAG 2.2 relative luminance of an opaque sRGB colour.
-    fn luminance(c: Color32) -> f64 {
-        let lin = |v: u8| {
-            let v = f64::from(v) / 255.0;
-            if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
-        };
-        0.2126 * lin(c.r()) + 0.7152 * lin(c.g()) + 0.0722 * lin(c.b())
-    }
-
-    /// WCAG 2.2 contrast ratio, from 1 to 21.
-    fn contrast(a: Color32, b: Color32) -> f64 {
-        let (la, lb) = (luminance(a), luminance(b));
-        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
-    }
+    use super::{Color32, contrast, palette, visuals};
 
     /// Records a failure when `fg` on `bg` is below `min`.
     fn check(failures: &mut Vec<String>, what: &str, fg: Color32, bg: Color32, min: f64) {
