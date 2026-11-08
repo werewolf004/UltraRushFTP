@@ -10,6 +10,35 @@ la traduction.
 
 ## [Non publié]
 
+Scripts (bloc K).
+
+### Ajouté
+
+- **Pascal Script** : tableaux (`[2, 4, 6]`, imbriqués, `M[0, 2]`, `in`, `SetLength`,
+  `Low`, `High`), index de chaînes (`S[1] := 'A'`), `case … of` (étiquettes de tout type,
+  intervalles), `break`, `continue`, `const`, `var` sans type, **procédures et
+  fonctions** avec paramètres `var`, variables locales, `Result` et récursivité ; `Chr`,
+  `Ord`, `Abs`, `Odd`.
+- `RushApp.UI.Selection` (`Prepare`, `Count`, `Items[i]` avec `Name`, `Size`, `Date`,
+  `Attr`, `Owner`, `Group`, `IsFolder`, `FullPath`, `IsRemoteSide`, `IsFTPConnected`,
+  `FTPName`) et l'événement `RushApp.UI.OnSwitchLayout` (chargement d'une disposition
+  enregistrée).
+- `MatchExpr` (expressions régulières) et `MatchString` (jokers).
+- `ShellExecuteCommand` : demandé à chaque fois par défaut, avec le programme, ses
+  paramètres et l'origine du script ; Options › Sécurité permet de lancer les programmes
+  sans demander, jamais, ou de garder une liste de programmes toujours autorisés.
+- Les lecteurs d'écran entendent la ligne sous le curseur de la liste de fichiers (zone
+  live).
+
+### Modifié
+
+- Les scripts (console, `RushScript` / `RushCommand` de mIRC, `-s`, `URUSHFTP_SCRIPT`)
+  tournent dans un fil à eux : la fenêtre reste utilisable, `InputQuery` ouvre une boîte
+  de saisie et l'attend, et la console a un bouton **Arrêter**. `Invoke` répond toujours
+  aussitôt.
+- `RushApp.UI.Bar` et `RushApp.UI.Menu` répondent par une erreur claire : l'aide de FTPRush
+  n'en décrit aucun membre.
+
 ## [0.6.0] - 2026-11-08
 
 Interface (bloc J).

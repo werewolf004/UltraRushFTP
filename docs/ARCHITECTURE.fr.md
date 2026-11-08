@@ -12,7 +12,7 @@ pour les types de connexion.
 |---|---|---|
 | `urftp-core` | Modèle : sites et signets, enregistrement du carnet, options, file d'attente et fichiers de file, options d'élément des scripts et du transfert conditionnel (`itemopts`), liste d'exclusion, priorités, règles « fichier existant », sommes SFV / MD5, aides des panneaux (`browsing` : filtre rapide, masques, renommage de plusieurs éléments, comparaison de dossiers, parcours locaux, espace utilisé, arborescence, modes CHMOD, dates), adresses et listes incrémentées (`urls`), imports et exports, empreinte du mot de passe maître (`master`, PBKDF2 de `ring`), sauvegardes de la configuration (`backup`), secrets protégés par DPAPI | interdit |
 | `urftp-proto` | Client FTP, FTPS explicite/implicite, SFTP, FXP, proxys, serveur Ident, moteur de file, limitation de débit, conversion fiche de site → profil de connexion | interdit |
-| `urftp-script` | Interpréteur du sous-ensemble Pascal Script de FTPRush (`RushApp.*`, drapeaux `RS_*`) | interdit |
+| `urftp-script` | Interpréteur du Pascal Script de FTPRush (procédures, tableaux, `case` ; `RushApp.*`, drapeaux `RS_*`, gestionnaires d'événements) | interdit |
 | `urftp-i18n` | Catalogues anglais et français (`locales/*.json`), macro `t!`, détection de la langue de Windows | interdit |
 | `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : fenêtre de la liaison mIRC (`TfmUltraRush`, ou `TfmRush` en mode compatibilité) et mémoire partagée (côté application du protocole mIRC), DPAPI, veille / veille prolongée / arrêt (`power`), espace disque libre, fichiers copiés dans l'Explorateur (`CF_HDROP`), texte du presse-papiers, état de la touche `Ctrl+V`, heure locale, icône de la zone de notification, clignotement de la fenêtre et sons des événements (`tray`), instance unique (`WM_SHOW_APP`), exports de `rushmirc.dll` (fonctionnalité `mirc-dll`) | autorisé, audité |
 | `rushmirc` | DLL mIRC (`cdylib`) : réexporte `urftp_sys::mirc`, sans code propre | interdit |
@@ -52,6 +52,11 @@ les crates :
   (`urftp-proto::browse`, relayée vers le fil de l'interface par `urftp-gui::browser`).
   Inactive, elle envoie les commandes anti-inactivité de `urftp-proto::keepalive` ; quand
   la connexion est perdue, elle se reconnecte et revient dans son dossier.
+- Chaque script tourne dans un fil à lui (`urftp-gui::app::scripting`). Ses appels
+  `RushApp.*` vont au fil de l'interface, qui y répond entre deux images (jusqu'à 15 ms par
+  image pour un script chargé) ; `InputQuery` et la confirmation de `ShellExecuteCommand`
+  sont des boîtes de dialogue auxquelles on répond plus tard, et Arrêter fait échouer
+  l'appel suivant. `Invoke` (mIRC) est évalué aussitôt sur le fil de l'interface.
 - Les transferts sont exécutés par le moteur de file (`urftp-proto::engine`) sur un runtime
   tokio multi-fil séparé. Chaque onglet a sa `Queue` ; le moteur garde un réservoir de
   connexions par site et publie des `EngineEvent` (démarré, progression, terminé, ignoré,

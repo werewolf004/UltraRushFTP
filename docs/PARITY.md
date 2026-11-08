@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17.
+Summary (284 topics): ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18.
 
 ## Main window and menus
 
@@ -354,24 +354,24 @@ Summary (284 topics): ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17.
 | Script files `.PAC` / compiled `.PCC` | 🟡 | Source scripts (`-s`, console, mIRC); no compiled form |
 | Identifiers, assignments, strings (`#nn`), comments | ✅ | |
 | Variables (`var`, implicit) | ✅ | |
-| Indexes (`Str[i]`, array properties) | ⬜ | |
-| Arrays (constructors, multi-index) | ⬜ | |
+| Indexes (`Str[i]`, array properties) | ✅ | Strings from 1, arrays from 0, `A[i, j]`; `Selection.Items[i]` |
+| Arrays (constructors, multi-index) | ✅ | `[…]`, nested, `in`, `SetLength`, `Length`, `Low`, `High`; no `VarArrayCreate` |
 | `if`, `while`, `repeat`, `for` | ✅ | |
-| `case` | ⬜ | |
-| User procedures and functions | ⬜ | Refused with a clear error today |
+| `case` | ✅ | Labels of any type, ranges |
+| User procedures and functions | ✅ | `var` parameters, `Result`, recursion; not nested |
 | `RushApp.Language` | ✅ | |
-| `RushApp.UI.Bar`, `RushApp.UI.Menu` | ⬜ | |
-| `RushApp.UI.Selection` (`Prepare`, `Count`, `Items`, `IsRemoteSide`, `IsFTPConnected`, `FTPName`) | ⬜ | |
+| `RushApp.UI.Bar`, `RushApp.UI.Menu` | ➖ | The help describes no member of them: a script using them gets a clear error |
+| `RushApp.UI.Selection` (`Prepare`, `Count`, `Items`, `IsRemoteSide`, `IsFTPConnected`, `FTPName`) | ✅ | `Date` is text |
 | `RushApp.FTP.Splitter` | ✅ | |
 | `RushApp.FTP.CWD`, `Delete`, `Login`, `Logout`, `RAW`, `RemoveQueue` | ✅ | With their flags |
 | `RushApp.FTP.Transfer` | 🟡 | Every parameter but `RS_CHECKLOGIN`; `Timeout` is unused, as in FTPRush |
 | `RushApp.FTP.EnableSite`, `DisableSite` | ✅ | |
-| Event `RushApp.UI.OnSwitchLayout` | ⬜ | Needs saved layouts |
+| Event `RushApp.UI.OnSwitchLayout` | ✅ | When a saved layout is loaded |
 | Statistics variables (`TotalDownloadSize`... `DownloadBW`) | ✅ | |
 | `RushApp.DeleteEmptyTabs` | ✅ | |
-| `MatchExpr`, `MatchString` | ⬜ | |
-| `ShellExecuteCommand` | ⬜ | Needs a confirmation rule before running programs |
-| Example: `InputQuery` for a bookmark | 🟡 | `InputQuery` accepted; no input dialog yet |
+| `MatchExpr`, `MatchString` | ✅ | Case-insensitive, like the transfer filters |
+| `ShellExecuteCommand` | ✅ | Asked each time by default (Options › Security); `Flag` not used |
+| Example: `InputQuery` for a bookmark | ✅ | Input box; scripts run beside the interface |
 | `%F%` / `%D%` prefixes in transfer filters | ✅ | |
 
 ## Advanced, FAQ and tips

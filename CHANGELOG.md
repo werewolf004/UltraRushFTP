@@ -9,6 +9,31 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Scripting (block K).
+
+### Added
+
+- **Pascal Script**: arrays (`[2, 4, 6]`, nested, `M[0, 2]`, `in`, `SetLength`, `Low`,
+  `High`), string indexes (`S[1] := 'A'`), `case … of` (labels of any type, ranges),
+  `break`, `continue`, `const`, untyped `var`, **procedures and functions** with `var`
+  parameters, local variables, `Result` and recursion; `Chr`, `Ord`, `Abs`, `Odd`.
+- `RushApp.UI.Selection` (`Prepare`, `Count`, `Items[i]` with `Name`, `Size`, `Date`,
+  `Attr`, `Owner`, `Group`, `IsFolder`, `FullPath`, `IsRemoteSide`, `IsFTPConnected`,
+  `FTPName`) and the `RushApp.UI.OnSwitchLayout` event (a saved layout is loaded).
+- `MatchExpr` (regular expressions) and `MatchString` (wildcards).
+- `ShellExecuteCommand`: asked each time by default, with the program, its parameters and
+  the origin of the script; Options › Security can start programs without asking, never,
+  or keep a list of programs always allowed.
+- Screen readers hear the row under the file-list cursor (live region).
+
+### Changed
+
+- Scripts (console, mIRC `RushScript` / `RushCommand`, `-s`, `URUSHFTP_SCRIPT`) run in a
+  thread of their own: the window stays usable, `InputQuery` opens an input box and waits
+  for it, and the console has a **Stop** button. `Invoke` still answers at once.
+- `RushApp.UI.Bar` and `RushApp.UI.Menu` answer a clear error: the FTPRush help describes
+  no member of them.
+
 ## [0.6.0] - 2026-11-08
 
 Interface (block J).

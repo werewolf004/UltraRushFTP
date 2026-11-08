@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17.
+Résumé (284 sujets) : ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18.
 
 ## Fenêtre principale et menus
 
@@ -354,24 +354,24 @@ Résumé (284 sujets) : ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17.
 | Fichiers de script `.PAC` / compilés `.PCC` | 🟡 | Scripts sources (`-s`, console, mIRC) ; pas de forme compilée |
 | Identifiants, affectations, chaînes (`#nn`), commentaires | ✅ | |
 | Variables (`var`, implicites) | ✅ | |
-| Index (`Str[i]`, propriétés tableau) | ⬜ | |
-| Tableaux (constructeurs, plusieurs index) | ⬜ | |
+| Index (`Str[i]`, propriétés tableau) | ✅ | Chaînes à partir de 1, tableaux à partir de 0, `A[i, j]` ; `Selection.Items[i]` |
+| Tableaux (constructeurs, plusieurs index) | ✅ | `[…]`, imbriqués, `in`, `SetLength`, `Length`, `Low`, `High` ; pas de `VarArrayCreate` |
 | `if`, `while`, `repeat`, `for` | ✅ | |
-| `case` | ⬜ | |
-| Procédures et fonctions de l'utilisateur | ⬜ | Refusées aujourd'hui avec une erreur claire |
+| `case` | ✅ | Étiquettes de tout type, intervalles |
+| Procédures et fonctions de l'utilisateur | ✅ | Paramètres `var`, `Result`, récursivité ; pas imbriquées |
 | `RushApp.Language` | ✅ | |
-| `RushApp.UI.Bar`, `RushApp.UI.Menu` | ⬜ | |
-| `RushApp.UI.Selection` (`Prepare`, `Count`, `Items`, `IsRemoteSide`, `IsFTPConnected`, `FTPName`) | ⬜ | |
+| `RushApp.UI.Bar`, `RushApp.UI.Menu` | ➖ | L'aide n'en décrit aucun membre : un script qui s'en sert reçoit une erreur claire |
+| `RushApp.UI.Selection` (`Prepare`, `Count`, `Items`, `IsRemoteSide`, `IsFTPConnected`, `FTPName`) | ✅ | `Date` est un texte |
 | `RushApp.FTP.Splitter` | ✅ | |
 | `RushApp.FTP.CWD`, `Delete`, `Login`, `Logout`, `RAW`, `RemoveQueue` | ✅ | Avec leurs drapeaux |
 | `RushApp.FTP.Transfer` | 🟡 | Tous les paramètres sauf `RS_CHECKLOGIN` ; `Timeout` n'est pas utilisé, comme dans FTPRush |
 | `RushApp.FTP.EnableSite`, `DisableSite` | ✅ | |
-| Événement `RushApp.UI.OnSwitchLayout` | ⬜ | Demande les dispositions enregistrées |
+| Événement `RushApp.UI.OnSwitchLayout` | ✅ | Au chargement d'une disposition enregistrée |
 | Variables de statistiques (`TotalDownloadSize`… `DownloadBW`) | ✅ | |
 | `RushApp.DeleteEmptyTabs` | ✅ | |
-| `MatchExpr`, `MatchString` | ⬜ | |
-| `ShellExecuteCommand` | ⬜ | Demande une règle de confirmation avant de lancer des programmes |
-| Exemple : `InputQuery` pour un signet | 🟡 | `InputQuery` accepté ; pas encore de boîte de saisie |
+| `MatchExpr`, `MatchString` | ✅ | Sans tenir compte de la casse, comme les filtres de transfert |
+| `ShellExecuteCommand` | ✅ | Demandé à chaque fois par défaut (Options › Sécurité) ; `Flag` non utilisé |
+| Exemple : `InputQuery` pour un signet | ✅ | Boîte de saisie ; les scripts tournent à côté de l'interface |
 | Préfixes `%F%` / `%D%` dans les filtres de transfert | ✅ | |
 
 ## Avancé, FAQ et astuces

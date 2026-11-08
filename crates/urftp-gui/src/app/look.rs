@@ -118,6 +118,7 @@ impl UltraRushApp {
             }
             if let Some(i) = apply {
                 self.tabs[self.active].dock = self.layouts[i].dock.clone();
+                self.fire_switch_layout(ui.ctx());
             }
             if let Some(i) = delete {
                 self.layouts.remove(i);

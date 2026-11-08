@@ -29,7 +29,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 - 🟡 Options window (8 pages) saved automatically.
 
 ### Phase 3 — automation and compatibility (0.1.0)
-- 🟡 Pascal Script interpreter and `RushApp.*` host (`Login`, `Logout`, `CWD`, `RAW`,
+- ✅ Pascal Script interpreter and `RushApp.*` host (`Login`, `Logout`, `CWD`, `RAW`,
   `Delete`, `Transfer`, `RemoveQueue`, `EnableSite`/`DisableSite`, statistics...).
 - ✅ mIRC link: `TfmRush` window and `rushmirc.dll` (32/64-bit), tested end to end.
 - ✅ Command line: FTPRush v2 startup options and the `urftp` tool.
@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -119,12 +119,13 @@ planned work is grouped below into blocks, each ending with a release.
   configuration, single instance; About window (J7; UltraFXP import not done: no sample file).
 
 ### K — Scripting
-- ⬜ Arrays, indexes, `case`, user procedures and functions.
-- ⬜ `RushApp.UI.Selection`, `RushApp.UI.Bar` / `Menu`, `OnSwitchLayout`.
-- ⬜ Interactive `InputQuery`, `MatchExpr`, `MatchString`; `ShellExecuteCommand` behind a
-  confirmation rule.
-- ⬜ Screen readers: announce the file-list cursor (rows are named in the AccessKit tree
-  but the cursor does not move the system focus yet).
+- ✅ Arrays, indexes, `case`, `break` / `continue`, constants, user procedures and
+  functions (`var` parameters, recursion).
+- ✅ `RushApp.UI.Selection`, `OnSwitchLayout`; `RushApp.UI.Bar` / `Menu` answer an error
+  (the FTPRush help describes no member of them).
+- ✅ Scripts run in a thread of their own: interactive `InputQuery`, a Stop button;
+  `MatchExpr`, `MatchString`; `ShellExecuteCommand` asked each time by default.
+- ✅ Screen readers: the row under the file-list cursor is told by a live region.
 
 ### Distribution
 - ⬜ Application manifest (`longPathAware`, DPI awareness), icon and version resources.

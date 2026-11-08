@@ -32,7 +32,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 - 🟡 Fenêtre Options (8 pages) enregistrée automatiquement.
 
 ### Phase 3 — automatisation et compatibilité (0.1.0)
-- 🟡 Interpréteur Pascal Script et hôte `RushApp.*` (`Login`, `Logout`, `CWD`, `RAW`,
+- ✅ Interpréteur Pascal Script et hôte `RushApp.*` (`Login`, `Logout`, `CWD`, `RAW`,
   `Delete`, `Transfer`, `RemoveQueue`, `EnableSite`/`DisableSite`, statistiques…).
 - ✅ Liaison mIRC : fenêtre `TfmRush` et `rushmirc.dll` (32/64 bits), testée de bout en
   bout.
@@ -54,7 +54,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 219 · 🟡 30 · ⬜ 17 · ➖ 18).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
@@ -134,12 +134,14 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
   restauration de la configuration, instance unique ; fenêtre À propos (J7 ; import UltraFXP pas fait : aucun fichier d'exemple).
 
 ### K — Scripts
-- ⬜ Tableaux, index, `case`, procédures et fonctions de l'utilisateur.
-- ⬜ `RushApp.UI.Selection`, `RushApp.UI.Bar` / `Menu`, `OnSwitchLayout`.
-- ⬜ `InputQuery` interactif, `MatchExpr`, `MatchString` ; `ShellExecuteCommand` derrière
-  une règle de confirmation.
-- ⬜ Lecteurs d'écran : annoncer le curseur de la liste de fichiers (les lignes sont nommées
-  dans l'arbre AccessKit, mais le curseur ne déplace pas encore le focus système).
+- ✅ Tableaux, index, `case`, `break` / `continue`, constantes, procédures et fonctions de
+  l'utilisateur (paramètres `var`, récursivité).
+- ✅ `RushApp.UI.Selection`, `OnSwitchLayout` ; `RushApp.UI.Bar` / `Menu` répondent par une
+  erreur (l'aide de FTPRush n'en décrit aucun membre).
+- ✅ Les scripts tournent dans un fil à eux : `InputQuery` interactif, bouton Arrêter ;
+  `MatchExpr`, `MatchString` ; `ShellExecuteCommand` demandé à chaque fois par défaut.
+- ✅ Lecteurs d'écran : la ligne sous le curseur de la liste de fichiers est annoncée par
+  une zone live.
 
 ### Distribution
 - ⬜ Manifeste d'application (`longPathAware`, prise en compte du DPI), icône et ressources

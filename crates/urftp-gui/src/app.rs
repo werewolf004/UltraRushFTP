@@ -45,6 +45,7 @@ mod security;
 
 pub(crate) use security::daily_backup;
 mod rushapp;
+mod scripting;
 #[cfg(test)]
 mod shots;
 
@@ -1265,6 +1266,8 @@ pub struct UltraRushApp {
     ipc_rx: Option<std::sync::mpsc::Receiver<urftp_sys::server::Request>>,
     /// Callback window of the DLL while a script coming from mIRC runs.
     ipc_callback: Option<isize>,
+    /// Scripts running in their threads, their questions, the selection and the events.
+    scripts: scripting::Scripts,
     /// (site, command, callback window) of the `RAW` whose reply must go back to mIRC.
     raw_callbacks: Vec<(String, String, isize)>,
     /// Command-line options, applied on the first frame.
@@ -1403,9 +1406,10 @@ enum Action {
     Conditional(usize),
     /// SFV (`false`) or MD5 (`true`) file of the selection of a local panel.
     Checksums(usize, bool),
-    /// Console: run the script of the tab / evaluate its expression.
+    /// Console: run the script of the tab / evaluate its expression / stop its script.
     RunScript,
     Invoke,
+    StopScript,
 }
 
 impl UltraRushApp {
@@ -1449,6 +1453,7 @@ impl UltraRushApp {
             ipc: None,
             ipc_rx: None,
             ipc_callback: None,
+            scripts: scripting::Scripts::default(),
             raw_callbacks: Vec::new(),
             exit_when_done: false,
             startup: Some(startup),
@@ -2256,10 +2261,7 @@ impl UltraRushApp {
             match std::fs::read(path) {
                 Ok(bytes) => {
                     let src = String::from_utf8(bytes).unwrap_or_else(|e| e.into_bytes().iter().map(|&b| b as char).collect());
-                    notes.push(match self.run_script(&src, ctx) {
-                        Ok(()) => (true, t!("startup.script_done", path = path.display())),
-                        Err(e) => (false, t!("startup.script_failed", path = path.display(), error = e)),
-                    });
+                    self.start_script(src, scripting::Origin::Startup(path.clone()), ctx);
                 }
                 Err(e) => notes.push((false, t!("startup.script_unreadable", path = path.display(), error = e))),
             }
@@ -2545,6 +2547,7 @@ impl UltraRushApp {
         let opts = self.engine_options();
         let extra = self.queue_site_profiles(self.active);
         let mut scripts = Vec::new();
+        let mut stop_script = false;
         let mut ops = Vec::new();
         let (mut raw_dialog, mut site_commands, mut manual) = (false, Vec::new(), false);
         let (mut connects, mut reconnects, mut open_sites) = (Vec::new(), Vec::new(), false);
@@ -2559,6 +2562,7 @@ impl UltraRushApp {
                 Action::ManualDownload => manual = true,
                 Action::SiteCommand(i) => site_commands.push(i),
                 Action::RunScript => scripts.push(false),
+                Action::StopScript => stop_script = true,
                 Action::Invoke => scripts.push(true),
                 Action::Open(side, name) => match &mut tab.sides[side] {
                     Side::Local(l) => l.open(&name),
@@ -2750,17 +2754,24 @@ impl UltraRushApp {
                 self.open_remote(tab, side, profile, id, Some(dir), ctx);
             }
         }
+        if stop_script {
+            let id = self.tabs[self.active].id;
+            self.stop_console_script(id);
+        }
         // Script console: run after the other actions (it acts on the whole application).
         for invoke in scripts {
             let (src, tab) = {
                 let t = &self.tabs[self.active];
                 (if invoke { t.invoke.clone() } else { t.script.clone() }, self.active)
             };
-            let out = if invoke {
-                self.invoke(&src, ctx).map(|v| format!("= {v}"))
-            } else {
-                self.run_script(&src, ctx).map(|()| t!("script.done"))
-            };
+            if !invoke {
+                let id = self.tabs[tab].id;
+                if !self.scripts.console_running(id) {
+                    self.start_script(src, scripting::Origin::Console(id), ctx);
+                }
+                continue;
+            }
+            let out = self.invoke(&src, ctx).map(|v| format!("= {v}"));
             let last = self.tabs.len() - 1;
             let t = &mut self.tabs[tab.min(last)];
             t.script_out.push(match out {
@@ -2790,7 +2801,7 @@ impl UltraRushApp {
     fn keyboard(&mut self, ctx: &egui::Context) -> Vec<Action> {
         use input::Command as C;
         let tab = &self.tabs[self.active];
-        if tab.prompt.is_some() || tab.trust.is_some() || self.confirm.is_some() || self.unlock.is_some() {
+        if tab.prompt.is_some() || tab.trust.is_some() || self.confirm.is_some() || self.unlock.is_some() || self.scripts.asking() {
             return Vec::new();
         }
         use egui::{Key, Modifiers};
@@ -3099,6 +3110,7 @@ impl eframe::App for UltraRushApp {
         self.stats.record(&traffic);
         self.check_queue_end(ctx);
         self.forward_raw_replies();
+        self.pump_scripts(ctx);
         if self.ipc_enabled {
             self.sync_ipc_class();
             self.serve_ipc(ctx);
@@ -3111,6 +3123,7 @@ impl eframe::App for UltraRushApp {
         // `-rx`: close when no queue runs and nothing is left to transfer.
         if self.exit_when_done
             && self.startup.is_none()
+            && self.scripts.running() == 0
             && self.tabs.iter().all(|t| t.engine_events.is_none() && !t.queue.lock().has_pending())
         {
             self.stats.save();
@@ -3141,12 +3154,7 @@ impl eframe::App for UltraRushApp {
         if !self.startup_script_done {
             self.startup_script_done = true;
             if let Ok(src) = std::env::var("URUSHFTP_SCRIPT") {
-                let r = self.run_script(&src, &ctx);
-                let t = self.active;
-                self.tabs[t].script_out.push(match r {
-                    Ok(()) => (true, t!("startup.env_script_done")),
-                    Err(e) => (false, t!("startup.env_script_failed", error = e)),
-                });
+                self.start_script(src, scripting::Origin::Env, &ctx);
             }
         }
         if self.tabs.iter().any(|t| t.engine_events.is_some()) {
@@ -3178,6 +3186,7 @@ impl eframe::App for UltraRushApp {
             let dark = self.dark;
             let highlights = look::highlights(ui_opts, dark);
             let log_look = (look::log_colors(ui_opts, dark), ui_opts.log_text_size);
+            let script_running = self.scripts.console_running(tab.id);
             let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, tools, .. } = tab;
             let mut viewer = PaneViewer {
                 sides,
@@ -3201,6 +3210,7 @@ impl eframe::App for UltraRushApp {
                 double_click,
                 highlights: &highlights,
                 log_look,
+                script_running,
             };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
@@ -3228,6 +3238,7 @@ impl eframe::App for UltraRushApp {
         self.queue_end_dialog(&ctx);
         self.conditional_dialog(&ctx);
         self.guard_windows();
+        self.script_dialogs(&ctx);
         self.unlock_dialog(&ctx);
         self.sites.show(&ctx, &self.options.settings);
         if self.options.show(&ctx) {
@@ -3277,6 +3288,8 @@ struct PaneViewer<'a> {
     highlights: &'a [(String, egui::Color32)],
     /// Colours (command, reply, status, error) and text size of the logs.
     log_look: (Option<[egui::Color32; 4]>, u32),
+    /// A script of the console of this tab is running.
+    script_running: bool,
 }
 
 /// A site of the site manager, for the connection menus.
@@ -3640,6 +3653,30 @@ impl PaneViewer<'_> {
         });
 
         self.list_rect[side] = Some(zone.response.rect);
+        // Screen readers: the row under the keyboard cursor is told by a live region; the
+        // list keeps the keyboard, so the system focus does not have to move.
+        let told = cursor_row.and_then(|i| rows.get(i).map(|f| (i, f))).map(|(i, f)| {
+            let size = if f.is_dir { t!("files.folder") } else { human_size(f.size) };
+            let mut parts = vec![f.name.clone()];
+            if selected.contains(&i) {
+                parts.push(t!("files.row_selected"));
+            }
+            if marks.contains(&f.name) {
+                parts.push(t!("files.marked"));
+            }
+            parts.push(size);
+            if !f.modified.is_empty() {
+                parts.push(f.modified.clone());
+            }
+            parts.push(t!("files.row_position", position = i + 1, count = rows.len()));
+            parts.join(", ")
+        });
+        let live = ui.allocate_response(egui::vec2(1.0, 1.0), Sense::hover());
+        ui.ctx().accesskit_node_builder(live.id, |n| {
+            n.set_role(egui::accesskit::Role::Status);
+            n.set_live(egui::accesskit::Live::Polite);
+            n.set_label(told.unwrap_or_default());
+        });
         if let Some(drop) = dropped
             && drop.from != side
         {
@@ -3874,7 +3911,13 @@ impl PaneViewer<'_> {
                 self.actions.push(Action::Invoke);
             }
             ui.separator();
-            if theme::primary_button(ui, t!("script.run")).clicked() {
+            if self.script_running {
+                ui.spinner();
+                ui.label(t!("script.running"));
+                if ui.button(t!("script.stop")).clicked() {
+                    self.actions.push(Action::StopScript);
+                }
+            } else if theme::primary_button(ui, t!("script.run")).clicked() {
                 self.actions.push(Action::RunScript);
             }
         });

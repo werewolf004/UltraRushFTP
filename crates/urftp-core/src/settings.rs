@@ -503,6 +503,22 @@ pub struct Settings {
     pub backup_daily: bool,
     /// Salted hash of the master password (empty: none); see `master`.
     pub master_hash: String,
+    /// Programs started by scripts (`ShellExecuteCommand`).
+    pub script_shell: ShellPolicy,
+    /// Programs the user allowed for good ("Always allow"), as written by the scripts.
+    pub script_programs: Vec<String>,
+}
+
+/// What `ShellExecuteCommand` does when a script asks to start a program.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ShellPolicy {
+    /// Ask each time, unless the program was allowed for good.
+    #[default]
+    Ask,
+    /// Start any program without asking.
+    Allow,
+    /// Never start a program.
+    Deny,
 }
 
 /// Notification area icon, event notifications and folder monitoring.
@@ -916,6 +932,8 @@ impl Default for Settings {
             single_instance: false,
             backup_daily: false,
             master_hash: String::new(),
+            script_shell: ShellPolicy::Ask,
+            script_programs: Vec::new(),
         }
     }
 }

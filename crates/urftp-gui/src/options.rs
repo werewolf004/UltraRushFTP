@@ -802,6 +802,42 @@ fn security_ui(ui: &mut egui::Ui, s: &mut Settings, f: &mut MasterForm) {
     ui.label(RichText::new(t!("options.sec_single_note")).weak());
     ui.checkbox(&mut s.backup_daily, t!("options.sec_backup_daily"));
     ui.label(RichText::new(t!("options.sec_backup_note")).weak());
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("options.sec_shell_section")).strong());
+    {
+        use urftp_core::settings::ShellPolicy as P;
+        let label = |p: P| match p {
+            P::Ask => t!("options.sec_shell_ask"),
+            P::Allow => t!("options.sec_shell_allow"),
+            P::Deny => t!("options.sec_shell_deny"),
+        };
+        ui.horizontal(|ui| {
+            let l = ui.label(t!("options.sec_shell"));
+            let combo = egui::ComboBox::from_id_salt("opt-shell").selected_text(label(s.script_shell)).width(300.0).show_ui(ui, |ui| {
+                for p in [P::Ask, P::Allow, P::Deny] {
+                    ui.selectable_value(&mut s.script_shell, p, label(p));
+                }
+            });
+            combo.response.labelled_by(l.id);
+        });
+    }
+    ui.label(RichText::new(t!("options.sec_shell_note")).weak());
+    ui.label(t!("options.sec_shell_programs"));
+    if s.script_programs.is_empty() {
+        ui.label(RichText::new(t!("options.sec_shell_none")).italics());
+    }
+    let mut remove = None;
+    for (i, prog) in s.script_programs.iter().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(prog).monospace());
+            if theme::icon_button(ui, "✕", t!("options.sec_shell_forget", program = prog)).clicked() {
+                remove = Some(i);
+            }
+        });
+    }
+    if let Some(i) = remove {
+        s.script_programs.remove(i);
+    }
 }
 
 /// "Notifications" page: tray icon, events, monitored folders.

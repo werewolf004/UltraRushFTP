@@ -241,6 +241,18 @@ fn arrows_move_the_cursor_and_shift_extends_the_selection() {
     assert_eq!(ui.left_selection(), ["docs"]);
     ui.key(Key::ArrowDown);
     assert_eq!(ui.left_selection(), ["alpha.txt"]);
+    // Screen readers hear the row under the cursor (live region), the focus stays put.
+    let told: Vec<String> = ui
+        .harness
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().role() == Role::Status)
+        .filter_map(|n| n.accesskit_node().label())
+        .filter(|l| !l.is_empty())
+        .collect();
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].starts_with("alpha.txt, selected, ") && told[0].ends_with("2 of 4"), "{}", told[0]);
+    assert!(!ui.widget_focused());
     ui.key_with(Modifiers::SHIFT, Key::ArrowDown);
     assert_eq!(ui.left_selection(), ["alpha.txt", "beta.bin"]);
     ui.key_with(Modifiers::COMMAND, Key::Space);
@@ -1348,4 +1360,124 @@ fn master_password_guards_the_site_manager_and_the_lock() {
     ui.harness.get_by_label(&t!("lock.unlock")).click();
     ui.run();
     assert!(ui.app().unlock.is_none());
+}
+
+/// Frames until no script runs any more (a few seconds at most).
+fn wait_scripts(ui: &mut Ui) {
+    for _ in 0..500 {
+        if ui.app().scripts.running() == 0 {
+            ui.run();
+            return;
+        }
+        ui.harness.step();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("the scripts did not finish: {:?}", ui.app().tabs[0].script_out);
+}
+
+/// Frames until a label is shown (a few seconds at most), then a few more: a dialog is
+/// centred once its size is known.
+fn wait_label(ui: &mut Ui, label: &str) {
+    for _ in 0..500 {
+        if ui.has_label(label) {
+            ui.run();
+            return;
+        }
+        ui.harness.step();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("\"{label}\" not shown");
+}
+
+#[test]
+fn console_scripts_run_beside_the_interface_and_ask_for_input() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.app().tabs[0].script = "procedure SetSplit(v);
+         begin
+           RushApp.FTP.Splitter := v;
+         end;
+         s := 'x';
+         if InputQuery('Bookmark', 'Name of the bookmark', s) then SetSplit(s + '|');"
+        .into();
+    act(&mut ui, super::Action::RunScript);
+    wait_label(&mut ui, "Name of the bookmark");
+    let id = ui.app().tabs[0].id;
+    assert!(ui.app().scripts.console_running(id));
+    assert_all_named(&ui, "script input");
+    ui.harness.get_by_label(&t!("common.validate")).click();
+    wait_scripts(&mut ui);
+    assert_eq!(ui.app().splitter, "x|", "the answer reaches the script");
+    assert_eq!(ui.app().tabs[0].script_out.last(), Some(&(true, t!("script.done"))));
+
+    // A program to start: asked, refused, ShellExecuteCommand returns False.
+    ui.app().tabs[0].script = "if not ShellExecuteCommand('urftp-test-tool.exe', '-x', '', 0) then RushApp.FTP.Splitter := 'no';".into();
+    act(&mut ui, super::Action::RunScript);
+    wait_label(&mut ui, &t!("script.shell_title"));
+    assert!(ui.has_label("urftp-test-tool.exe"));
+    assert_all_named(&ui, "program confirmation");
+    ui.harness.get_by_label(&t!("script.shell_refuse")).click();
+    wait_scripts(&mut ui);
+    assert_eq!(ui.app().splitter, "no");
+    // Forbidden by the options: not even asked.
+    ui.app().options.settings.script_shell = urftp_core::settings::ShellPolicy::Deny;
+    ui.app().splitter = ";".into();
+    act(&mut ui, super::Action::RunScript);
+    wait_scripts(&mut ui);
+    assert_eq!(ui.app().splitter, "no");
+    assert!(!ui.has_label(&t!("script.shell_title")));
+
+    // A script that does not end is stopped from the console.
+    ui.app().tabs[0].script = "while true do RushApp.FTP.Splitter := ';';".into();
+    act(&mut ui, super::Action::RunScript);
+    ui.run();
+    let id = ui.app().tabs[0].id;
+    assert!(ui.app().scripts.console_running(id), "still running");
+    act(&mut ui, super::Action::StopScript);
+    wait_scripts(&mut ui);
+    let (ok, msg) = ui.app().tabs[0].script_out.last().cloned().unwrap();
+    assert!(!ok && msg.contains("stopped"), "{msg}");
+}
+
+#[test]
+fn scripts_read_the_selection_match_texts_and_answer_the_layout_event() {
+    let mut ui = Ui::start(Lang::En, true);
+    let ctx = ui.harness.ctx.clone();
+    // The right panel is local: select everything in it and make it active.
+    act(&mut ui, super::Action::SelectAll(1));
+    ui.app().tabs[0].focus = 1;
+    let rows = ui.app().tabs[0].sides[1].rows().len();
+    ui.app()
+        .run_script(
+            "RushApp.UI.Selection.Prepare;
+             s := IntToStr(RushApp.UI.Selection.Count);
+             if not RushApp.UI.Selection.IsRemoteSide then s := s + ',local';
+             for i := 0 to RushApp.UI.Selection.Count - 1 do
+               if RushApp.UI.Selection.Items[i].IsFolder then s := s + ',' + RushApp.UI.Selection.Items[i].Name;
+             RushApp.FTP.Splitter := s;",
+            &ctx,
+        )
+        .unwrap();
+    assert_eq!(ui.app().splitter, format!("{rows},local,docs"));
+    assert_eq!(ui.app().invoke("MatchString('Release.Name-GRP', '*name*')", &ctx).unwrap(), "True");
+    assert_eq!(ui.app().invoke("MatchExpr('allen', '^al+en$')", &ctx).unwrap(), "True");
+    assert_eq!(ui.app().invoke("MatchExpr('bob', '[allen]')", &ctx).unwrap(), "False");
+    assert!(ui.app().invoke("MatchExpr('x', '(')", &ctx).is_err());
+    assert!(ui.app().invoke("RushApp.UI.Bar", &ctx).unwrap_err().to_string().contains(&t!("host.ui_undocumented")));
+
+    ui.app()
+        .run_script(
+            "procedure Switched(Sender);
+             begin
+               RushApp.FTP.Splitter := 'layout';
+             end;
+             RushApp.UI.OnSwitchLayout := Switched;",
+            &ctx,
+        )
+        .unwrap();
+    assert_eq!(ui.app().splitter, format!("{rows},local,docs"), "not run when it is set");
+    ui.app().fire_switch_layout(&ctx);
+    wait_scripts(&mut ui);
+    assert_eq!(ui.app().splitter, "layout");
+    ui.app().run_script("RushApp.UI.OnSwitchLayout := nil;", &ctx).unwrap();
+    assert!(ui.app().scripts.on_switch_layout.is_none());
 }

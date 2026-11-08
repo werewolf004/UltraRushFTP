@@ -4,12 +4,17 @@
 //! `RushApp.FTP.Login('FTP1;FTP2','public',RS_BOOKMARK or RS_CHECKBM);`, and `Invoke` asks
 //! for a value: `RushApp.TotalDownloadSize`.
 //!
-//! The interpreter handles the subset used by FTPRush scripts: variables, strings,
-//! integers, booleans, operators (including bitwise `or`/`and` on flags),
-//! `if/then/else`, `while`, `repeat/until`, `for`, `begin/end`, `exit`, a few built-in
-//! functions (`IntToStr`, `StrToInt`, `Length`, `Copy`, `Pos`, `UpperCase`, `ShowMessage`,
-//! `InputQuery`...). Everything starting with `RushApp` is handed to the host ([`Host`]),
-//! that is to the application.
+//! The interpreter handles the language described by the FTPRush help: variables, strings,
+//! integers, booleans, arrays (`[1, 2]`, 0-based, several indexes) and string indexes
+//! (1-based), operators (including bitwise `or`/`and` on flags and `in`),
+//! `if/then/else`, `case`, `while`, `repeat/until`, `for`, `break`, `continue`, `exit`,
+//! constants, procedures and functions with `var` parameters, and built-in functions
+//! (`IntToStr`, `StrToInt`, `Length`, `Copy`, `Pos`, `UpperCase`, `ShowMessage`,
+//! `InputQuery`...). Everything starting with `RushApp`, and the functions of the FTPRush
+//! library (`MatchExpr`, `MatchString`, `ShellExecuteCommand`), are handed to the host
+//! ([`Host`]), that is to the application.
+
+use std::sync::Arc;
 
 mod interp;
 mod lexer;
@@ -74,7 +79,47 @@ pub enum Value {
     Str(String),
     Bool(bool),
     Nil,
+    /// Array (`[2, 4, 6]`), 0-based.
+    Array(Vec<Value>),
+    /// Object of the host with named fields (`RushApp.UI.Selection.Items[0]`).
+    Record(Vec<(String, Value)>),
+    /// Procedure of the script given to an event (`RushApp.UI.OnSwitchLayout := Handler`).
+    Event(EventHandler),
 }
+
+/// A procedure of a script, kept by the host to answer an event later.
+#[derive(Clone)]
+pub struct EventHandler {
+    program: Arc<parser::Program>,
+    name: String,
+}
+
+impl EventHandler {
+    /// Name of the procedure, as written in the script.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Runs the procedure; it receives `Sender` (nil) when it declares a parameter. The
+    /// global variables start empty: they are not those of the script that set the event.
+    pub fn fire(&self, host: &mut dyn Host) -> Result<(), ScriptError> {
+        interp::Interpreter::new(host, Arc::clone(&self.program)).fire(&self.name)
+    }
+}
+
+impl std::fmt::Debug for EventHandler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EventHandler({})", self.name)
+    }
+}
+
+impl PartialEq for EventHandler {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.program, &other.program) && self.name.eq_ignore_ascii_case(&other.name)
+    }
+}
+
+impl Eq for EventHandler {}
 
 impl Value {
     /// Text representation (`Invoke` answer, concatenation).
@@ -84,6 +129,11 @@ impl Value {
             Value::Str(s) => s.clone(),
             Value::Bool(b) => if *b { "True" } else { "False" }.to_string(),
             Value::Nil => String::new(),
+            Value::Array(items) => format!("[{}]", items.iter().map(Value::to_text).collect::<Vec<_>>().join(", ")),
+            Value::Record(fields) => {
+                format!("({})", fields.iter().map(|(k, v)| format!("{k}={}", v.to_text())).collect::<Vec<_>>().join(", "))
+            }
+            Value::Event(h) => h.name.clone(),
         }
     }
 
@@ -93,6 +143,9 @@ impl Value {
             Value::Str(_) => "string",
             Value::Bool(_) => "boolean",
             Value::Nil => "nil",
+            Value::Array(_) => "array",
+            Value::Record(_) => "object",
+            Value::Event(_) => "procedure",
         }
     }
 
@@ -159,6 +212,9 @@ pub enum HostError {
         /// Site searched, when known.
         site: Option<String>,
     },
+    /// The script was stopped (by the user, or because the application is closing).
+    #[error("script stopped")]
+    Cancelled,
     /// An argument has an invalid value.
     #[error("{function}: {reason}")]
     InvalidArgument {
@@ -220,15 +276,15 @@ impl ScriptError {
 /// Runs a complete script (`RushScript`).
 pub fn run(source: &str, host: &mut dyn Host) -> Result<(), ScriptError> {
     let prog = parser::parse_program(lexer::tokenize(source)?)?;
-    interp::Interpreter::new(host).run(&prog)
+    interp::Interpreter::new(host, Arc::new(prog)).run()
 }
 
 /// Evaluates a single expression and returns its value (`Invoke`).
 pub fn evaluate(expression: &str, host: &mut dyn Host) -> Result<Value, ScriptError> {
     let expr = parser::parse_expression(lexer::tokenize(expression.trim())?)?;
-    let prog = [parser::Stmt::Assign(vec!["__result".into()], expr, 1)];
-    let mut it = interp::Interpreter::new(host);
-    it.run(&prog)?;
+    let prog = parser::Program { main: vec![parser::Stmt::Assign(parser::Target::var("__result"), expr, 1)], ..Default::default() };
+    let mut it = interp::Interpreter::new(host, Arc::new(prog));
+    it.run()?;
     Ok(it.take_var("__result").unwrap_or(Value::Nil))
 }
 

@@ -136,7 +136,9 @@ impl Drop for Stats {
 // ====================================================================== execution
 
 impl UltraRushApp {
-    /// Runs a script (`RushScript`); errors carry their line number.
+    /// Runs a script at once, on the interface thread (tests): `InputQuery` answers
+    /// nothing and `ShellExecuteCommand` only starts the programs allowed without asking.
+    #[cfg(test)]
     pub(super) fn run_script(&mut self, src: &str, ctx: &egui::Context) -> Result<(), ScriptError> {
         let mut host = AppHost { app: self, ctx };
         urftp_script::run(src, &mut host)
@@ -186,26 +188,14 @@ impl UltraRushApp {
                     let _ = reply.send(answer);
                 }
                 Request::Script { source, callback } => {
-                    self.ipc_callback = callback;
-                    let r = self.run_script(&source, ctx);
-                    self.ipc_callback = None;
-                    self.note_ipc("RushScript", r);
+                    self.start_script(source, scripting::Origin::Mirc { what: "RushScript", callback }, ctx);
                 }
                 Request::Command { source } => {
-                    let r = self.run_script(&source, ctx);
-                    self.note_ipc("RushCommand", r);
+                    self.start_script(source, scripting::Origin::Mirc { what: "RushCommand", callback: None }, ctx);
                 }
                 Request::Show => self.show_main_window(ctx),
             }
         }
-    }
-
-    fn note_ipc(&mut self, what: &str, r: Result<(), ScriptError>) {
-        let t = self.active;
-        self.tabs[t].script_out.push(match r {
-            Ok(()) => (true, t!("script.mirc_done", what = what)),
-            Err(e) => (false, t!("script.mirc_failed", what = what, error = e)),
-        });
     }
 
     /// Sends mIRC the replies of the `RAW` it asked for; the others are forgotten.
@@ -228,9 +218,35 @@ impl UltraRushApp {
     }
 }
 
-struct AppHost<'a> {
+/// The application as seen by a script.
+pub(super) struct AppHost<'a> {
     app: &'a mut UltraRushApp,
     ctx: &'a egui::Context,
+}
+
+impl<'a> AppHost<'a> {
+    pub(super) fn new(app: &'a mut UltraRushApp, ctx: &'a egui::Context) -> Self {
+        Self { app, ctx }
+    }
+}
+
+/// `RushApp.UI.Bar` and `RushApp.UI.Menu`: the FTPRush help describes no member of them.
+fn undocumented(name: &str) -> Option<HostError> {
+    let lower = name.to_ascii_lowercase();
+    (lower.starts_with("rushapp.ui.bar") || lower.starts_with("rushapp.ui.menu"))
+        .then(|| HostError::InvalidArgument { function: name.into(), reason: t!("host.ui_undocumented") })
+}
+
+/// `MatchExpr` (regular expression) and `MatchString` (wildcards), case-insensitive like
+/// the transfer filters.
+fn match_text(name: &str, a: &[Value], regex: bool) -> Result<Value, HostError> {
+    want(a, 2, name)?;
+    let pattern = if regex {
+        Pattern::regex(s(a, 1)).map_err(|e| HostError::InvalidArgument { function: name.into(), reason: e.to_string() })?
+    } else {
+        Pattern::wildcard(s(a, 1))
+    };
+    Ok(Value::Bool(pattern.matches(&s(a, 0))))
 }
 
 fn s(a: &[Value], i: usize) -> String {
@@ -741,6 +757,13 @@ impl Host for AppHost<'_> {
             "rushapp.ftp.enablesite" => self.enable_site(a, true)?,
             "rushapp.ftp.disablesite" => self.enable_site(a, false)?,
             "rushapp.deleteemptytabs" | "rushapp.deleteemptycontainers" => self.delete_empty_tabs(),
+            "rushapp.ui.selection.prepare" => self.app.prepare_selection(),
+            "matchexpr" => return match_text(name, a, true),
+            "matchstring" => return match_text(name, a, false),
+            "shellexecutecommand" => {
+                want(a, 2, name)?;
+                return Ok(self.app.shell_now(&s(a, 0), &s(a, 1), &s(a, 2)));
+            }
             "showmessage" => {
                 let msg = s(a, 0);
                 self.log(LogKind::Status, t!("host.message", message = msg));
@@ -749,7 +772,7 @@ impl Host for AppHost<'_> {
                 self.log(LogKind::Status, t!("host.input_query"));
                 return Ok(Value::Nil);
             }
-            _ => return Err(HostError::UnknownFunction(name.into())),
+            _ => return Err(undocumented(name).unwrap_or_else(|| HostError::UnknownFunction(name.into()))),
         }
         Ok(Value::Nil)
     }
@@ -785,7 +808,15 @@ impl Host for AppHost<'_> {
             "rushapp.containers.transfersitecount" => Value::Int(self.app.tabs.iter().filter(|t| t.engine.is_some()).count() as i64),
             "rushapp.downloadbw" => Value::Int(st.bandwidth().0.round() as i64),
             "rushapp.uploadbw" => Value::Int(st.bandwidth().1.round() as i64),
-            _ => return Err(HostError::UnknownProperty(name.into())),
+            "rushapp.ui.selection.count" => Value::Int(self.app.scripts.selection.as_ref().map_or(0, |s| s.items.len() as i64)),
+            "rushapp.ui.selection.items" => Value::Array(self.app.scripts.selection.as_ref().map(|s| s.items.clone()).unwrap_or_default()),
+            "rushapp.ui.selection.isremoteside" => Value::Bool(self.app.scripts.selection.as_ref().is_some_and(|s| s.remote)),
+            "rushapp.ui.selection.isftpconnected" => Value::Bool(self.app.scripts.selection.as_ref().is_some_and(|s| s.connected)),
+            "rushapp.ui.selection.ftpname" => {
+                Value::Str(self.app.scripts.selection.as_ref().map(|s| s.ftp_name.clone()).unwrap_or_default())
+            }
+            "rushapp.ui.onswitchlayout" => self.app.scripts.on_switch_layout.clone().map_or(Value::Nil, Value::Event),
+            _ => return Err(undocumented(name).unwrap_or_else(|| HostError::UnknownProperty(name.into()))),
         })
     }
 
@@ -799,7 +830,20 @@ impl Host for AppHost<'_> {
                 self.app.splitter = v;
                 Ok(())
             }
-            _ => Err(HostError::ReadOnlyProperty(name.into())),
+            "rushapp.ui.onswitchlayout" => match value {
+                Value::Event(h) => {
+                    self.app.scripts.on_switch_layout = Some(h);
+                    Ok(())
+                }
+                Value::Nil => {
+                    self.app.scripts.on_switch_layout = None;
+                    Ok(())
+                }
+                other => {
+                    Err(HostError::InvalidArgument { function: name.into(), reason: t!("host.event_expected", found = other.type_name()) })
+                }
+            },
+            _ => Err(undocumented(name).unwrap_or_else(|| HostError::ReadOnlyProperty(name.into()))),
         }
     }
 }

@@ -454,6 +454,8 @@ given to several commands are listed. `F1` shows the keys in use. The arrows, `E
 | Master password | none | Asked before the site manager and the options (once per session) and to unlock *File → Lock*. Only a salted PBKDF2-SHA256 hash is kept; the site passwords stay protected by Windows (DPAPI). A forgotten master password cannot be recovered: remove `master_hash` from `settings.json` |
 | Only one UltraRushFTP | off | A second start shows the window already open (not in the FTPRush compatibility mode of the mIRC link) |
 | Back up the configuration each day | off | At the first start of the day, into `backup` of the data folder; 4 kept |
+| ShellExecuteCommand | Ask each time | What a script asking to start a program gets: a question showing the script's origin, the program, its parameters and folder (*Start it*, *Always allow this program*, *Refuse*); *Start them without asking*; *Never start a program*. Scripts evaluated by `Invoke` cannot ask: they only start the programs allowed |
+| Programs always allowed | none | Programs allowed with *Always allow this program*; `✕` stops allowing one |
 
 ### Backups
 
@@ -591,21 +593,48 @@ incomplete transfer), `2` invalid arguments.
 ## Scripts (`RushApp`)
 
 Pascal Script as in FTPRush v2, run from the *Script* console, `-s`, `URUSHFTP_SCRIPT` or
-mIRC. Supported language: variables, strings, integers, booleans, operators (bitwise
-`or`/`and` on flags), `if/then/else`, `while`, `repeat/until`, `for … to/downto`,
-`begin/end`, `exit`; built-in functions `IntToStr`, `StrToInt`, `StrToIntDef`, `Length`,
-`UpperCase`, `LowerCase`, `Trim`, `Copy`, `Pos`, `ShowMessage`, `InputQuery`.
+mIRC. Each script runs beside the interface: the window stays usable, `InputQuery` opens
+an input box and waits for it, and the console shows *Script running…* with a **■ Stop**
+button (the script stops at its next call to the application). `Invoke` evaluates its
+expression at once, so an `InputQuery` in it gets no answer.
+
+Supported language:
+
+- variables (`var a, b;`, types optional and ignored, or implicit), `const NAME = value;`,
+  strings (`'…'`, `#13#10`), integers (`$1F`), booleans, `nil`;
+- arrays: `A := [2, 4, 6]` (0-based), nested `[[…], […]]` read with `M[0, 2]` or
+  `M[0][2]` and assigned with `M[1, 1] := x`; strings indexed from 1 (`S[1] := 'A'`);
+  `x in [1, 2]`; `SetLength`, `Length`, `Low`, `High`;
+- operators (bitwise `or`/`and`/`xor` on flags), `if/then/else`,
+  `case … of` (labels of any type, several per branch, ranges `1..5`, `else`), `while`,
+  `repeat/until`, `for … to/downto`, `break`, `continue`, `begin/end`, `exit`;
+- `procedure` and `function` declared before the statements, with parameters, `var`
+  parameters (by reference), local `var`, `Result` or the function's name for the
+  value, recursion (64 levels);
+- built-in functions `IntToStr`, `StrToInt`, `StrToIntDef`, `Length`, `UpperCase`,
+  `LowerCase`, `Trim`, `Copy`, `Pos`, `Chr`, `Ord`, `Abs`, `Odd`, `ShowMessage`,
+  `InputQuery`; FTPRush library: `MatchExpr(text, regex)`, `MatchString(text, wildcards)`
+  (case-insensitive, like the transfer filters), `ShellExecuteCommand(program, parameters,
+  folder, flag)` (see *Options › Security*; `flag` is not used).
 
 | Procedures | Properties (read) | Properties (write) |
 |---|---|---|
-| `RushApp.FTP.Login`, `Logout`, `CWD`, `RAW`, `Delete`, `Transfer`, `RemoveQueue`, `EnableSite`, `DisableSite`; `RushApp.DeleteEmptyTabs` (`DeleteEmptyContainers`) | `RushApp.Version`, `Language`, `StartDate`, `DayCount`, `TotalDownloadSize`, `TotalUploadSize`, `TotalFxpSize`, `CurDownloadSize`, `CurUploadSize`, `CurFxpSize`, `DownloadBW`, `UploadBW`, `PoolInfo`, `FTP.Splitter`, `Containers.ContainerCount`, `Containers.ConnectedSiteCount`, `Containers.TransferSiteCount` | `RushApp.FTP.Splitter` |
+| `RushApp.FTP.Login`, `Logout`, `CWD`, `RAW`, `Delete`, `Transfer`, `RemoveQueue`, `EnableSite`, `DisableSite`; `RushApp.DeleteEmptyTabs` (`DeleteEmptyContainers`); `RushApp.UI.Selection.Prepare` | `RushApp.Version`, `Language`, `StartDate`, `DayCount`, `TotalDownloadSize`, `TotalUploadSize`, `TotalFxpSize`, `CurDownloadSize`, `CurUploadSize`, `CurFxpSize`, `DownloadBW`, `UploadBW`, `PoolInfo`, `FTP.Splitter`, `Containers.ContainerCount`, `Containers.ConnectedSiteCount`, `Containers.TransferSiteCount`; `UI.Selection.Count`, `Items[i]` (`Name`, `Size`, `Date`, `Attr`, `Owner`, `Group`, `IsFolder`, `FullPath`), `IsRemoteSide`, `IsFTPConnected`, `FTPName`; `UI.OnSwitchLayout` | `RushApp.FTP.Splitter`, `RushApp.UI.OnSwitchLayout` |
+
+`RushApp.UI.Selection.Prepare` takes the selection of the active panel (the row under the
+cursor when nothing is selected); the other `Selection` properties read what it took.
+`RushApp.UI.OnSwitchLayout := MyProcedure;` runs `MyProcedure` (with or without a `Sender`
+parameter) each time a saved layout is loaded from *View → Layouts*; `:= nil` removes it.
+The procedure runs on its own: the global variables of the script that set it are not
+kept. `RushApp.UI.Bar` and `RushApp.UI.Menu` answer an error: the FTPRush help describes
+no member of them.
 
 Flags handled: `RS_APPEND`, `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`, `RS_DELEMPTYTABS`,
 `RS_DIRDES`, `RS_DIRSRC`, `RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`, `RS_FOLDER`,
 `RS_FULLPATH`, `RS_GHOST`, `RS_INVERT` (`-password`), `RS_LOGIN`, `RS_LOGOUT`, `RS_NOCIRCLE`,
 `RS_NOMKD`, `RS_NOSKIP`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`, `RS_POPUP`, `RS_SORTDATE`,
-`RS_SORTDES`, `RS_SORTSIZE`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`. `RS_CHECKLOGIN` and the
-interactive `InputQuery` are recognised but not supported yet (a message says so).
+`RS_SORTDES`, `RS_SORTSIZE`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`. `RS_CHECKLOGIN` is
+recognised but not supported yet (a message says so).
 
 `RushApp.FTP.Transfer(Handle, SrcList, SrcFolder, SrcItem, DesList, DesFolder, DesItem,
 Flag, FolderAllow, FolderSkip, FileAllow, FileSkip, CompleteFlag, RepeatCount, RetryCount,

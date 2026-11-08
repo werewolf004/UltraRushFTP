@@ -463,6 +463,8 @@ montre les touches en vigueur. Les flèches, `Entrée`, `Échap`, `Tab`, `Ctrl+T
 | Mot de passe maître | aucun | Demandé avant le gestionnaire de sites et les options (une fois par session) et pour déverrouiller *Fichier → Verrouiller*. Seule une empreinte salée PBKDF2-SHA256 est gardée ; les mots de passe des sites restent protégés par Windows (DPAPI). Un mot de passe maître oublié ne se retrouve pas : retirer `master_hash` de `settings.json` |
 | Un seul UltraRushFTP | désactivé | Un second lancement affiche la fenêtre déjà ouverte (pas dans le mode compatibilité FTPRush de la liaison mIRC) |
 | Sauvegarder la configuration chaque jour | désactivé | Au premier lancement du jour, dans `backup` du dossier de données ; 4 gardées |
+| ShellExecuteCommand | Demander à chaque fois | Ce que reçoit un script qui demande à lancer un programme : une question qui montre l'origine du script, le programme, ses paramètres et son dossier (*Le lancer*, *Toujours autoriser ce programme*, *Refuser*) ; *Les lancer sans demander* ; *Ne jamais lancer de programme*. Les scripts évalués par `Invoke` ne peuvent pas demander : ils ne lancent que les programmes autorisés |
+| Programmes toujours autorisés | aucun | Programmes autorisés par *Toujours autoriser ce programme* ; `✕` retire l'autorisation |
 
 ### Sauvegardes
 
@@ -602,23 +604,50 @@ transfert incomplet), `2` arguments invalides.
 ## Scripts (`RushApp`)
 
 Pascal Script comme dans FTPRush v2, exécuté depuis la console *Script*, `-s`,
-`URUSHFTP_SCRIPT` ou mIRC. Langage géré : variables, chaînes, entiers, booléens,
-opérateurs (`or`/`and` bit à bit sur les drapeaux), `if/then/else`, `while`,
-`repeat/until`, `for … to/downto`, `begin/end`, `exit` ; fonctions intégrées `IntToStr`,
-`StrToInt`, `StrToIntDef`, `Length`, `UpperCase`, `LowerCase`, `Trim`, `Copy`, `Pos`,
-`ShowMessage`, `InputQuery`.
+`URUSHFTP_SCRIPT` ou mIRC. Chaque script tourne à côté de l'interface : la fenêtre reste
+utilisable, `InputQuery` ouvre une boîte de saisie et l'attend, et la console affiche
+*Script en cours…* avec un bouton **■ Arrêter** (le script s'arrête à son prochain appel à
+l'application). `Invoke` évalue son expression aussitôt : un `InputQuery` n'y reçoit donc
+pas de réponse.
+
+Langage géré :
+
+- variables (`var a, b;`, types facultatifs et ignorés, ou implicites),
+  `const NOM = valeur;`, chaînes (`'…'`, `#13#10`), entiers (`$1F`), booléens, `nil` ;
+- tableaux : `A := [2, 4, 6]` (à partir de 0), imbriqués `[[…], […]]` lus par `M[0, 2]` ou
+  `M[0][2]` et affectés par `M[1, 1] := x` ; chaînes indexées à partir de 1
+  (`S[1] := 'A'`) ; `x in [1, 2]` ; `SetLength`, `Length`, `Low`, `High` ;
+- opérateurs (`or`/`and`/`xor` bit à bit sur les drapeaux), `if/then/else`,
+  `case … of` (étiquettes de tout type, plusieurs par branche, intervalles `1..5`, `else`),
+  `while`, `repeat/until`, `for … to/downto`, `break`, `continue`, `begin/end`, `exit` ;
+- `procedure` et `function` déclarées avant les instructions, avec paramètres, paramètres
+  `var` (par référence), `var` locales, `Result` ou le nom de la fonction pour la valeur,
+  récursivité (64 niveaux) ;
+- fonctions intégrées `IntToStr`, `StrToInt`, `StrToIntDef`, `Length`, `UpperCase`,
+  `LowerCase`, `Trim`, `Copy`, `Pos`, `Chr`, `Ord`, `Abs`, `Odd`, `ShowMessage`,
+  `InputQuery` ; bibliothèque FTPRush : `MatchExpr(texte, regex)`,
+  `MatchString(texte, jokers)` (sans tenir compte de la casse, comme les filtres de
+  transfert), `ShellExecuteCommand(programme, paramètres, dossier, drapeau)` (voir
+  *Options › Sécurité* ; `drapeau` n'est pas utilisé).
 
 | Procédures | Propriétés (lecture) | Propriétés (écriture) |
 |---|---|---|
-| `RushApp.FTP.Login`, `Logout`, `CWD`, `RAW`, `Delete`, `Transfer`, `RemoveQueue`, `EnableSite`, `DisableSite` ; `RushApp.DeleteEmptyTabs` (`DeleteEmptyContainers`) | `RushApp.Version`, `Language`, `StartDate`, `DayCount`, `TotalDownloadSize`, `TotalUploadSize`, `TotalFxpSize`, `CurDownloadSize`, `CurUploadSize`, `CurFxpSize`, `DownloadBW`, `UploadBW`, `PoolInfo`, `FTP.Splitter`, `Containers.ContainerCount`, `Containers.ConnectedSiteCount`, `Containers.TransferSiteCount` | `RushApp.FTP.Splitter` |
+| `RushApp.FTP.Login`, `Logout`, `CWD`, `RAW`, `Delete`, `Transfer`, `RemoveQueue`, `EnableSite`, `DisableSite` ; `RushApp.DeleteEmptyTabs` (`DeleteEmptyContainers`) ; `RushApp.UI.Selection.Prepare` | `RushApp.Version`, `Language`, `StartDate`, `DayCount`, `TotalDownloadSize`, `TotalUploadSize`, `TotalFxpSize`, `CurDownloadSize`, `CurUploadSize`, `CurFxpSize`, `DownloadBW`, `UploadBW`, `PoolInfo`, `FTP.Splitter`, `Containers.ContainerCount`, `Containers.ConnectedSiteCount`, `Containers.TransferSiteCount` ; `UI.Selection.Count`, `Items[i]` (`Name`, `Size`, `Date`, `Attr`, `Owner`, `Group`, `IsFolder`, `FullPath`), `IsRemoteSide`, `IsFTPConnected`, `FTPName` ; `UI.OnSwitchLayout` | `RushApp.FTP.Splitter`, `RushApp.UI.OnSwitchLayout` |
+
+`RushApp.UI.Selection.Prepare` prend la sélection du panneau actif (la ligne sous le
+curseur quand rien n'est sélectionné) ; les autres propriétés de `Selection` lisent ce
+qu'elle a pris. `RushApp.UI.OnSwitchLayout := MaProcedure;` exécute `MaProcedure` (avec ou
+sans paramètre `Sender`) chaque fois qu'une disposition enregistrée est chargée depuis
+*Affichage → Dispositions* ; `:= nil` la retire. La procédure tourne seule : les variables
+globales du script qui l'a donnée ne sont pas gardées. `RushApp.UI.Bar` et
+`RushApp.UI.Menu` répondent par une erreur : l'aide de FTPRush n'en décrit aucun membre.
 
 Drapeaux gérés : `RS_APPEND`, `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`,
 `RS_DELEMPTYTABS`, `RS_DIRDES`, `RS_DIRSRC`, `RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`,
 `RS_FOLDER`, `RS_FULLPATH`, `RS_GHOST`, `RS_INVERT` (`-motdepasse`), `RS_LOGIN`, `RS_LOGOUT`,
 `RS_NOCIRCLE`, `RS_NOMKD`, `RS_NOSKIP`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`, `RS_POPUP`,
 `RS_SORTDATE`, `RS_SORTDES`, `RS_SORTSIZE`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`.
-`RS_CHECKLOGIN` et l'`InputQuery` interactif sont reconnus mais pas encore pris en charge
-(un message l'indique).
+`RS_CHECKLOGIN` est reconnu mais pas encore pris en charge (un message l'indique).
 
 `RushApp.FTP.Transfer(Handle, SrcList, SrcFolder, SrcItem, DesList, DesFolder, DesItem,
 Flag, FolderAllow, FolderSkip, FileAllow, FileSkip, CompleteFlag, RepeatCount, RetryCount,

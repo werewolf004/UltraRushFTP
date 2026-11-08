@@ -11,7 +11,7 @@ Goal: every feature of FTPRush v2, modernised, with **tabbed** site containers a
 |---|---|---|
 | `urftp-core` | Data model: sites and bookmarks, site book storage, options, queue and queue files, item options of scripts and conditional transfers (`itemopts`), skip list, priorities, "existing file" rules, SFV / MD5 checksums, panel helpers (`browsing`: quick filter, masks, renaming several items, folder comparison, local walks, space used, directory tree, CHMOD modes, dates), addresses and incremented lists (`urls`), imports and exports, master password hash (`master`, PBKDF2 of `ring`), configuration backups (`backup`), DPAPI-protected secrets | forbidden |
 | `urftp-proto` | FTP client, explicit/implicit FTPS, SFTP, FXP, proxies, Ident server, queue engine, speed limiting, site → connection profile conversion | forbidden |
-| `urftp-script` | Interpreter of the FTPRush Pascal Script subset (`RushApp.*`, `RS_*` flags) | forbidden |
+| `urftp-script` | Interpreter of the FTPRush Pascal Script (procedures, arrays, `case`; `RushApp.*`, `RS_*` flags, event handlers) | forbidden |
 | `urftp-i18n` | English and French catalogs (`locales/*.json`), `t!` macro, Windows language detection | forbidden |
 | `urftp-sys` | **The only crate allowed to contain `unsafe`**: mIRC link window (`TfmUltraRush`, or `TfmRush` in compatibility mode) and shared memory (application side of the mIRC protocol), DPAPI, sleep / hibernate / shut down (`power`), free disk space, files copied in Explorer (`CF_HDROP`), clipboard text, the `Ctrl+V` key state, local time, the notification area icon, window flashing and event sounds (`tray`), single instance (`WM_SHOW_APP`), `rushmirc.dll` exports (`mirc-dll` feature) | allowed, audited |
 | `rushmirc` | mIRC DLL (`cdylib`): re-exports `urftp_sys::mirc`, no code of its own | forbidden |
@@ -50,6 +50,11 @@ Declared once in `[workspace.lints]` (root `Cargo.toml`) and inherited by every 
   the interface thread by `urftp-gui::browser`). While idle it sends the anti-idle commands
   of `urftp-proto::keepalive`; when the connection is lost it reconnects and goes back to
   its folder.
+- Each script runs in a thread of its own (`urftp-gui::app::scripting`). Its `RushApp.*`
+  calls travel to the interface thread, which answers them between frames (up to 15 ms per
+  frame for a busy script); `InputQuery` and the confirmation of `ShellExecuteCommand`
+  are dialogs answered later, and Stop makes the next call fail. `Invoke` (mIRC) is
+  evaluated at once on the interface thread.
 - Transfers are run by the queue engine (`urftp-proto::engine`) on a separate multi-thread
   tokio runtime. Each tab has its own `Queue`; the engine keeps a connection pool per site
   and publishes `EngineEvent`s (started, progress, done, skipped, failed…). It pauses

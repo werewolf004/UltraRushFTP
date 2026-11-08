@@ -23,6 +23,11 @@ pub struct Token {
 const KEYWORDS: &[&str] = &[
     "and",
     "begin",
+    "break",
+    "case",
+    "continue",
+    "in",
+    "of",
     "div",
     "do",
     "downto",
