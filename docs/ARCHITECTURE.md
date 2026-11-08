@@ -129,7 +129,9 @@ UltraRushFTP exports them. CI checks that both DLLs (32 and 64-bit) export exact
   end-to-end mIRC test (fake mIRC window ↔ DLL ↔ `TfmRush` server) in `crates/urftp-sys`.
 - `cargo run -p urftp-proto --example dev_server` starts the same FTP server for manual
   tests (`test` / `secret`).
-- `scripts/screenshots.ps1` regenerates the documentation images from demo data.
+- `scripts/screenshots.ps1` regenerates the documentation images from demo data. The
+  application is drawn off screen by wgpu (the ignored test `app::shots::render_screenshot`
+  of `urftp-gui`, with `egui_kittest`): no window opens and nothing takes the focus.
 
 ## Functional reference: FTPRush v2
 

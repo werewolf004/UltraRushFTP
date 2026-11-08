@@ -9,6 +9,11 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The documentation screenshots are drawn off screen: no window opens and nothing takes
+  the focus while they are made. They no longer show the Windows title bar.
+
 ## [0.3.0] - 2026-11-07
 
 Connections and sites (block G): keep alive and reconnection, several hosts per site,

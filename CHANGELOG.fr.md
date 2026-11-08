@@ -10,6 +10,12 @@ la traduction.
 
 ## [Non publié]
 
+### Modifié
+
+- Les captures de la documentation sont dessinées hors écran : aucune fenêtre ne s'ouvre
+  et rien ne prend le focus pendant leur création. Elles ne montrent plus la barre de titre
+  de Windows.
+
 ## [0.3.0] - 2026-11-07
 
 Connexions et sites (bloc G) : maintien de connexion et reconnexion, plusieurs hôtes par

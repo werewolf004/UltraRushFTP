@@ -1,5 +1,6 @@
 //! Graphical interface of UltraRushFTP (egui + egui_dock).
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Released builds have no console; the test binary keeps one (its output is read).
+#![cfg_attr(all(not(debug_assertions), not(test)), windows_subsystem = "windows")]
 
 mod app;
 mod browser;

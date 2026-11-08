@@ -138,7 +138,9 @@ les exporte. La CI vérifie que les deux DLL (32 et 64 bits) exportent exactemen
 - `cargo run -p urftp-proto --example dev_server` démarre le même serveur FTP pour les
   essais manuels (`test` / `secret`).
 - `scripts/screenshots.ps1` régénère les images de la documentation à partir de données de
-  démonstration.
+  démonstration. L'application est dessinée hors écran par wgpu (le test ignoré
+  `app::shots::render_screenshot` de `urftp-gui`, avec `egui_kittest`) : aucune fenêtre ne
+  s'ouvre et rien ne prend le focus.
 
 ## Référence fonctionnelle : FTPRush v2
 

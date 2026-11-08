@@ -3,8 +3,9 @@
 # Everything shown is demo data: the local development server (127.0.0.1, test/secret),
 # fictitious example.com / example.net / example.org sites and a demo folder under
 # target/demo. Nothing from the user's real site book, settings or home folder is used.
-# The application runs with a private IPC window class, so a running FTPRush or
-# UltraRushFTP is never contacted.
+# The application is drawn off screen (wgpu, through an ignored test of urftp-gui): no
+# window opens, nothing comes to the foreground, and the mIRC link window is not created,
+# so a running FTPRush or UltraRushFTP is never contacted.
 #
 #   pwsh scripts/screenshots.ps1 [-Langs en,fr]
 param([string[]] $Langs = @('en', 'fr'))
@@ -12,22 +13,12 @@ $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
 
-cargo build --release --locked -p urftp-gui
 cargo build --locked -p urftp-proto --example dev_server
-
-Add-Type -AssemblyName System.Drawing
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public static class UrftpShot {
-  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
-  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
-  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
-  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
-  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
-}
-"@
-[UrftpShot]::SetProcessDPIAware() | Out-Null
+# The off-screen renderer: test binary of urftp-gui (release, for the transfer speed).
+$built = cargo test --release --locked -p urftp-gui --no-run --message-format=json | ForEach-Object { $_ | ConvertFrom-Json } |
+    Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'UltraRushFTP' -and $_.profile.test -and $_.executable }
+$renderer = @($built)[-1].executable
+if (-not $renderer) { throw 'test binary of urftp-gui not found' }
 
 # ------------------------------------------------------------------ demo server
 $serverLog = Join-Path $env:TEMP "urftp-demo-server-$PID.txt"
@@ -82,46 +73,33 @@ $script = Join-Path $demo 'transfer.pas'
     Set-Content -Encoding utf8NoBOM $script
 
 # ------------------------------------------------------------------ capture
-function Shot([string] $out, [string] $arguments, [hashtable] $envs, [double] $wait, [switch] $KeepQueue) {
+function Shot([string] $out, [string[]] $arguments, [hashtable] $envs, [double] $wait, [switch] $KeepQueue) {
     # The queue left by the previous shot would be offered at startup.
     if (-not $KeepQueue) { Remove-Item -Force "$data/queue.json" -ErrorAction SilentlyContinue }
-    foreach ($k in $envs.Keys) { Set-Item "env:$k" $envs[$k] }
-    $p = Start-Process -FilePath target/release/UltraRushFTP.exe -ArgumentList $arguments -PassThru
+    $all = $envs + @{ URUSHFTP_SHOT_OUT = $out; URUSHFTP_SHOT_ARGS = ($arguments -join "`n"); URUSHFTP_SHOT_WAIT = "$wait"; URUSHFTP_SHOT_HOME = $local }
+    foreach ($k in $all.Keys) { Set-Item "env:$k" $all[$k] }
+    # An image left by a previous run must not pass for this one.
+    Remove-Item -Force $out -ErrorAction SilentlyContinue
     try {
-        Start-Sleep -Milliseconds ([int]($wait * 1000))
-        $p.Refresh()
-        $h = $p.MainWindowHandle
-        if ($h -eq [IntPtr]::Zero) { throw "no window for $out" }
-        [UrftpShot]::SetForegroundWindow($h) | Out-Null
-        Start-Sleep -Milliseconds 600
-        $r = New-Object UrftpShot+RECT
-        [UrftpShot]::GetWindowRect($h, [ref]$r) | Out-Null
-        $bmp = New-Object System.Drawing.Bitmap ($r.R - $r.L), ($r.B - $r.T)
-        $g = [System.Drawing.Graphics]::FromImage($bmp)
-        $hdc = $g.GetHdc()
-        [UrftpShot]::PrintWindow($h, $hdc, 2) | Out-Null
-        $g.ReleaseHdc($hdc)
-        $bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
-        $g.Dispose(); $bmp.Dispose()
+        $log = & $renderer --ignored --exact app::shots::render_screenshot --test-threads 1 2>&1
+        if ($LASTEXITCODE -or -not (Test-Path $out)) { $log | ForEach-Object { Write-Host "    $_" }; throw "capture failed (exit $LASTEXITCODE, renderer $renderer): $out" }
         Write-Host "  $out"
     } finally {
-        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-        foreach ($k in $envs.Keys) { Remove-Item "env:$k" -ErrorAction SilentlyContinue }
+        foreach ($k in $all.Keys) { Remove-Item "env:$k" -ErrorAction SilentlyContinue }
     }
 }
 
 $images = Join-Path $root 'docs/images'
 New-Item -ItemType Directory -Force $images | Out-Null
-$env:URUSHFTP_IPC_CLASS = "TfmRush.UltraRushFTP.Screenshots.$PID"
-$base = "-f`"$data`" -c`"Local demo`""
+$base = @("-f`"$data`"", '-c"Local demo"')
 try {
     foreach ($lang in $Langs) {
         Write-Host "[$lang]"
         $common = @{ URUSHFTP_LANG = $lang }
         Remove-Item -Recurse -Force "$local/Downloads/*" -ErrorAction SilentlyContinue
-        Shot "$images/main.$lang.png" "$base -s`"$script`"" $common 3
+        Shot "$images/main.$lang.png" ($base + "-s`"$script`"") $common 3
         Remove-Item -Recurse -Force "$local/Downloads/*" -ErrorAction SilentlyContinue
-        Shot "$images/main-light.$lang.png" "$base -s`"$script`"" ($common + @{ URUSHFTP_THEME = 'light' }) 3
+        Shot "$images/main-light.$lang.png" ($base + "-s`"$script`"") ($common + @{ URUSHFTP_THEME = 'light' }) 3
         # Queues of two tabs left unfinished: they are offered one by one.
         $item = { param($ss, $sp, $ds, $dp, $size) @{ src_site = $ss; src_path = $sp; dst_site = $ds; dst_path = $dp; is_dir = $false; size = $size; priority = $null; state = 'waiting' } }
         @{ version = 1; tabs = @(
@@ -139,6 +117,5 @@ try {
         }
     }
 } finally {
-    Remove-Item env:URUSHFTP_IPC_CLASS -ErrorAction SilentlyContinue
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
 }

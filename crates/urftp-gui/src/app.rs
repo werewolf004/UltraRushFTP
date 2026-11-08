@@ -34,6 +34,8 @@ use urftp_proto::throttle::RateLimiter;
 
 mod rushapp;
 #[cfg(test)]
+mod shots;
+#[cfg(test)]
 mod ui_tests;
 
 // ====================================================================== model
