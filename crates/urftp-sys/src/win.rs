@@ -76,6 +76,48 @@ pub fn ctrl_v_down() -> bool {
     down(i32::from(VK_CONTROL)) && down(0x56)
 }
 
+/// Number that changes each time the clipboard content changes.
+pub fn clipboard_sequence() -> u32 {
+    // SAFETY: plain query, no pointer involved.
+    unsafe { windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber() }
+}
+
+/// Text of the clipboard (`CF_UNICODETEXT`), when it holds some.
+pub fn clipboard_text() -> Option<String> {
+    use windows_sys::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard};
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+    use windows_sys::Win32::System::Ole::CF_UNICODETEXT;
+
+    let format = u32::from(CF_UNICODETEXT);
+    // SAFETY: plain query of the clipboard formats.
+    if unsafe { IsClipboardFormatAvailable(format) } == 0 {
+        return None;
+    }
+    // SAFETY: a null owner window is allowed; the clipboard is closed below.
+    if unsafe { OpenClipboard(std::ptr::null_mut()) } == 0 {
+        return None;
+    }
+    // SAFETY: the clipboard is open; the handle stays owned by the clipboard and is only
+    // read, between `GlobalLock` and `GlobalUnlock`, until `CloseClipboard`.
+    unsafe {
+        let handle = GetClipboardData(format);
+        let ptr = if handle.is_null() { std::ptr::null_mut() } else { GlobalLock(handle) };
+        let text = if ptr.is_null() {
+            None
+        } else {
+            // At most the size of the block, stopping at the first NUL.
+            let units = GlobalSize(handle) / 2;
+            let slice = std::slice::from_raw_parts(ptr as *const u16, units);
+            let end = slice.iter().position(|&c| c == 0).unwrap_or(units);
+            let s = String::from_utf16_lossy(&slice[..end]);
+            GlobalUnlock(handle);
+            Some(s)
+        };
+        CloseClipboard();
+        text
+    }
+}
+
 /// Local date and time of the computer: (year, month, day, hour, minute, second).
 pub fn local_time() -> (u16, u16, u16, u16, u16, u16) {
     use windows_sys::Win32::System::SystemInformation::GetLocalTime;

@@ -33,6 +33,7 @@ use urftp_i18n::{Lang, language, t};
 use urftp_proto::ident::{IdentConfig, IdentServer};
 use urftp_proto::throttle::RateLimiter;
 
+mod favorites;
 mod fileops;
 mod logs;
 mod raw;
@@ -547,6 +548,8 @@ struct Container {
     condition: Option<ConditionDialog>,
     /// Messages of work done in the background (SFV / MD5 files).
     background: Vec<std::sync::mpsc::Receiver<(LogKind, String)>>,
+    /// Profiles of the addresses queued by "Manual download" (not in the site manager).
+    adhoc: Vec<SiteProfile>,
     /// Dialogs, windows and background work of the file operations.
     tools: fileops::Tools,
 }
@@ -649,6 +652,7 @@ impl Container {
             close_when_done: false,
             condition: None,
             background: Vec::new(),
+            adhoc: Vec::new(),
             tools: fileops::Tools::default(),
         }
     }
@@ -1257,6 +1261,9 @@ pub struct UltraRushApp {
     logs_flushed: std::time::Instant,
     /// "Send RAW command" dialog and the replies received.
     raw: raw::RawDialog,
+    manual: favorites::ManualDownload,
+    /// Clipboard sequence number last looked at (clipboard watch).
+    clipboard_seq: Option<u32>,
 }
 
 /// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
@@ -1314,6 +1321,8 @@ enum Action {
     Op(usize, Op),
     /// "Send RAW command" dialog (`Ctrl+R`).
     RawDialog,
+    /// "Manual download" window.
+    ManualDownload,
     /// Predefined site command `n` of the FTP menu.
     SiteCommand(usize),
     Open(usize, String),
@@ -1422,6 +1431,8 @@ impl UltraRushApp {
             paste_down: false,
             logs_flushed: std::time::Instant::now(),
             raw: raw::RawDialog::default(),
+            manual: favorites::ManualDownload::default(),
+            clipboard_seq: None,
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -1638,32 +1649,7 @@ impl UltraRushApp {
 
     /// Quick-connection profile: a site record without name, with the global options.
     fn quick_profile(&self) -> Option<SiteProfile> {
-        let q = &self.quick;
-        let host = q.host.trim();
-        if host.is_empty() {
-            return None;
-        }
-        let protocol = match q.proto {
-            QuickProto::Ftp => urftp_core::site::SiteProtocol::Ftp,
-            QuickProto::FtpsExplicit => urftp_core::site::SiteProtocol::FtpsExplicit,
-            QuickProto::FtpsImplicit => urftp_core::site::SiteProtocol::FtpsImplicit,
-            QuickProto::Sftp => urftp_core::site::SiteProtocol::Sftp,
-        };
-        let port = q.port.trim().parse().unwrap_or(q.proto.default_port());
-        let user = q.user.trim();
-        let anonymous = user.is_empty() && q.pass.is_empty();
-        let site = Site {
-            name: format!("{}@{host}:{port}", if user.is_empty() { "anonymous" } else { user }),
-            host: host.to_string(),
-            port,
-            protocol,
-            user: if user.is_empty() { "anonymous".into() } else { user.to_string() },
-            password: q.pass.clone(),
-            anonymous,
-            max_transfers: self.options.settings.transfer.quick_connect_transfers,
-            ..Site::default()
-        };
-        Some(self.site_profile(&site))
+        self.quick_site().map(|site| self.site_profile(&site))
     }
 
     /// Connects the right panel of the active tab (like the v2 quick-connect bar).
@@ -1764,6 +1750,7 @@ impl UltraRushApp {
     }
 
     fn connect_site(&mut self, site: Site, variant: sites::LoginVariant, ctx: &egui::Context) {
+        self.note_recent(site.id, ctx);
         let profile = self.site_profile(&site).with_login_variant(variant.ghost, variant.quiet);
         let remote = (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone());
         self.connect_profile(profile, Some(site.id), remote, ctx);
@@ -2180,6 +2167,7 @@ impl UltraRushApp {
     /// Connects panel `side` of the active tab to a site record (connection bar and menu of
     /// the panel); the local folder of the site goes to the other panel when it is local.
     fn connect_site_in(&mut self, site: Site, variant: sites::LoginVariant, side: usize, ctx: &egui::Context) {
+        self.note_recent(site.id, ctx);
         let profile = self.site_profile(&site).with_login_variant(variant.ghost, variant.quiet);
         let remote = (!site.remote_dir.is_empty()).then(|| site.remote_dir.clone());
         let tab = self.active;
@@ -2270,6 +2258,10 @@ impl UltraRushApp {
                     self.new_tab();
                     ui.close();
                 }
+                if ui.button(t!("fav.manual")).clicked() {
+                    actions.push(Action::ManualDownload);
+                    ui.close();
+                }
                 if ui.button(t!("menu.options")).clicked() {
                     self.options.open = true;
                     ui.close();
@@ -2339,6 +2331,10 @@ impl UltraRushApp {
                 self.options.open = !self.options.open;
             }
             ui.separator();
+            let mut fav = Vec::new();
+            self.favorites_menu(ui, &mut fav);
+            actions.append(&mut fav);
+            ui.separator();
             ui.label("⚡");
             let before = self.quick.proto;
             let combo = egui::ComboBox::from_id_salt("proto").selected_text(self.quick.proto.label()).width(120.0).show_ui(ui, |ui| {
@@ -2366,6 +2362,7 @@ impl UltraRushApp {
             if theme::primary_button(ui, t!("quick.connect")).clicked() || enter {
                 self.quick_connect(ui.ctx());
             }
+            self.add_quick_button(ui);
         });
         ui.add_space(4.0);
         actions
@@ -2487,7 +2484,7 @@ impl UltraRushApp {
         let extra = self.queue_site_profiles(self.active);
         let mut scripts = Vec::new();
         let mut ops = Vec::new();
-        let (mut raw_dialog, mut site_commands) = (false, Vec::new());
+        let (mut raw_dialog, mut site_commands, mut manual) = (false, Vec::new(), false);
         let (mut connects, mut reconnects, mut open_sites) = (Vec::new(), Vec::new(), false);
         let clear_on_logout = self.options.settings.transfer.clear_queue_on_logout;
         // Queue file: Some(true) = save, Some(false) = load (file dialog after the loop).
@@ -2497,6 +2494,7 @@ impl UltraRushApp {
             match a {
                 Action::Op(side, op) => ops.push((side, op)),
                 Action::RawDialog => raw_dialog = true,
+                Action::ManualDownload => manual = true,
                 Action::SiteCommand(i) => site_commands.push(i),
                 Action::RunScript => scripts.push(false),
                 Action::Invoke => scripts.push(true),
@@ -2648,6 +2646,9 @@ impl UltraRushApp {
         if raw_dialog {
             self.raw.open_with(None);
         }
+        if manual {
+            self.open_manual(None);
+        }
         for i in site_commands {
             self.site_command(i);
         }
@@ -2715,7 +2716,10 @@ impl UltraRushApp {
         let Some(t) = self.tabs.get(tab) else { return Vec::new() };
         let names: BTreeSet<String> =
             t.queue.lock().items().iter().flat_map(|i| [i.src.site.clone(), i.dst.site.clone()]).flatten().collect();
-        names.iter().filter_map(|n| self.sites.book.find_by_name(n)).map(|s| self.site_profile(s)).collect()
+        let mut v: Vec<SiteProfile> = names.iter().filter_map(|n| self.sites.book.find_by_name(n)).map(|s| self.site_profile(s)).collect();
+        let known: BTreeSet<String> = v.iter().map(|p| p.name.clone()).collect();
+        v.extend(t.adhoc.iter().filter(|p| names.contains(&p.name) && !known.contains(&p.name)).cloned());
+        v
     }
 
     /// Keyboard shortcuts. Application shortcuts work everywhere outside dialogs; the file
@@ -3135,6 +3139,8 @@ impl eframe::App for UltraRushApp {
         self.prompt_dialog(&ctx);
         self.tools_ui(&ctx);
         self.raw_dialog_window(&ctx);
+        self.manual_window(&ctx);
+        self.watch_clipboard(&ctx);
         self.saved_queue_dialog(&ctx);
         self.trust_dialog(&ctx);
         self.shortcuts_window(&ctx);

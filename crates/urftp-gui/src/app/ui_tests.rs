@@ -1207,3 +1207,29 @@ fn raw_dialog_opens_with_ctrl_r_and_site_commands_fill_it() {
     assert_eq!(ui.app().send_raw("SITE WHO", super::raw::RawTarget::All), 0);
     assert!(ui.app().tabs[0].log.iter().any(|e| e.text == t!("raw.no_connection")));
 }
+
+#[test]
+fn recent_sites_quick_site_and_manual_download() {
+    let mut ui = Ui::start(Lang::Fr, true);
+    let id = connect_left_panel(&mut ui, "Recent site");
+    assert_eq!(ui.app().options.settings.recent_sites.first(), Some(&id), "the connected site comes first");
+
+    ui.app().quick.host = "ftp.example.org".into();
+    ui.app().quick.user = "bob".into();
+    ui.run();
+    ui.harness.get_by_label(&t!("fav.add_quick")).click();
+    ui.run();
+    assert!(ui.app().sites.book.find_by_name("bob@ftp.example.org:21").is_some(), "quick connection saved as a site");
+
+    // A port nobody listens on: the queue fails, but the items and their site are there.
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let target = scratch().join("manual");
+    let ctx = ui.harness.ctx.clone();
+    let n = ui.app().queue_addresses(&format!("ftp://127.0.0.1:{port}/pub/f[1-3].bin"), &target, &ctx);
+    assert_eq!(n, 3);
+    let tab = &ui.app().tabs[0];
+    let site = format!("anonymous@127.0.0.1:{port}");
+    assert!(tab.adhoc.iter().any(|p| p.name == site), "profile kept for the engine");
+    let items = tab.queue.lock().items().iter().map(|i| (i.src.site.clone().unwrap_or_default(), i.src.path.clone())).collect::<Vec<_>>();
+    assert!(items.contains(&(site.clone(), "/pub/f2.bin".into())), "{items:?}");
+}

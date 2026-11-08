@@ -912,5 +912,22 @@
   "options.ui_command_new": "Nouvelle commande",
   "options.ui_commands_hint": "Une commande FTP par ligne. %1 est un paramètre : la commande s'ouvre alors dans la boîte RAW pour être complétée.",
   "shortcuts.k_ctrl_r": "Ctrl+R",
-  "shortcuts.ctrl_r": "Envoyer une commande RAW"
+  "shortcuts.ctrl_r": "Envoyer une commande RAW",
+  "fav.button": "★ Favoris ▾",
+  "fav.hint": "Sites récents et tous les sites du gestionnaire (panneau actif)",
+  "fav.recent": "Récents",
+  "fav.no_recent": "Aucun site connecté pour l'instant",
+  "fav.manual": "Téléchargement manuel…",
+  "fav.add_quick": "Ajouter cette connexion rapide au gestionnaire de sites",
+  "fav.site_added": "{site} ajouté au gestionnaire de sites.",
+  "fav.manual_title": "Téléchargement manuel",
+  "fav.manual_urls": "Adresses (une par ligne)",
+  "fav.manual_hint": "ftp://utilisateur:motdepasse@hôte:port/chemin, ftps://, ftpsi://, sftp:// ; un chemin terminé par / est un dossier. [1-12] ou [01-12] fait une liste : fichier[01-12].rar.",
+  "fav.manual_target": "Dans le dossier",
+  "fav.manual_count": "{n} élément(s) à télécharger",
+  "fav.manual_bad": "Pas une adresse : {line}",
+  "fav.manual_queue": "Ajouter à la file et démarrer",
+  "options.ui_clipboard_section": "Presse-papiers",
+  "options.ui_watch_clipboard": "Les adresses FTP copiées dans le presse-papiers ouvrent le Téléchargement manuel",
+  "options.ui_clipboard_auto": "Les mettre en file aussitôt, vers le panneau local de l'onglet"
 }

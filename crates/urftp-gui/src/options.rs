@@ -681,6 +681,10 @@ pub(crate) fn interface_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::Inte
         theme::grid_row(ui, t!("options.ui_status_format"), theme::single_line(&mut s.status_format).desired_width(260.0));
     });
     ui.label(RichText::new(t!("options.ui_status_hint")).weak());
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("options.ui_clipboard_section")).strong());
+    ui.checkbox(&mut s.watch_clipboard, t!("options.ui_watch_clipboard"));
+    ui.add_enabled(s.watch_clipboard, egui::Checkbox::new(&mut s.clipboard_auto, t!("options.ui_clipboard_auto")));
 }
 
 /// Predefined site commands of the FTP menu ("Command designer").

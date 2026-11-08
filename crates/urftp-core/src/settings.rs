@@ -494,6 +494,8 @@ pub struct Settings {
     pub interface: InterfaceSettings,
     /// Predefined commands of the FTP menu ("Command designer").
     pub site_commands: Vec<SiteCommand>,
+    /// Sites of the site manager last connected, most recent first.
+    pub recent_sites: Vec<u64>,
 }
 
 /// A predefined command: one FTP command per line; `%1` is a parameter typed before
@@ -540,6 +542,10 @@ pub struct InterfaceSettings {
     /// Text of the progress bar of the status bar: `%p` percent, `%b` bytes, `%s` speed,
     /// `%e` time left, `%c` items.
     pub status_format: String,
+    /// FTP addresses copied to the clipboard open "Manual download".
+    pub watch_clipboard: bool,
+    /// ... and are queued at once, into the local panel of the tab.
+    pub clipboard_auto: bool,
 }
 
 impl Default for InterfaceSettings {
@@ -551,6 +557,8 @@ impl Default for InterfaceSettings {
             log_to_disk: false,
             log_dir: String::new(),
             status_format: "%p · %b · %s · %e".into(),
+            watch_clipboard: false,
+            clipboard_auto: false,
         }
     }
 }
@@ -728,6 +736,7 @@ impl Default for Settings {
             browse: BrowseSettings::default(),
             interface: InterfaceSettings::default(),
             site_commands: default_site_commands(),
+            recent_sites: Vec::new(),
         }
     }
 }

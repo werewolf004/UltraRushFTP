@@ -912,5 +912,22 @@
   "options.ui_command_new": "New command",
   "options.ui_commands_hint": "One FTP command per line. %1 is a parameter: the command then opens in the RAW dialog to be completed.",
   "shortcuts.k_ctrl_r": "Ctrl+R",
-  "shortcuts.ctrl_r": "Send RAW command"
+  "shortcuts.ctrl_r": "Send RAW command",
+  "fav.button": "★ Favourites ▾",
+  "fav.hint": "Recent sites and every site of the site manager (active panel)",
+  "fav.recent": "Recent",
+  "fav.no_recent": "No site connected yet",
+  "fav.manual": "Manual download…",
+  "fav.add_quick": "Add this quick connection to the site manager",
+  "fav.site_added": "{site} added to the site manager.",
+  "fav.manual_title": "Manual download",
+  "fav.manual_urls": "Addresses (one per line)",
+  "fav.manual_hint": "ftp://user:password@host:port/path, ftps://, ftpsi://, sftp://; a path ending with / is a folder. [1-12] or [01-12] makes a list: file[01-12].rar.",
+  "fav.manual_target": "Into the folder",
+  "fav.manual_count": "{n} item(s) to download",
+  "fav.manual_bad": "Not an address: {line}",
+  "fav.manual_queue": "Add to the queue and start",
+  "options.ui_clipboard_section": "Clipboard",
+  "options.ui_watch_clipboard": "FTP addresses copied to the clipboard open Manual download",
+  "options.ui_clipboard_auto": "Queue them at once, into the local panel of the tab"
 }
