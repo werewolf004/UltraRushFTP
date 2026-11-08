@@ -80,6 +80,10 @@ pub struct SiteManager {
     /// Sites to test, picked up by the application which owns the runtime.
     probe_request: Vec<Site>,
     pub probes: Probes,
+    /// Every site in one sortable list instead of the folder tree.
+    list_mode: bool,
+    /// Column the list is sorted by (0 name, 1 host, 2 protocol, 3 folder).
+    list_sort: usize,
 }
 
 /// Site books of other clients present on this machine.
@@ -122,6 +126,8 @@ impl SiteManager {
             connect: None,
             probe_request: Vec::new(),
             probes: Probes::default(),
+            list_mode: false,
+            list_sort: 0,
         }
     }
 
@@ -217,11 +223,15 @@ impl SiteManager {
                 ui.separator();
                 ui.horizontal_top(|ui| {
                     ui.vertical(|ui| {
-                        ui.set_width(260.0);
+                        ui.set_width(if self.list_mode { 420.0 } else { 260.0 });
                         egui::ScrollArea::vertical().id_salt("site-tree").max_height(ui.available_height() - 4.0).show(ui, |ui| {
                             let mut clicked = None;
-                            let probes = self.probes.lock().clone();
-                            tree(ui, &self.book.root, &mut Vec::new(), &self.selection, &probes, &mut clicked);
+                            if self.list_mode {
+                                self.list(ui, &mut clicked);
+                            } else {
+                                let probes = self.probes.lock().clone();
+                                tree(ui, &self.book.root, &mut Vec::new(), &self.selection, &probes, &mut clicked);
+                            }
                             if let Some(sel) = clicked {
                                 self.selection = sel;
                             }
@@ -289,7 +299,7 @@ impl SiteManager {
                     ui.close();
                     if let Some(p) = rfd::FileDialog::new()
                         .set_title(t!("sites.import_dialog"))
-                        .add_filter(t!("sites.import_filter"), &["xml", "json", "ftp"])
+                        .add_filter(t!("sites.import_filter"), &["xml", "json", "ftp", "txt"])
                         .add_filter(t!("sites.all_files"), &["*"])
                         .pick_file()
                     {
@@ -308,6 +318,25 @@ impl SiteManager {
                     }
                 }
             });
+            ui.menu_button(t!("sites.export"), |ui| {
+                for f in urftp_core::export::ExportFormat::ALL {
+                    let label = match f {
+                        urftp_core::export::ExportFormat::Text => t!("sites.export_text"),
+                        urftp_core::export::ExportFormat::Csv => t!("sites.export_csv"),
+                        urftp_core::export::ExportFormat::Html => t!("sites.export_html"),
+                        urftp_core::export::ExportFormat::FtpRushXml => t!("sites.export_xml"),
+                    };
+                    if ui.button(label).clicked() {
+                        ui.close();
+                        self.export(f);
+                    }
+                }
+                ui.label(RichText::new(t!("sites.export_note")).weak());
+            });
+            let mode = if self.list_mode { t!("sites.tree_mode") } else { t!("sites.list_mode") };
+            if ui.button(mode).clicked() {
+                self.list_mode = !self.list_mode;
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Selection::Site(id) = self.selection {
                     let enabled = self.book.find(id).is_some_and(|s| s.enabled && !s.host.trim().is_empty());
@@ -321,6 +350,66 @@ impl SiteManager {
                 }
                 ui.label(RichText::new(t!("sites.count", n = self.book.root.site_count())).weak());
             });
+        });
+    }
+
+    /// Writes the sites of the selected folder (or of every folder) to a file, without
+    /// passwords.
+    fn export(&mut self, format: urftp_core::export::ExportFormat) {
+        let path = match &self.selection {
+            Selection::Group(p) => p.clone(),
+            Selection::Site(_) => Vec::new(),
+        };
+        let Some(group) = self.book.root.group(&path).cloned() else { return };
+        let Some(file) = rfd::FileDialog::new()
+            .set_title(t!("sites.export"))
+            .set_file_name(format!("sites.{}", format.extension()))
+            .add_filter(format.extension(), &[format.extension()])
+            .save_file()
+        else {
+            return;
+        };
+        let text = urftp_core::export::export(&group, format);
+        self.report = Some(match std::fs::write(&file, text) {
+            Ok(()) => {
+                Report { title: t!("sites.export_done", n = group.site_count()), lines: vec![file.display().to_string()], error: false }
+            }
+            Err(e) => Report { title: t!("sites.export_failed"), lines: vec![format!("{}: {e}", file.display())], error: true },
+        });
+    }
+
+    /// Every site in one list (list mode), sortable by clicking a column.
+    fn list(&mut self, ui: &mut egui::Ui, clicked: &mut Option<Selection>) {
+        let mut rows: Vec<(String, Site)> = self.book.all_sites().into_iter().map(|(g, s)| (g.join(" / "), s.clone())).collect();
+        let key = |r: &(String, Site)| match self.list_sort {
+            1 => r.1.host.to_lowercase(),
+            2 => proto_label(r.1.protocol),
+            3 => r.0.to_lowercase(),
+            _ => r.1.name.to_lowercase(),
+        };
+        rows.sort_by_key(key);
+        egui::Grid::new("site-list").num_columns(4).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+            for (i, k) in ["common.name", "common.host", "common.type", "sites.list_folder"].iter().enumerate() {
+                let text = format!("{}{}", urftp_i18n::text(k), if self.list_sort == i { " ⏶" } else { "" });
+                if ui
+                    .add(egui::Label::new(RichText::new(text).strong()).sense(egui::Sense::click()))
+                    .on_hover_text(t!("files.sort"))
+                    .clicked()
+                {
+                    self.list_sort = i;
+                }
+            }
+            ui.end_row();
+            for (folder, s) in &rows {
+                let selected = self.selection == Selection::Site(s.id);
+                if ui.selectable_label(selected, &s.name).clicked() {
+                    *clicked = Some(Selection::Site(s.id));
+                }
+                ui.label(format!("{}:{}", s.host, s.port));
+                ui.label(proto_label(s.protocol));
+                ui.label(RichText::new(folder).weak());
+                ui.end_row();
+            }
         });
     }
 

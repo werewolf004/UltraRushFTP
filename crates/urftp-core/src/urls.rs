@@ -104,6 +104,29 @@ pub fn parse_url(text: &str) -> Option<FtpUrl> {
     Some(FtpUrl { scheme, user, password, port: port.unwrap_or(scheme.default_port()), host, path: unescape(path) })
 }
 
+/// Site record of an address: named after its login and host, folder kept.
+pub fn site_of_url(u: &FtpUrl) -> crate::site::Site {
+    use crate::site::SiteProtocol;
+    let user = if u.user.is_empty() { "anonymous".to_string() } else { u.user.clone() };
+    let dir = u.path.trim_end_matches('/');
+    crate::site::Site {
+        name: format!("{user}@{}:{}", u.host, u.port),
+        host: u.host.clone(),
+        port: u.port,
+        protocol: match u.scheme {
+            UrlScheme::Ftp => SiteProtocol::Ftp,
+            UrlScheme::FtpsExplicit => SiteProtocol::FtpsExplicit,
+            UrlScheme::FtpsImplicit => SiteProtocol::FtpsImplicit,
+            UrlScheme::Sftp => SiteProtocol::Sftp,
+        },
+        anonymous: u.user.is_empty() && u.password.is_empty(),
+        user,
+        password: u.password.clone(),
+        remote_dir: dir.to_string(),
+        ..crate::site::Site::default()
+    }
+}
+
 /// Every address of a text (one per line or separated by spaces), for the clipboard.
 pub fn find_urls(text: &str) -> Vec<String> {
     text.split_whitespace()

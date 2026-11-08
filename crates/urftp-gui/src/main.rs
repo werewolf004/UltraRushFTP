@@ -41,6 +41,15 @@ fn run() -> Result<(), StartupError> {
     {
         urftp_core::sitestore::set_data_dir(dir);
     }
+    // Single instance: the window already open is shown instead (not in the FTPRush
+    // compatibility mode, where the link window may be FTPRush's own).
+    let settings = urftp_core::settings::Settings::load(&urftp_core::settings::Settings::default_path()).unwrap_or_default();
+    if settings.single_instance && !settings.ftprush_dll_window && urftp_sys::server::show_running_instance() {
+        return Ok(());
+    }
+    if settings.backup_daily {
+        app::daily_backup();
+    }
     // The network runs on a separate tokio runtime; the interface never blocks.
     let runtime =
         tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("urftp-net").build().map_err(StartupError::Runtime)?;

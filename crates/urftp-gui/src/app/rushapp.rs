@@ -195,6 +195,7 @@ impl UltraRushApp {
                     let r = self.run_script(&source, ctx);
                     self.note_ipc("RushCommand", r);
                 }
+                Request::Show => self.show_main_window(ctx),
             }
         }
     }

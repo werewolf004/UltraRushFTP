@@ -20,6 +20,8 @@ pub enum ImportFormat {
     FtpRush3,
     FtpRush2,
     FlashFxp,
+    /// One address per line (`ftp://user:password@host:port/folder`).
+    PlainText,
 }
 
 impl std::fmt::Display for ImportFormat {
@@ -35,6 +37,7 @@ impl ImportFormat {
             ImportFormat::FtpRush3 => "FTPRush v3",
             ImportFormat::FtpRush2 => "FTPRush v1/v2",
             ImportFormat::FlashFxp => "FlashFXP",
+            ImportFormat::PlainText => "text",
         }
     }
 }
@@ -115,9 +118,27 @@ pub fn detect(file_name: &str, text: &str) -> Option<ImportFormat> {
         Some(ImportFormat::FlashFxp)
     } else if name.contains("rushsite") || lower.contains("ftprush") || lower.contains("rushsite") {
         Some(ImportFormat::FtpRush2)
+    } else if is_address_list(text) {
+        Some(ImportFormat::PlainText)
     } else {
         None
     }
+}
+
+/// Every non-empty line is an address.
+fn is_address_list(text: &str) -> bool {
+    let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty()).peekable();
+    lines.peek().is_some() && lines.all(|l| crate::urls::parse_url(l).is_some())
+}
+
+/// One site per address; the password of an address is kept.
+fn plain_text(text: &str) -> ImportResult {
+    let mut group = SiteGroup::new("Import text");
+    for u in text.lines().filter_map(crate::urls::parse_url) {
+        group.sites.push(crate::urls::site_of_url(&u));
+    }
+    let warnings = if group.sites.is_empty() { vec![ImportWarning::NoSites] } else { Vec::new() };
+    ImportResult { format: ImportFormat::PlainText, group, warnings }
 }
 
 /// Imports the text of a file.
@@ -128,6 +149,7 @@ pub fn import_text(file_name: &str, text: &str) -> Result<ImportResult, ImportEr
         ImportFormat::FtpRush3 => ftprush3::import(text),
         ImportFormat::FtpRush2 => ftprush2::import(text),
         ImportFormat::FlashFxp => flashfxp::import(text),
+        ImportFormat::PlainText => Ok(plain_text(text)),
     }
 }
 
@@ -167,6 +189,36 @@ mod tests {
         assert_eq!(detect("export.xml", "<SITES><A NAME=\"a\" UID=\"01\"/></SITES>"), Some(ImportFormat::FtpRush2));
         assert_eq!(detect("export.xml", "<SITES VERSION=\"1.3\"><A><ADDRESS>h</ADDRESS></A></SITES>"), Some(ImportFormat::FlashFxp));
         assert!(import_text("RushSite.xml", "<SITES/>").unwrap().group.sites.is_empty());
+        assert_eq!(
+            detect(
+                "list.txt",
+                "ftp://a/
+
+ sftp://u@b:2222/home
+"
+            ),
+            Some(ImportFormat::PlainText)
+        );
+        assert_eq!(
+            detect(
+                "list.txt",
+                "ftp://a/
+not an address"
+            ),
+            None
+        );
+        let r = import_text(
+            "list.txt",
+            "ftp://u:p@a.example:2121/x
+sftp://b/",
+        )
+        .unwrap();
+        let a = &r.group.sites[0];
+        assert_eq!(
+            (a.host.as_str(), a.port, a.user.as_str(), a.password.as_str(), a.remote_dir.as_str()),
+            ("a.example", 2121, "u", "p", "/x")
+        );
+        assert_eq!(r.group.sites[1].protocol, crate::site::SiteProtocol::Sftp);
     }
 
     #[test]

@@ -52,6 +52,8 @@ pub enum Request {
         /// Pascal Script source.
         source: String,
     },
+    /// Another UltraRushFTP was started: show the window instead.
+    Show,
 }
 
 /// Failure to start the `TfmRush` window.
@@ -82,6 +84,23 @@ pub fn window_exists(class: &str) -> bool {
     // SAFETY: `class` is a valid NUL-terminated UTF-16 string; a null title matches any.
     let h = unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) };
     !h.is_null()
+}
+
+/// Single instance: asks the UltraRushFTP already running (its own `TfmUltraRush` window,
+/// never FTPRush's) to show its window. Returns `false` when none runs.
+pub fn show_running_instance() -> bool {
+    let class = wide(crate::OWN_WINDOW_CLASS);
+    // SAFETY: `class` is a valid NUL-terminated UTF-16 string; a null title matches any.
+    let h = unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) };
+    if h.is_null() {
+        return false;
+    }
+    // SAFETY: plain calls; the running instance may then bring its window to the front.
+    unsafe {
+        windows_sys::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(windows_sys::Win32::UI::WindowsAndMessaging::ASFW_ANY);
+        PostMessageW(h, crate::WM_SHOW_APP, 0, 0);
+    }
+    true
 }
 
 /// Creates the window on the current thread, with `handler` stored in its user data.
@@ -240,6 +259,13 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             }
             // SAFETY: default processing with the received arguments.
             unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+        }
+        crate::WM_SHOW_APP => {
+            // SAFETY: as for `WM_EXCHANGE`.
+            if let Some(h) = unsafe { handler(hwnd) } {
+                h(Request::Show);
+            }
+            1
         }
         WM_EXCHANGE => {
             // SAFETY: `hwnd` is our window, between WM_NCCREATE and WM_DESTROY.

@@ -9,6 +9,8 @@ pub(super) enum Confirm {
     CloseTab(usize),
     /// Queue removals held back (`QueueRemove`, `QueueClearAll`).
     Queue(Vec<Action>),
+    /// Restore this backup (the application then stops).
+    Restore(PathBuf),
 }
 
 impl Container {
@@ -83,6 +85,11 @@ impl UltraRushApp {
                     .sum::<usize>();
                 (t!("confirm.queue_title"), t!("confirm.queue_text", n = n), t!("confirm.remove"))
             }
+            Confirm::Restore(p) => (
+                t!("backup.confirm_title"),
+                t!("backup.confirm_text", name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()),
+                t!("backup.confirm_yes"),
+            ),
         };
         let mut answer = None;
         egui::Modal::new(egui::Id::new("confirm")).show(ctx, |ui| {
@@ -118,6 +125,7 @@ impl UltraRushApp {
                 self.queue_remove_confirmed = true;
                 self.apply(actions, ctx);
             }
+            Confirm::Restore(p) => self.restore_backup(&p),
         }
     }
 }

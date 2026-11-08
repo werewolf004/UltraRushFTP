@@ -1310,3 +1310,42 @@ fn layouts_are_saved_and_given_to_new_tabs_and_sort_options_apply() {
     super::look::configure(&urftp_core::settings::InterfaceSettings::default());
     assert_eq!(rows.first().map(String::as_str), Some("beta.bin"), "{rows:?}");
 }
+
+#[test]
+fn master_password_guards_the_site_manager_and_the_lock() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.app().options.settings.master_hash = urftp_core::master::hash_password("open sesame").unwrap();
+    ui.app().sites.open = true;
+    ui.run();
+    assert!(!ui.app().sites.open && ui.has_label(&t!("lock.prompt")), "the password is asked first");
+    ui.app().unlock.as_mut().unwrap().password = "wrong".into();
+    ui.run();
+    ui.harness.get_by_label(&t!("lock.unlock")).click();
+    ui.run();
+    assert!(ui.has_label(&t!("lock.wrong")) && !ui.app().sites.open);
+    ui.app().unlock.as_mut().unwrap().password = "open sesame".into();
+    ui.run();
+    ui.harness.get_by_label(&t!("lock.unlock")).click();
+    ui.run();
+    assert!(ui.app().sites.open, "unlocked: the site manager opens");
+
+    // List mode of the site manager, with every control named.
+    ui.harness.get_by_label(&t!("sites.list_mode")).click();
+    ui.run();
+    assert_all_named(&ui, "site manager, list mode");
+    ui.app().sites.open = false;
+    ui.run();
+
+    // Locked window: no Cancel, the password alone brings it back.
+    let ctx = ui.harness.ctx.clone();
+    ui.app().lock(&ctx);
+    ui.run();
+    assert!(ui.has_label(&t!("lock.locked")) && !ui.has_label(&t!("common.cancel")));
+    ui.key_with(Modifiers::COMMAND, Key::T);
+    assert_eq!(ui.app().tabs.len(), 1, "no shortcut while locked");
+    ui.app().unlock.as_mut().unwrap().password = "open sesame".into();
+    ui.run();
+    ui.harness.get_by_label(&t!("lock.unlock")).click();
+    ui.run();
+    assert!(ui.app().unlock.is_none());
+}

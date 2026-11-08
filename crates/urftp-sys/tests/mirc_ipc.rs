@@ -85,6 +85,7 @@ fn invoke_script_and_raw_callback_round_trip() {
         Request::Command { source } => {
             let _ = tx.send((source, None, true));
         }
+        Request::Show => {}
     })
     .expect("serveur TfmRush");
 

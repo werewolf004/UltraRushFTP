@@ -39,6 +39,8 @@ pub const SHARED_MAP_SIZE: usize = 4096;
 pub const WM_USER: u32 = 0x0400;
 /// Message sent by `Invoke`.
 pub const WM_EXCHANGE: u32 = WM_USER + 300;
+/// Sent by a second UltraRushFTP to the running one (single instance): show the window.
+pub const WM_SHOW_APP: u32 = WM_USER + 301;
 /// mIRC message running the command stored in the `mIRC` shared memory.
 pub const WM_MCOMMAND: u32 = WM_USER + 200;
 

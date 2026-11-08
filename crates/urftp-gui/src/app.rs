@@ -41,6 +41,9 @@ mod logs;
 mod look;
 mod notify;
 mod raw;
+mod security;
+
+pub(crate) use security::daily_backup;
 mod rushapp;
 #[cfg(test)]
 mod shots;
@@ -1300,6 +1303,10 @@ pub struct UltraRushApp {
     layout_name: Option<String>,
     /// The zoom of the options was applied (first frame).
     zoom_applied: bool,
+    /// The master password was given in this session.
+    unlocked: bool,
+    /// Master password dialog (site manager, options, locked window).
+    unlock: Option<security::Unlock>,
 }
 
 /// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
@@ -1463,6 +1470,8 @@ impl UltraRushApp {
             layouts: look::load_layouts(),
             layout_name: None,
             zoom_applied: false,
+            unlocked: false,
+            unlock: None,
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -2298,6 +2307,9 @@ impl UltraRushApp {
                     actions.push(Action::ManualDownload);
                     ui.close();
                 }
+                ui.separator();
+                self.backup_menu(ui);
+                ui.separator();
                 if ui.button(t!("menu.options")).clicked() {
                     self.options.open = true;
                     ui.close();
@@ -2767,7 +2779,7 @@ impl UltraRushApp {
     fn keyboard(&mut self, ctx: &egui::Context) -> Vec<Action> {
         use input::Command as C;
         let tab = &self.tabs[self.active];
-        if tab.prompt.is_some() || tab.trust.is_some() || self.confirm.is_some() {
+        if tab.prompt.is_some() || tab.trust.is_some() || self.confirm.is_some() || self.unlock.is_some() {
             return Vec::new();
         }
         use egui::{Key, Modifiers};
@@ -3204,6 +3216,8 @@ impl eframe::App for UltraRushApp {
         self.queue_info_window(&ctx);
         self.queue_end_dialog(&ctx);
         self.conditional_dialog(&ctx);
+        self.guard_windows();
+        self.unlock_dialog(&ctx);
         self.sites.show(&ctx, &self.options.settings);
         if self.options.show(&ctx) {
             self.apply_settings(&ctx);

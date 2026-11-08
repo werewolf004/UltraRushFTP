@@ -34,10 +34,11 @@ pub(crate) enum Page {
     Interface,
     Shortcuts,
     Notifications,
+    Security,
 }
 
 impl Page {
-    pub(crate) const ALL: [Page; 16] = [
+    pub(crate) const ALL: [Page; 17] = [
         Page::General,
         Page::Transfers,
         Page::Speed,
@@ -54,6 +55,7 @@ impl Page {
         Page::Interface,
         Page::Shortcuts,
         Page::Notifications,
+        Page::Security,
     ];
 
     pub(crate) fn label(self) -> String {
@@ -74,6 +76,7 @@ impl Page {
             Page::Interface => t!("options.page_interface"),
             Page::Shortcuts => t!("options.page_shortcuts"),
             Page::Notifications => t!("options.page_notifications"),
+            Page::Security => t!("options.page_security"),
         }
     }
 }
@@ -87,6 +90,18 @@ pub struct OptionsWindow {
     /// Status message of the Ident server (shown on the Ident page).
     pub ident_status: Option<(String, bool)>,
     error: Option<String>,
+    /// Fields of the master password (never stored).
+    master: MasterForm,
+}
+
+/// Master password fields of the Security page.
+#[derive(Default)]
+struct MasterForm {
+    current: String,
+    new: String,
+    again: String,
+    /// Result of the last change: (message, error?).
+    message: Option<(String, bool)>,
 }
 
 impl OptionsWindow {
@@ -98,7 +113,16 @@ impl OptionsWindow {
         // Development: `URUSHFTP_OPEN_OPTIONS=<page>` (0 to 10) opens the window on that page.
         let open_on = std::env::var("URUSHFTP_OPEN_OPTIONS").ok().and_then(|v| v.parse::<usize>().ok());
         let page = open_on.and_then(|i| Page::ALL.get(i).copied()).unwrap_or(Page::General);
-        Self { open: open_on.is_some(), settings, page, dirty: false, last_change: 0.0, ident_status: None, error }
+        Self {
+            open: open_on.is_some(),
+            settings,
+            page,
+            dirty: false,
+            last_change: 0.0,
+            ident_status: None,
+            error,
+            master: MasterForm::default(),
+        }
     }
 
     pub fn save(&mut self) {
@@ -265,6 +289,7 @@ impl OptionsWindow {
             Page::Browse => browse_ui(ui, &mut s.browse),
             Page::Shortcuts => shortcuts_ui(ui, &mut s.interface),
             Page::Notifications => notifications_ui(ui, &mut s.notify),
+            Page::Security => security_ui(ui, s, &mut self.master),
             Page::Interface => {
                 interface_ui(ui, &mut s.interface);
                 ui.add_space(8.0);
@@ -717,6 +742,66 @@ pub(crate) fn interface_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::Inte
     ui.checkbox(&mut s.confirm_exit, t!("options.ui_confirm_exit"));
     ui.checkbox(&mut s.confirm_close_tab, t!("options.ui_confirm_close_tab"));
     ui.checkbox(&mut s.confirm_queue_remove, t!("options.ui_confirm_queue"));
+}
+
+/// "Security" page: master password, single instance, daily backup.
+fn security_ui(ui: &mut egui::Ui, s: &mut Settings, f: &mut MasterForm) {
+    use urftp_core::master;
+    ui.label(RichText::new(t!("options.sec_master_section")).strong());
+    ui.label(RichText::new(t!("options.sec_master_note")).weak());
+    let has = !s.master_hash.is_empty();
+    ui.label(if has { t!("options.sec_master_set") } else { t!("options.sec_master_none") });
+    egui::Grid::new("opt-master").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        if has {
+            theme::grid_row(ui, t!("options.sec_current"), theme::single_line(&mut f.current).password(true).desired_width(220.0));
+        }
+        theme::grid_row(ui, t!("options.sec_new"), theme::single_line(&mut f.new).password(true).desired_width(220.0));
+        theme::grid_row(ui, t!("options.sec_again"), theme::single_line(&mut f.again).password(true).desired_width(220.0));
+    });
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(!f.new.is_empty(), egui::Button::new(if has { t!("options.sec_change") } else { t!("options.sec_set") }))
+            .clicked()
+        {
+            let current_ok = !has || master::verify_password(&f.current, &s.master_hash);
+            f.message = Some(if !current_ok {
+                (t!("lock.wrong"), true)
+            } else if f.new != f.again {
+                (t!("options.sec_mismatch"), true)
+            } else {
+                match master::hash_password(&f.new) {
+                    Ok(h) => {
+                        s.master_hash = h;
+                        (t!("options.sec_saved"), false)
+                    }
+                    Err(e) => (e.to_string(), true),
+                }
+            });
+            f.current.clear();
+            f.new.clear();
+            f.again.clear();
+        }
+        if has && ui.button(t!("options.sec_remove")).clicked() {
+            let current_ok = master::verify_password(&f.current, &s.master_hash);
+            f.message = Some(if current_ok {
+                s.master_hash.clear();
+                (t!("options.sec_removed"), false)
+            } else {
+                (t!("lock.wrong"), true)
+            });
+            f.current.clear();
+        }
+    });
+    if let Some((m, err)) = &f.message {
+        let p = theme::colors(ui);
+        ui.colored_label(if *err { p.error } else { p.success }, m);
+    }
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("options.sec_start_section")).strong());
+    ui.checkbox(&mut s.single_instance, t!("options.sec_single"));
+    ui.label(RichText::new(t!("options.sec_single_note")).weak());
+    ui.checkbox(&mut s.backup_daily, t!("options.sec_backup_daily"));
+    ui.label(RichText::new(t!("options.sec_backup_note")).weak());
 }
 
 /// "Notifications" page: tray icon, events, monitored folders.

@@ -5219,6 +5219,7 @@ dependencies = [
  "crc32fast",
  "md-5",
  "regex",
+ "ring",
  "roxmltree",
  "serde",
  "serde_json",

@@ -497,6 +497,12 @@ pub struct Settings {
     /// Sites of the site manager last connected, most recent first.
     pub recent_sites: Vec<u64>,
     pub notify: NotifySettings,
+    /// A second start shows the window already open instead.
+    pub single_instance: bool,
+    /// A copy of the configuration is made at the first start of each day (4 kept).
+    pub backup_daily: bool,
+    /// Salted hash of the master password (empty: none); see `master`.
+    pub master_hash: String,
 }
 
 /// Notification area icon, event notifications and folder monitoring.
@@ -907,6 +913,9 @@ impl Default for Settings {
             site_commands: default_site_commands(),
             recent_sites: Vec::new(),
             notify: NotifySettings::default(),
+            single_instance: false,
+            backup_daily: false,
+            master_hash: String::new(),
         }
     }
 }

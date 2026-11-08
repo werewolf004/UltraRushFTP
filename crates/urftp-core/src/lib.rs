@@ -12,12 +12,15 @@
 //! [`localpath`] (paths longer than `MAX_PATH`). Tabs (FTPRush "containers") and
 //! statistics live in the interface crate.
 
+pub mod backup;
 pub mod browsing;
 pub mod checksum;
 pub mod exists;
+pub mod export;
 pub mod import;
 pub mod itemopts;
 pub mod localpath;
+pub mod master;
 pub mod pattern;
 pub mod priority;
 pub mod queue;
