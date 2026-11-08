@@ -9,6 +9,8 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-08
+
 Browsing and file operations (block I).
 
 ### Added
@@ -259,7 +261,8 @@ link and command line. Not yet validated against real-world servers.
 - Known advisory accepted: `RUSTSEC-2023-0071` in `rsa` (used for SSH RSA keys); see
   [SECURITY.md](SECURITY.md).
 
-[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.1.0...v0.2.0
