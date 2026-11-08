@@ -33,8 +33,10 @@ use urftp_i18n::{Lang, language, t};
 use urftp_proto::ident::{IdentConfig, IdentServer};
 use urftp_proto::throttle::RateLimiter;
 
+mod confirm;
 mod favorites;
 mod fileops;
+pub(crate) mod input;
 mod logs;
 mod raw;
 mod rushapp;
@@ -1264,6 +1266,12 @@ pub struct UltraRushApp {
     manual: favorites::ManualDownload,
     /// Clipboard sequence number last looked at (clipboard watch).
     clipboard_seq: Option<u32>,
+    /// Question waiting for an answer (quit, close a tab, remove queue items).
+    confirm: Option<confirm::Confirm>,
+    /// The user agreed to quit with transfers running.
+    exit_confirmed: bool,
+    /// The next queue removals were confirmed.
+    queue_remove_confirmed: bool,
 }
 
 /// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
@@ -1287,33 +1295,19 @@ fn parse_connect_url(url: &str) -> Option<QuickConnect> {
 }
 
 /// Keyboard shortcuts shown by F1: (keys, description), as catalogue keys.
-const SHORTCUTS: [(&str, &str); 26] = [
+/// Keys that cannot be changed, shown in the shortcuts window (`F1`) before the commands
+/// of the shortcut manager.
+const FIXED_SHORTCUTS: [(&str, &str); 10] = [
     ("shortcuts.k_tab", "shortcuts.tab"),
     ("shortcuts.k_escape", "shortcuts.escape"),
-    ("shortcuts.k_f6", "shortcuts.f6"),
     ("shortcuts.k_arrows", "shortcuts.arrows"),
     ("shortcuts.k_shift_arrows", "shortcuts.shift_arrows"),
-    ("shortcuts.k_ctrl_space", "shortcuts.ctrl_space"),
-    ("shortcuts.k_ctrl_a", "shortcuts.ctrl_a"),
     ("shortcuts.k_enter", "shortcuts.enter"),
-    ("shortcuts.k_backspace", "shortcuts.backspace"),
-    ("shortcuts.k_space", "shortcuts.space"),
-    ("shortcuts.k_f2", "shortcuts.f2"),
-    ("shortcuts.k_f5", "shortcuts.f5"),
-    ("shortcuts.k_f7", "shortcuts.f7"),
-    ("shortcuts.k_delete", "shortcuts.delete"),
-    ("shortcuts.k_ctrl_f", "shortcuts.ctrl_f"),
-    ("shortcuts.k_ctrl_m", "shortcuts.ctrl_m"),
-    ("shortcuts.k_plus_minus", "shortcuts.plus_minus"),
-    ("shortcuts.k_ctrl_shift_c", "shortcuts.ctrl_shift_c"),
+    ("shortcuts.k_ctrl_tab", "shortcuts.ctrl_tab"),
     ("shortcuts.k_ctrl_v", "shortcuts.ctrl_v"),
-    ("shortcuts.k_f3_f4", "shortcuts.f3_f4"),
     ("shortcuts.k_shift_dblclick", "shortcuts.shift_dblclick"),
     ("shortcuts.k_shift_bookmark", "shortcuts.shift_bookmark"),
-    ("shortcuts.k_ctrl_t", "shortcuts.ctrl_t"),
-    ("shortcuts.k_ctrl_r", "shortcuts.ctrl_r"),
-    ("shortcuts.k_ctrl_tab", "shortcuts.ctrl_tab"),
-    ("shortcuts.k_f1", "shortcuts.f1"),
+    ("shortcuts.k_f3_f4", "shortcuts.f3_f4"),
 ];
 
 enum Action {
@@ -1433,6 +1427,9 @@ impl UltraRushApp {
             raw: raw::RawDialog::default(),
             manual: favorites::ManualDownload::default(),
             clipboard_seq: None,
+            confirm: None,
+            exit_confirmed: false,
+            queue_remove_confirmed: false,
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -2434,7 +2431,7 @@ impl UltraRushApp {
             }
         });
         if let Some(i) = close {
-            self.close_tab(i);
+            self.request_close_tab(i);
         }
     }
 
@@ -2479,6 +2476,7 @@ impl UltraRushApp {
     }
 
     fn apply(&mut self, actions: Vec<Action>, ctx: &egui::Context) {
+        let actions = self.hold_queue_removals(actions);
         let rt = self.rt.clone();
         let opts = self.engine_options();
         let extra = self.queue_site_profiles(self.active);
@@ -2726,22 +2724,25 @@ impl UltraRushApp {
     /// list keys apply to the active panel when no control has the keyboard focus (Tab moves
     /// between controls, Escape gives the keys back to the list).
     fn keyboard(&mut self, ctx: &egui::Context) -> Vec<Action> {
+        use input::Command as C;
         let tab = &self.tabs[self.active];
-        if tab.prompt.is_some() || tab.trust.is_some() {
+        if tab.prompt.is_some() || tab.trust.is_some() || self.confirm.is_some() {
             return Vec::new();
         }
         use egui::{Key, Modifiers};
         let pressed = |m: Modifiers, k: Key| ctx.input_mut(|i| i.consume_key(m, k));
-        if pressed(Modifiers::NONE, Key::F1) {
+        let keys = input::table(&self.options.settings.interface.shortcuts);
+        let hit = |c: input::Command| keys.iter().filter(|(k, _)| *k == c).any(|(_, b)| ctx.input_mut(|i| i.consume_key(b.mods, b.key)));
+        if hit(C::Help) {
             self.shortcuts_open = !self.shortcuts_open;
         }
-        if pressed(Modifiers::COMMAND, Key::T) {
+        if hit(C::NewTab) {
             self.new_tab();
         }
-        if pressed(Modifiers::COMMAND, Key::W) {
-            self.close_tab(self.active);
+        if hit(C::CloseTab) {
+            self.request_close_tab(self.active);
         }
-        if pressed(Modifiers::COMMAND, Key::R) {
+        if hit(C::Raw) {
             self.raw.open_with(None);
         }
         let n = self.tabs.len();
@@ -2764,8 +2765,36 @@ impl UltraRushApp {
         }
         let side = tab.focus;
         let mut out = Vec::new();
-        if pressed(Modifiers::NONE, Key::F6) || pressed(Modifiers::SHIFT, Key::F6) {
-            out.push(Action::Focus(1 - side));
+        // The list commands, in the order of the table (more modifiers first).
+        let file_at_cursor =
+            tab.sides[side].cursor().row.and_then(|i| tab.sides[side].rows().get(i)).filter(|r| !r.is_dir).map(|r| r.name.clone());
+        let remote = tab.sides[side].is_remote();
+        for (cmd, b) in keys.iter().filter(|(c, _)| !c.global()) {
+            if !ctx.input_mut(|i| i.consume_key(b.mods, b.key)) {
+                continue;
+            }
+            match cmd {
+                C::SwitchPanel => out.push(Action::Focus(1 - side)),
+                C::Refresh => out.push(Action::Refresh(side)),
+                C::Rename => out.push(Action::Rename(side)),
+                C::NewFolder => out.push(Action::NewFolder(side)),
+                C::Delete => out.push(Action::Delete(side)),
+                C::Transfer => out.push(Action::Transfer(side)),
+                C::Parent => out.push(Action::Up(side)),
+                C::SelectAll => out.push(Action::SelectAll(side)),
+                C::ToggleCursor => out.push(Action::ToggleCursor(side)),
+                C::Filter => out.push(Action::Op(side, Op::Filter)),
+                C::Mark => out.push(Action::Op(side, Op::Mark)),
+                C::SelectMask => out.push(Action::Op(side, Op::SelectMask(true))),
+                C::UnselectMask => out.push(Action::Op(side, Op::SelectMask(false))),
+                C::CopyNames => out.push(Action::Op(side, Op::CopyNames)),
+                C::View | C::Edit => {
+                    if let (true, Some(name)) = (remote, file_at_cursor.clone()) {
+                        out.push(Action::Op(side, if *cmd == C::View { Op::View(name) } else { Op::Edit(name) }));
+                    }
+                }
+                C::Help | C::NewTab | C::CloseTab | C::Raw => {}
+            }
         }
         for (key, m) in [
             (Key::ArrowUp, CursorMove::By(-1)),
@@ -2782,55 +2811,13 @@ impl UltraRushApp {
                 out.push(Action::Cursor(side, m, false));
             }
         }
-        if pressed(Modifiers::COMMAND, Key::Space) {
-            out.push(Action::ToggleCursor(side));
-        }
-        if pressed(Modifiers::COMMAND, Key::A) {
-            out.push(Action::SelectAll(side));
-        }
         if paste_pressed {
             out.push(Action::Op(side, Op::Paste));
-        }
-        for (m, key, op) in [
-            (Modifiers::COMMAND, Key::F, Op::Filter),
-            (Modifiers::COMMAND, Key::M, Op::Mark),
-            (Modifiers::COMMAND | Modifiers::SHIFT, Key::C, Op::CopyNames),
-            (Modifiers::NONE, Key::Plus, Op::SelectMask(true)),
-            (Modifiers::NONE, Key::Minus, Op::SelectMask(false)),
-        ] {
-            if pressed(m, key) {
-                out.push(Action::Op(side, op));
-            }
-        }
-        let file_at_cursor =
-            tab.sides[side].cursor().row.and_then(|i| tab.sides[side].rows().get(i)).filter(|r| !r.is_dir).map(|r| r.name.clone());
-        if tab.sides[side].is_remote()
-            && let Some(name) = file_at_cursor
-        {
-            if pressed(Modifiers::NONE, Key::F3) {
-                out.push(Action::Op(side, Op::View(name.clone())));
-            }
-            if pressed(Modifiers::NONE, Key::F4) {
-                out.push(Action::Op(side, Op::Edit(name)));
-            }
         }
         if pressed(Modifiers::NONE, Key::Enter)
             && let Some(n) = tab.sides[side].folder_to_open()
         {
             out.push(Action::Open(side, n));
-        }
-        for (key, action) in [
-            (Key::Backspace, Action::Up(side)),
-            (Key::F5, Action::Refresh(side)),
-            (Key::F2, Action::Rename(side)),
-            (Key::F7, Action::NewFolder(side)),
-            (Key::Delete, Action::Delete(side)),
-            (Key::Space, Action::Transfer(side)),
-            (Key::Insert, Action::Transfer(side)),
-        ] {
-            if pressed(Modifiers::NONE, key) {
-                out.push(action);
-            }
         }
         out
     }
@@ -2840,6 +2827,7 @@ impl UltraRushApp {
         if !self.shortcuts_open {
             return;
         }
+        let chosen = self.options.settings.interface.shortcuts.clone();
         let mut open = true;
         egui::Window::new(t!("shortcuts.title"))
             .id(egui::Id::new("shortcuts-window"))
@@ -2849,12 +2837,19 @@ impl UltraRushApp {
             .resizable(false)
             .show(ctx, |ui| {
                 egui::Grid::new("shortcuts").num_columns(2).spacing([24.0, 6.0]).striped(true).show(ui, |ui| {
-                    for (keys, what) in SHORTCUTS {
+                    for (keys, what) in FIXED_SHORTCUTS.iter().filter(|(k, _)| *k != "shortcuts.k_f3_f4") {
                         ui.label(RichText::new(urftp_i18n::text(keys)).monospace().strong());
                         ui.label(urftp_i18n::text(what));
                         ui.end_row();
                     }
+                    for c in input::Command::ALL {
+                        let keys = input::keys_of(c, &chosen).iter().map(input::format).collect::<Vec<_>>().join(", ");
+                        ui.label(RichText::new(keys).monospace().strong());
+                        ui.label(urftp_i18n::text(&c.label_key()));
+                        ui.end_row();
+                    }
                 });
+                ui.label(RichText::new(t!("shortcuts.change_note")).weak());
             });
         if !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.shortcuts_open = false;
@@ -3062,6 +3057,7 @@ impl eframe::App for UltraRushApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.check_exit(&ctx);
         // Starts Ident on the first frame, then whenever its settings change.
         if self.ident_applied.is_none() {
             self.sync_ident();
@@ -3105,6 +3101,7 @@ impl eframe::App for UltraRushApp {
             let paused = tab.paused();
             let ui_opts = &self.options.settings.interface;
             let log_view = (ui_opts.log_site_names, ui_opts.log_times);
+            let double_click = ui_opts.double_click_file;
             let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, tools, .. } = tab;
             let mut viewer = PaneViewer {
                 sides,
@@ -3125,6 +3122,7 @@ impl eframe::App for UltraRushApp {
                 list_rect: &mut tools.list_rect,
                 bookmarks: &bookmarks,
                 log_view,
+                double_click,
             };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
@@ -3139,6 +3137,7 @@ impl eframe::App for UltraRushApp {
         self.prompt_dialog(&ctx);
         self.tools_ui(&ctx);
         self.raw_dialog_window(&ctx);
+        self.confirm_dialog(&ctx);
         self.manual_window(&ctx);
         self.watch_clipboard(&ctx);
         self.saved_queue_dialog(&ctx);
@@ -3191,6 +3190,8 @@ struct PaneViewer<'a> {
     bookmarks: &'a [Vec<String>; 2],
     /// The logs show (site names, times).
     log_view: (bool, bool),
+    /// Double-click on a file.
+    double_click: urftp_core::settings::FileDoubleClick,
 }
 
 /// A site of the site manager, for the connection menus.
@@ -3477,8 +3478,17 @@ impl PaneViewer<'_> {
                             } else {
                                 opened = Some(f.name.clone());
                             }
-                        } else if resp.double_clicked() && remote_panel {
-                            menu.push(Action::Op(side, Op::View(f.name.clone())));
+                        } else if resp.double_clicked() {
+                            use urftp_core::settings::FileDoubleClick as D;
+                            match self.double_click {
+                                D::Transfer => {
+                                    // The first click selected the row alone.
+                                    clicked = Some((i, false, false));
+                                    menu.push(Action::Transfer(side));
+                                }
+                                D::View if remote_panel => menu.push(Action::Op(side, Op::View(f.name.clone()))),
+                                D::View | D::Nothing => {}
+                            }
                         } else if resp.clicked() {
                             let m = resp.ctx.input(|inp| inp.modifiers);
                             clicked = Some((i, m.command, m.shift));

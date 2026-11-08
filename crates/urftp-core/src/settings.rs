@@ -546,6 +546,29 @@ pub struct InterfaceSettings {
     pub watch_clipboard: bool,
     /// ... and are queued at once, into the local panel of the tab.
     pub clipboard_auto: bool,
+    /// Keys chosen in the shortcut manager: command → `Ctrl+Shift+F, F9` (missing: the
+    /// default keys).
+    pub shortcuts: std::collections::BTreeMap<String, String>,
+    /// Double-click on a file of a panel.
+    pub double_click_file: FileDoubleClick,
+    /// Ask before quitting while transfers run or wait.
+    pub confirm_exit: bool,
+    /// Ask before closing a tab with connections or a queue.
+    pub confirm_close_tab: bool,
+    /// Ask before removing items from the queue.
+    pub confirm_queue_remove: bool,
+}
+
+/// What a double-click on a file does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FileDoubleClick {
+    /// Transfer it to the other panel (FTPRush).
+    #[default]
+    Transfer,
+    /// Open it with the viewer (remote files).
+    View,
+    Nothing,
 }
 
 impl Default for InterfaceSettings {
@@ -559,6 +582,11 @@ impl Default for InterfaceSettings {
             status_format: "%p · %b · %s · %e".into(),
             watch_clipboard: false,
             clipboard_auto: false,
+            shortcuts: std::collections::BTreeMap::new(),
+            double_click_file: FileDoubleClick::Transfer,
+            confirm_exit: true,
+            confirm_close_tab: true,
+            confirm_queue_remove: false,
         }
     }
 }

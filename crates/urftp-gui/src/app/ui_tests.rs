@@ -226,8 +226,8 @@ fn site_manager_controls_are_named() {
 fn shortcuts_window_opens_with_f1_and_closes_with_escape() {
     let mut ui = Ui::start(Lang::En, true);
     ui.key(Key::F1);
+    assert!(ui.has_label(&t!("keys.switch_panel")) && ui.has_label("F6, Shift+F6"), "commands listed with their keys");
     assert!(ui.has_label(&t!("shortcuts.title")));
-    assert!(ui.has_label(&t!("shortcuts.f6")));
     ui.key(Key::Escape);
     assert!(!ui.has_label(&t!("shortcuts.title")));
 }
@@ -386,6 +386,8 @@ fn availability_test_marks_an_unreachable_site() {
         }
     }
     assert!(matches!(result, Some(crate::sites::Probe::Down(_))), "{result:?}");
+    // The result may have come after the last frame: draw it.
+    ui.run();
     assert_eq!(ui.harness.query_all_by_label("✖").count(), 2, "the tree and the form show the failure");
 }
 
@@ -1232,4 +1234,37 @@ fn recent_sites_quick_site_and_manual_download() {
     assert!(tab.adhoc.iter().any(|p| p.name == site), "profile kept for the engine");
     let items = tab.queue.lock().items().iter().map(|i| (i.src.site.clone().unwrap_or_default(), i.src.path.clone())).collect::<Vec<_>>();
     assert!(items.contains(&(site.clone(), "/pub/f2.bin".into())), "{items:?}");
+}
+
+#[test]
+fn chosen_keys_replace_the_defaults_and_busy_tabs_ask_before_closing() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.app().options.settings.interface.shortcuts.insert("filter".into(), "Alt+F".into());
+    ui.key_with(Modifiers::COMMAND, Key::F);
+    assert!(!ui.app().tabs[0].sides[0].list().filter_open, "Ctrl+F no longer filters");
+    ui.key_with(Modifiers::ALT, Key::F);
+    assert!(ui.app().tabs[0].sides[0].list().filter_open, "Alt+F does");
+
+    // The first tab has waiting items: closing it is asked first.
+    ui.app().new_tab();
+    fill_queue(&mut ui);
+    ui.run();
+    ui.app().request_close_tab(0);
+    ui.run();
+    assert!(matches!(ui.app().confirm, Some(super::confirm::Confirm::CloseTab(_))));
+    let before = ui.app().tabs.len();
+    ui.harness.get_by_label(&t!("confirm.close")).click();
+    ui.run();
+    assert_eq!(ui.app().tabs.len(), before - 1);
+
+    // Queue removals wait for the answer when asked for.
+    ui.app().active = 0;
+    ui.app().options.settings.interface.confirm_queue_remove = true;
+    let ids = fill_queue(&mut ui);
+    act(&mut ui, super::Action::QueueRemove(ids[0]));
+    assert!(ui.app().tabs[0].queue.lock().get(ids[0]).is_some(), "not removed yet");
+    ui.run();
+    ui.harness.get_by_label(&t!("confirm.remove")).click();
+    ui.run();
+    assert!(ui.app().tabs[0].queue.lock().get(ids[0]).is_none());
 }

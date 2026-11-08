@@ -32,10 +32,11 @@ pub(crate) enum Page {
     Advanced,
     Browse,
     Interface,
+    Shortcuts,
 }
 
 impl Page {
-    pub(crate) const ALL: [Page; 14] = [
+    pub(crate) const ALL: [Page; 15] = [
         Page::General,
         Page::Transfers,
         Page::Speed,
@@ -50,6 +51,7 @@ impl Page {
         Page::Advanced,
         Page::Browse,
         Page::Interface,
+        Page::Shortcuts,
     ];
 
     pub(crate) fn label(self) -> String {
@@ -68,6 +70,7 @@ impl Page {
             Page::Advanced => t!("options.page_advanced"),
             Page::Browse => t!("options.page_browse"),
             Page::Interface => t!("options.page_interface"),
+            Page::Shortcuts => t!("options.page_shortcuts"),
         }
     }
 }
@@ -257,6 +260,7 @@ impl OptionsWindow {
             }
             Page::Advanced => advanced_ui(ui, &mut s.transfer),
             Page::Browse => browse_ui(ui, &mut s.browse),
+            Page::Shortcuts => shortcuts_ui(ui, &mut s.interface),
             Page::Interface => {
                 interface_ui(ui, &mut s.interface);
                 ui.add_space(8.0);
@@ -685,6 +689,79 @@ pub(crate) fn interface_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::Inte
     ui.label(RichText::new(t!("options.ui_clipboard_section")).strong());
     ui.checkbox(&mut s.watch_clipboard, t!("options.ui_watch_clipboard"));
     ui.add_enabled(s.watch_clipboard, egui::Checkbox::new(&mut s.clipboard_auto, t!("options.ui_clipboard_auto")));
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("options.ui_mouse_section")).strong());
+    ui.horizontal(|ui| {
+        use urftp_core::settings::FileDoubleClick as D;
+        let label = |d: D| match d {
+            D::Transfer => t!("options.ui_dbl_transfer"),
+            D::View => t!("options.ui_dbl_view"),
+            D::Nothing => t!("options.ui_dbl_nothing"),
+        };
+        let l = ui.label(t!("options.ui_double_click"));
+        let combo = egui::ComboBox::from_id_salt("opt-dbl").selected_text(label(s.double_click_file)).width(220.0).show_ui(ui, |ui| {
+            for d in [D::Transfer, D::View, D::Nothing] {
+                ui.selectable_value(&mut s.double_click_file, d, label(d));
+            }
+        });
+        combo.response.labelled_by(l.id);
+    });
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("options.ui_confirm_section")).strong());
+    ui.checkbox(&mut s.confirm_exit, t!("options.ui_confirm_exit"));
+    ui.checkbox(&mut s.confirm_close_tab, t!("options.ui_confirm_close_tab"));
+    ui.checkbox(&mut s.confirm_queue_remove, t!("options.ui_confirm_queue"));
+}
+
+/// Shortcut manager: the keys of each command, the conflicts.
+fn shortcuts_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettings) {
+    use crate::app::input::{self, Command};
+    ui.label(RichText::new(t!("options.keys_note")).weak());
+    ui.add_space(4.0);
+    egui::Grid::new("opt-keys").num_columns(3).spacing([12.0, 6.0]).striped(true).show(ui, |ui| {
+        for c in Command::ALL {
+            let label = urftp_i18n::text(&c.label_key()).to_string();
+            let l = ui.label(&label);
+            let mut text = s.shortcuts.get(c.id()).cloned().unwrap_or_else(|| c.default_keys().to_string());
+            let valid = input::parse_list(&text).is_some_and(|v| !v.is_empty());
+            let mut field = theme::single_line(&mut text).desired_width(200.0);
+            if !valid {
+                field = field.text_color(theme::colors(ui).error);
+            }
+            let r = ui.add(field).labelled_by(l.id);
+            if r.changed() {
+                if text.trim() == c.default_keys() {
+                    s.shortcuts.remove(c.id());
+                } else {
+                    s.shortcuts.insert(c.id().to_string(), text.clone());
+                }
+            }
+            if ui
+                .add_enabled(s.shortcuts.contains_key(c.id()), egui::Button::new(t!("common.defaults")))
+                .on_hover_text(c.default_keys())
+                .clicked()
+            {
+                s.shortcuts.remove(c.id());
+            }
+            ui.end_row();
+        }
+    });
+    let bad: Vec<String> = Command::ALL
+        .iter()
+        .filter(|c| s.shortcuts.get(c.id()).is_some_and(|t| input::parse_list(t).is_none_or(|v| v.is_empty())))
+        .map(|c| urftp_i18n::text(&c.label_key()).to_string())
+        .collect();
+    let p = theme::colors(ui);
+    if !bad.is_empty() {
+        ui.colored_label(p.error, t!("options.keys_invalid", names = bad.join(", ")));
+    }
+    for (key, cmds) in input::conflicts(&s.shortcuts) {
+        let names: Vec<String> = cmds.iter().map(|c| urftp_i18n::text(&c.label_key()).to_string()).collect();
+        ui.colored_label(p.warning, t!("options.keys_conflict", key = key, names = names.join(", ")));
+    }
+    if ui.button(t!("options.keys_reset")).clicked() {
+        s.shortcuts.clear();
+    }
 }
 
 /// Predefined site commands of the FTP menu ("Command designer").
@@ -787,7 +864,7 @@ fn advanced_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings
         for (label, value, salt) in
             [(t!("options.adv_upload_case"), &mut t.upload_case, "up"), (t!("options.adv_download_case"), &mut t.download_case, "down")]
         {
-            let l = ui.label(&label);
+            let l = ui.label(label);
             let combo =
                 egui::ComboBox::from_id_salt(("opt-adv-case", salt)).selected_text(case_label(*value)).width(180.0).show_ui(ui, |ui| {
                     for c in [NameCase::Keep, NameCase::Lower, NameCase::Upper] {
