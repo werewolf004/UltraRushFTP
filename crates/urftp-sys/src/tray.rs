@@ -59,11 +59,14 @@ pub struct Tray {
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
-/// `text` as a fixed UTF-16 field (cut to fit, NUL-terminated).
-fn fill<const N: usize>(field: &mut [u16; N], text: &str) {
-    let mut v: Vec<u16> = text.encode_utf16().take(N - 1).collect();
-    v.push(0);
-    field[..v.len()].copy_from_slice(&v);
+/// `text` as a fixed UTF-16 field (cut to fit, NUL-terminated). Returned by value: the
+/// fields of `NOTIFYICONDATAW` may not be borrowed (the structure is packed on 32 bits).
+fn field<const N: usize>(text: &str) -> [u16; N] {
+    let mut out = [0u16; N];
+    for (slot, c) in out.iter_mut().zip(text.encode_utf16().take(N - 1)) {
+        *slot = c;
+    }
+    out
 }
 
 fn icon_data(hwnd: HWND) -> NOTIFYICONDATAW {
@@ -106,8 +109,8 @@ impl Tray {
         let mut d = icon_data(self.hwnd as HWND);
         d.uFlags = NIF_INFO;
         d.dwInfoFlags = NIIF_INFO;
-        fill(&mut d.szInfoTitle, title);
-        fill(&mut d.szInfo, text);
+        d.szInfoTitle = field(title);
+        d.szInfo = field(text);
         // SAFETY: `d` is fully initialised and names the icon of our window.
         unsafe { Shell_NotifyIconW(NIM_MODIFY, &d) };
     }
@@ -116,7 +119,7 @@ impl Tray {
     pub fn set_tip(&self, tip: &str) {
         let mut d = icon_data(self.hwnd as HWND);
         d.uFlags = NIF_TIP;
-        fill(&mut d.szTip, tip);
+        d.szTip = field(tip);
         // SAFETY: as in `notify`.
         unsafe { Shell_NotifyIconW(NIM_MODIFY, &d) };
     }
@@ -163,7 +166,7 @@ fn create(state: State, tip: &str) -> Result<HWND, std::io::Error> {
     d.uCallbackMessage = WM_TRAY;
     // SAFETY: a null instance with `IDI_APPLICATION` loads the stock application icon.
     d.hIcon = unsafe { LoadIconW(std::ptr::null_mut(), IDI_APPLICATION) };
-    fill(&mut d.szTip, tip);
+    d.szTip = field(tip);
     // SAFETY: `d` is fully initialised for our window.
     if unsafe { Shell_NotifyIconW(NIM_ADD, &d) } == 0 {
         let err = std::io::Error::last_os_error();
