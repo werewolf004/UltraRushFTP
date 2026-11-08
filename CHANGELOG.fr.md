@@ -10,6 +10,8 @@ la traduction.
 
 ## [Non publié]
 
+## [0.4.0] - 2026-11-08
+
 File et transferts (bloc H).
 
 ### Ajouté
@@ -247,7 +249,8 @@ réels.
 - Alerte connue acceptée : `RUSTSEC-2023-0071` dans `rsa` (utilisée pour les clés SSH
   RSA) ; voir [SECURITY.fr.md](SECURITY.fr.md).
 
-[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.3.0...HEAD
+[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/werewolf004/UltraRushFTP/releases/tag/v0.1.0
