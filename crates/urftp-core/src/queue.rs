@@ -2,8 +2,10 @@
 //! item to start according to each site's limits. No I/O here.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::TransferKind;
+use crate::itemopts::ItemOptions;
+use crate::{TransferKind, TransferMode};
 
 pub type ItemId = u64;
 
@@ -66,6 +68,13 @@ pub struct QueueItem {
     pub attempts: u32,
     /// Bytes transferred during the last attempt.
     pub transferred: u64,
+    /// Options from a script, passed down to the contents of a folder.
+    pub options: Option<Arc<ItemOptions>>,
+    /// Strict order (`RS_NOCIRCLE`): nothing of a sequence starts before every item of the
+    /// smaller sequences is finished. The contents of a folder keep its sequence.
+    pub sequence: Option<u64>,
+    /// Binary, ASCII or by the ASCII list ("Edit queue"); the contents of a folder keep it.
+    pub mode: TransferMode,
 }
 
 impl QueueItem {
@@ -207,7 +216,20 @@ impl Queue {
 
     fn make(&mut self, src: Endpoint, dst: Endpoint, is_dir: bool, size: Option<u64>, priority: Option<usize>) -> QueueItem {
         self.next_id += 1;
-        QueueItem { id: self.next_id, src, dst, is_dir, size, priority, state: ItemState::Waiting, attempts: 0, transferred: 0 }
+        QueueItem {
+            id: self.next_id,
+            src,
+            dst,
+            is_dir,
+            size,
+            priority,
+            state: ItemState::Waiting,
+            attempts: 0,
+            transferred: 0,
+            options: None,
+            sequence: None,
+            mode: TransferMode::Auto,
+        }
     }
 
     /// Adds an item: it goes before the waiting items with a lower priority.
@@ -220,8 +242,25 @@ impl Queue {
     }
 
     /// Inserts the contents of a folder right after it, sorted by priority (stable order).
+    /// They get the sequence of the folder and `options`.
     pub fn insert_children(&mut self, parent: ItemId, children: Vec<NewItem>) -> Vec<ItemId> {
-        let mut made: Vec<QueueItem> = children.into_iter().map(|(s, d, dir, size, prio)| self.make(s, d, dir, size, prio)).collect();
+        self.insert_children_with(parent, children, None)
+    }
+
+    /// [`Queue::insert_children`] with the options of the contents.
+    pub fn insert_children_with(&mut self, parent: ItemId, children: Vec<NewItem>, options: Option<Arc<ItemOptions>>) -> Vec<ItemId> {
+        let sequence = self.get(parent).and_then(|p| p.sequence);
+        let mode = self.get(parent).map_or(TransferMode::Auto, |p| p.mode);
+        let mut made: Vec<QueueItem> = children
+            .into_iter()
+            .map(|(s, d, dir, size, prio)| {
+                let mut it = self.make(s, d, dir, size, prio);
+                it.options.clone_from(&options);
+                it.sequence = sequence;
+                it.mode = mode;
+                it
+            })
+            .collect();
         made.sort_by_key(QueueItem::rank);
         let ids = made.iter().map(|i| i.id).collect();
         let at = self.position(parent).map_or(self.items.len(), |p| p + 1);
@@ -238,9 +277,32 @@ impl Queue {
         }
     }
 
-    /// First waiting item allowed by `can_start`.
+    /// First waiting item allowed by `can_start` and by the strict order of the sequences.
     pub fn next_runnable(&self, mut can_start: impl FnMut(&QueueItem) -> bool) -> Option<ItemId> {
-        self.items.iter().find(|i| i.state == ItemState::Waiting && can_start(i)).map(|i| i.id)
+        let first_sequence =
+            self.items.iter().filter(|i| matches!(i.state, ItemState::Waiting | ItemState::Running)).filter_map(|i| i.sequence).min();
+        self.items
+            .iter()
+            .find(|i| i.state == ItemState::Waiting && (i.sequence.is_none() || i.sequence == first_sequence) && can_start(i))
+            .map(|i| i.id)
+    }
+
+    /// Options and sequence of an item queued by a script.
+    pub fn set_options(&mut self, id: ItemId, options: Option<Arc<ItemOptions>>, sequence: Option<u64>) {
+        if let Some(i) = self.get_mut(id) {
+            i.options = options;
+            i.sequence = sequence;
+        }
+    }
+
+    /// A new sequence number, after every one already used.
+    pub fn next_sequence(&self) -> u64 {
+        self.items.iter().filter_map(|i| i.sequence).max().map_or(1, |m| m + 1)
+    }
+
+    /// Is this transfer already in the queue, not finished?
+    pub fn contains_pending(&self, src: &Endpoint, dst: &Endpoint) -> bool {
+        self.items.iter().any(|i| &i.src == src && &i.dst == dst && !i.state.is_finished())
     }
 
     pub fn set_state(&mut self, id: ItemId, state: ItemState) {
@@ -269,6 +331,17 @@ impl Queue {
                 i.attempts = 0;
                 n += 1;
             }
+        }
+        n
+    }
+
+    /// Puts the failed items (not the stopped ones) back to waiting; returns their number.
+    pub fn retry_failed_only(&mut self) -> usize {
+        let mut n = 0;
+        for i in self.items.iter_mut().filter(|i| matches!(i.state, ItemState::Failed(_))) {
+            i.state = ItemState::Waiting;
+            i.attempts = 0;
+            n += 1;
         }
         n
     }
@@ -302,6 +375,141 @@ impl Queue {
     /// Is any item still waiting or running?
     pub fn has_pending(&self) -> bool {
         self.items.iter().any(|i| matches!(i.state, ItemState::Waiting | ItemState::Running))
+    }
+
+    /// Changes the source and target of an item that is not running ("Edit queue"); it
+    /// waits again, with its attempts reset. `false` when it runs or does not exist.
+    pub fn edit(&mut self, id: ItemId, src: Endpoint, dst: Endpoint) -> bool {
+        match self.get_mut(id) {
+            Some(i) if i.state != ItemState::Running => {
+                i.src = src;
+                i.dst = dst;
+                i.state = ItemState::Waiting;
+                i.attempts = 0;
+                i.transferred = 0;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Transfer mode of an item that is not running.
+    pub fn set_mode(&mut self, id: ItemId, mode: TransferMode) -> bool {
+        match self.get_mut(id) {
+            Some(i) if i.state != ItemState::Running => {
+                i.mode = mode;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Swaps source and target of a site-to-site item that is not running ("Invert FXP").
+    pub fn invert_fxp(&mut self, id: ItemId) -> bool {
+        match self.get_mut(id) {
+            Some(i) if i.state != ItemState::Running && i.kind() == TransferKind::Fxp => {
+                std::mem::swap(&mut i.src, &mut i.dst);
+                i.state = ItemState::Waiting;
+                i.attempts = 0;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Marks as failed the given items that are still to do (waiting, stopped, waiting for
+    /// a decision); returns how many changed. Running and finished items are left alone.
+    pub fn mark_failed(&mut self, ids: &[ItemId], reason: &str) -> usize {
+        let mut n = 0;
+        for i in self.items.iter_mut().filter(|i| ids.contains(&i.id)) {
+            if matches!(i.state, ItemState::Waiting | ItemState::Stopped | ItemState::NeedsConfirmation) {
+                i.state = ItemState::Failed(reason.to_string());
+                n += 1;
+            }
+        }
+        n
+    }
+
+    /// Ids of every item.
+    pub fn ids(&self) -> Vec<ItemId> {
+        self.items.iter().map(|i| i.id).collect()
+    }
+
+    /// Removes the failed items ("Clear all failed"); returns their number.
+    pub fn clear_failed(&mut self) -> usize {
+        self.remove_where(|i| matches!(i.state, ItemState::Failed(_)))
+    }
+
+    /// Counts and sizes of the queue ("Queue information").
+    pub fn stats(&self) -> QueueStats {
+        let mut s = QueueStats::default();
+        for i in &self.items {
+            match &i.state {
+                ItemState::Waiting => s.waiting += 1,
+                ItemState::Running => s.running += 1,
+                ItemState::Done => s.done += 1,
+                ItemState::Skipped(_) => s.skipped += 1,
+                ItemState::NeedsConfirmation => s.to_confirm += 1,
+                ItemState::Stopped => s.stopped += 1,
+                ItemState::Failed(_) => s.failed += 1,
+            }
+            if i.is_dir {
+                s.folders += 1;
+                continue;
+            }
+            s.files += 1;
+            match i.kind() {
+                TransferKind::Upload => s.uploads += 1,
+                TransferKind::Download => s.downloads += 1,
+                TransferKind::Fxp => s.fxp += 1,
+            }
+            let size = i.size.unwrap_or(0);
+            s.total_bytes += size;
+            match i.state {
+                ItemState::Done => s.done_bytes += size,
+                ItemState::Waiting | ItemState::Running | ItemState::Stopped | ItemState::NeedsConfirmation => {
+                    s.left_bytes += size;
+                    s.unknown_sizes += u32::from(i.size.is_none());
+                }
+                _ => {}
+            }
+        }
+        s
+    }
+}
+
+/// Counts and sizes of a queue (folders not yet expanded count as one item, without size).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct QueueStats {
+    pub waiting: u32,
+    pub running: u32,
+    pub done: u32,
+    pub skipped: u32,
+    pub to_confirm: u32,
+    pub stopped: u32,
+    pub failed: u32,
+    pub files: u32,
+    pub folders: u32,
+    pub uploads: u32,
+    pub downloads: u32,
+    pub fxp: u32,
+    /// Sum of the known file sizes.
+    pub total_bytes: u64,
+    pub done_bytes: u64,
+    /// Known size of the files left to transfer.
+    pub left_bytes: u64,
+    /// Files left whose size is not known yet.
+    pub unknown_sizes: u32,
+}
+
+impl QueueStats {
+    pub fn items(&self) -> u32 {
+        self.files + self.folders
+    }
+
+    /// Time left at `rate` bytes per second (`None` without rate or with nothing left).
+    pub fn eta(&self, rate: u64) -> Option<std::time::Duration> {
+        (rate > 0 && self.left_bytes > 0).then(|| std::time::Duration::from_secs(self.left_bytes.div_ceil(rate)))
     }
 }
 
@@ -378,5 +586,70 @@ mod tests {
         assert_eq!(q.get(b).unwrap().state, ItemState::Waiting);
         assert_eq!(q.remove_where(|_| true), 2, "the running item stays");
         assert_eq!(q.items().len(), 1);
+    }
+
+    #[test]
+    fn edit_invert_mark_and_clear() {
+        let mut q = Queue::new();
+        let a = up(&mut q, "a", None);
+        let f = q.push(Endpoint::remote("A", "/rel/x"), Endpoint::remote("B", "/in/x"), false, Some(5), None);
+        let r = up(&mut q, "r", None);
+        q.set_state(r, ItemState::Running);
+        q.set_state(a, ItemState::Failed("550".into()));
+
+        assert!(q.edit(a, Endpoint::local("D:/a"), Endpoint::remote("other", "/x/a")));
+        let it = q.get(a).unwrap();
+        assert_eq!((it.src.path.as_str(), it.dst.site.as_deref(), &it.state), ("D:/a", Some("other"), &ItemState::Waiting));
+        assert!(!q.edit(r, Endpoint::local("x"), Endpoint::local("y")), "running items are not edited");
+
+        assert!(!q.invert_fxp(a), "not an FXP item");
+        assert!(q.invert_fxp(f));
+        let it = q.get(f).unwrap();
+        assert_eq!((it.src.site.as_deref(), it.dst.path.as_str()), (Some("B"), "/rel/x"));
+
+        assert_eq!(q.mark_failed(&q.ids(), "marked"), 2, "the running item is left");
+        assert_eq!(q.get(r).unwrap().state, ItemState::Running);
+        assert_eq!(q.clear_failed(), 2);
+        assert_eq!(q.ids(), [r]);
+    }
+
+    #[test]
+    fn sequences_run_one_after_the_other_with_their_contents() {
+        let mut q = Queue::new();
+        let a = q.push(Endpoint::remote("s", "/A"), Endpoint::local("C:/A"), true, None, None);
+        let b = q.push(Endpoint::remote("s", "/B"), Endpoint::local("C:/B"), true, None, None);
+        let free = up(&mut q, "free", None);
+        let s1 = q.next_sequence();
+        q.set_options(a, None, Some(s1));
+        q.set_options(b, None, Some(q.next_sequence()));
+        let opts = Some(Arc::new(ItemOptions { sub_count: 3, ..ItemOptions::default() }));
+        q.set_state(a, ItemState::Done);
+        let kids = q.insert_children_with(a, vec![(Endpoint::remote("s", "/A/x"), Endpoint::local("C:/A/x"), false, None, None)], opts);
+        assert_eq!(q.get(kids[0]).unwrap().sequence, Some(s1), "the contents keep the sequence");
+        assert_eq!(q.get(kids[0]).unwrap().options.as_ref().map(|o| o.sub_count), Some(3));
+        let all = |_: &QueueItem| true;
+        assert_eq!(q.next_runnable(all), Some(kids[0]), "B waits for the contents of A");
+        q.set_state(kids[0], ItemState::Running);
+        assert_eq!(q.next_runnable(all), Some(free), "items without sequence are not held");
+        q.set_state(kids[0], ItemState::Done);
+        assert_eq!(q.next_runnable(all), Some(b));
+        assert!(q.contains_pending(&Endpoint::remote("s", "/B"), &Endpoint::local("C:/B")));
+        assert!(!q.contains_pending(&Endpoint::remote("s", "/A/x"), &Endpoint::local("C:/A/x")));
+    }
+
+    #[test]
+    fn stats_count_states_and_sizes() {
+        let mut q = Queue::new();
+        let a = q.push(Endpoint::remote("s", "/a"), Endpoint::local("C:/a"), false, Some(100), None);
+        q.push(Endpoint::remote("s", "/b"), Endpoint::local("C:/b"), false, Some(50), None);
+        q.push(Endpoint::local("C:/c"), Endpoint::remote("s", "/c"), false, None, None);
+        q.push(Endpoint::remote("s", "/dir"), Endpoint::local("C:/dir"), true, None, None);
+        q.set_state(a, ItemState::Done);
+        let s = q.stats();
+        assert_eq!((s.files, s.folders, s.items(), s.downloads, s.uploads), (3, 1, 4, 2, 1));
+        assert_eq!((s.done, s.waiting), (1, 3));
+        assert_eq!((s.total_bytes, s.done_bytes, s.left_bytes, s.unknown_sizes), (150, 100, 50, 1));
+        assert_eq!(s.eta(25), Some(std::time::Duration::from_secs(2)));
+        assert_eq!(s.eta(0), None);
     }
 }

@@ -62,6 +62,10 @@ pub struct FtpConfig {
     /// Sends `NOOP` on the control channel at this interval during the transfers (proxies
     /// and routers that drop an idle control connection).
     pub noop_during_transfer: Option<Duration>,
+    /// Sends `SITE XDUPE 3` after login: the server lists the dupes when it refuses an upload.
+    pub xdupe: bool,
+    /// Send and receive buffer of the data connections, in bytes (`None`: the system's).
+    pub tcp_buffer: Option<usize>,
 }
 
 impl Default for FtpConfig {
@@ -88,6 +92,8 @@ impl Default for FtpConfig {
             bind_ip: None,
             list_format: listing::ListFormat::Auto,
             noop_during_transfer: None,
+            xdupe: false,
+            tcp_buffer: None,
         }
     }
 }
@@ -105,6 +111,15 @@ pub enum LogLine {
 
 /// Receiver of the log lines.
 pub type LogSink = Arc<dyn Fn(LogLine) + Send + Sync>;
+
+/// Options of one transfer.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DataOptions {
+    /// `TYPE A` instead of `TYPE I`.
+    pub ascii: bool,
+    /// `MODE Z` (zlib compression of the data channel) when the server announces it.
+    pub compress: bool,
+}
 
 /// Representation type (`TYPE A` / `TYPE I`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,6 +150,8 @@ pub struct FtpClient {
     welcome: Reply,
     cwd: Option<String>,
     current_type: Option<TransferType>,
+    /// `MODE Z` is on.
+    mode_z: bool,
     epsv_refused: bool,
     /// The passive mode failed and the connection switched to active mode.
     passive_failed: bool,
@@ -225,6 +242,7 @@ impl FtpClient {
             welcome: Reply { code: 0, lines: Vec::new() },
             cwd: None,
             current_type: None,
+            mode_z: false,
             epsv_refused: false,
             passive_failed: false,
             pending_noops: 0,
@@ -485,6 +503,11 @@ impl FtpClient {
             // Failure does not matter: some servers are already in UTF-8.
             let _ = self.raw("OPTS UTF8 ON").await?;
         }
+        if self.config.xdupe {
+            // glftpd and others: the dupes come back in the reply refusing an upload. A
+            // server without it just refuses the command.
+            let _ = self.raw("SITE XDUPE 3").await?;
+        }
         self.cwd = self.pwd().await.ok();
         Ok(())
     }
@@ -660,6 +683,7 @@ impl FtpClient {
                     )));
                 }
                 tcp.set_nodelay(true)?;
+                crate::net::set_buffers(&tcp, self.config.tcp_buffer)?;
                 Box::new(tcp)
             }
         };
@@ -734,6 +758,7 @@ impl FtpClient {
         };
         let tcp = self.connect_data(target).await?;
         tcp.set_nodelay(true)?;
+        crate::net::set_buffers(&tcp, self.config.tcp_buffer)?;
         Ok(Box::new(tcp))
     }
 
@@ -868,16 +893,44 @@ impl FtpClient {
         Ok((text, mlsd))
     }
 
+    /// `MODE Z` or `MODE S` for the next transfer (`MODE Z` only when announced).
+    async fn set_mode(&mut self, compress: bool) -> Result<bool> {
+        // `FEAT` lists it as ` MODE Z`: the feature `MODE` with the parameter `Z`.
+        let announced = self.features.param("MODE").is_some_and(|p| p.split_whitespace().any(|m| m.eq_ignore_ascii_case("Z")));
+        let z = compress && announced;
+        if z != self.mode_z {
+            self.expect(if z { "MODE Z" } else { "MODE S" }, |r| r.code == 200).await?;
+            self.mode_z = z;
+        }
+        Ok(z)
+    }
+
     /// Downloads `remote` into `out`, from byte `offset` (resume through `REST`).
     /// `progress` receives the number of bytes received during this call. Returns it.
-    pub async fn retr<W>(&mut self, remote: &str, offset: u64, out: &mut W, mut progress: impl FnMut(u64)) -> Result<u64>
+    pub async fn retr<W>(&mut self, remote: &str, offset: u64, out: &mut W, progress: impl FnMut(u64)) -> Result<u64>
+    where
+        W: AsyncWrite + Unpin + ?Sized,
+    {
+        self.retr_with(remote, offset, out, progress, DataOptions::default()).await
+    }
+
+    /// [`FtpClient::retr`] in ASCII and/or compressed.
+    pub async fn retr_with<W>(
+        &mut self,
+        remote: &str,
+        offset: u64,
+        out: &mut W,
+        mut progress: impl FnMut(u64),
+        opts: DataOptions,
+    ) -> Result<u64>
     where
         W: AsyncWrite + Unpin + ?Sized,
     {
         let name = self.enter_parent(remote).await?;
         let cmd = format!("RETR {name}");
         self.protect_for(false).await?;
-        self.set_type(TransferType::Binary).await?;
+        self.set_type(if opts.ascii { TransferType::Ascii } else { TransferType::Binary }).await?;
+        let z = self.set_mode(opts.compress).await?;
         let pending = self.prepare_data(&cmd).await?;
         if offset > 0 {
             self.expect(&format!("REST {offset}"), |r| r.code == 350).await?;
@@ -890,15 +943,51 @@ impl FtpClient {
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
         let mut last_noop = std::time::Instant::now();
+        let mut inflate = z.then(|| (flate2::Decompress::new(true), vec![0u8; CHUNK * 4]));
         loop {
             let n = timeout(io, read_data(&mut data, &mut buf)).await?;
             if n == 0 {
                 break;
             }
-            timeout(io, out.write_all(&buf[..n])).await?;
-            total += n as u64;
+            match &mut inflate {
+                None => {
+                    timeout(io, out.write_all(&buf[..n])).await?;
+                    total += n as u64;
+                }
+                Some((d, plain)) => {
+                    let mut input = &buf[..n];
+                    while !input.is_empty() {
+                        let (before_in, before_out) = (d.total_in(), d.total_out());
+                        d.decompress(input, plain, flate2::FlushDecompress::None)
+                            .map_err(|e| FtpError::Protocol(format!("MODE Z: invalid compressed data ({e})")))?;
+                        let used = (d.total_in() - before_in) as usize;
+                        let made = (d.total_out() - before_out) as usize;
+                        timeout(io, out.write_all(&plain[..made])).await?;
+                        total += made as u64;
+                        input = &input[used..];
+                        if used == 0 && made == 0 {
+                            break;
+                        }
+                    }
+                }
+            }
             progress(total);
             self.keep_control_alive(&mut last_noop).await?;
+        }
+        // What the decompressor still holds.
+        if let Some((d, plain)) = &mut inflate {
+            loop {
+                let before_out = d.total_out();
+                d.decompress(&[], plain, flate2::FlushDecompress::Finish)
+                    .map_err(|e| FtpError::Protocol(format!("MODE Z: invalid compressed data ({e})")))?;
+                let made = (d.total_out() - before_out) as usize;
+                if made == 0 {
+                    break;
+                }
+                timeout(io, out.write_all(&plain[..made])).await?;
+                total += made as u64;
+            }
+            progress(total);
         }
         drop(data);
         out.flush().await?;
@@ -908,14 +997,30 @@ impl FtpClient {
 
     /// Uploads `input` to `remote`. With `offset > 0`, resumes the upload (`REST` + `STOR`):
     /// `input` must then already be positioned at `offset`.
-    pub async fn stor<R>(&mut self, remote: &str, offset: u64, input: &mut R, mut progress: impl FnMut(u64)) -> Result<u64>
+    pub async fn stor<R>(&mut self, remote: &str, offset: u64, input: &mut R, progress: impl FnMut(u64)) -> Result<u64>
+    where
+        R: AsyncRead + Unpin + ?Sized,
+    {
+        self.stor_with(remote, offset, input, progress, DataOptions::default()).await
+    }
+
+    /// [`FtpClient::stor`] in ASCII and/or compressed.
+    pub async fn stor_with<R>(
+        &mut self,
+        remote: &str,
+        offset: u64,
+        input: &mut R,
+        mut progress: impl FnMut(u64),
+        opts: DataOptions,
+    ) -> Result<u64>
     where
         R: AsyncRead + Unpin + ?Sized,
     {
         let name = self.enter_parent(remote).await?;
         let cmd = format!("STOR {name}");
         self.protect_for(false).await?;
-        self.set_type(TransferType::Binary).await?;
+        self.set_type(if opts.ascii { TransferType::Ascii } else { TransferType::Binary }).await?;
+        let z = self.set_mode(opts.compress).await?;
         let pending = self.prepare_data(&cmd).await?;
         if offset > 0 {
             self.expect(&format!("REST {offset}"), |r| r.code == 350).await?;
@@ -928,12 +1033,34 @@ impl FtpClient {
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
         let mut last_noop = std::time::Instant::now();
+        let mut deflate = z.then(|| (flate2::Compress::new(flate2::Compression::default(), true), vec![0u8; CHUNK * 2]));
         loop {
             let n = timeout(io, input.read(&mut buf)).await?;
-            if n == 0 {
-                break;
+            let flush = if n == 0 { flate2::FlushCompress::Finish } else { flate2::FlushCompress::None };
+            match &mut deflate {
+                None if n == 0 => break,
+                None => timeout(io, data.write_all(&buf[..n])).await?,
+                Some((c, packed)) => {
+                    let mut chunk = &buf[..n];
+                    loop {
+                        let (before_in, before_out) = (c.total_in(), c.total_out());
+                        let status = c
+                            .compress(chunk, packed, flush)
+                            .map_err(|e| FtpError::Protocol(format!("MODE Z: compression failed ({e})")))?;
+                        let used = (c.total_in() - before_in) as usize;
+                        let made = (c.total_out() - before_out) as usize;
+                        timeout(io, data.write_all(&packed[..made])).await?;
+                        chunk = &chunk[used..];
+                        let finished = status == flate2::Status::StreamEnd;
+                        if finished || (chunk.is_empty() && n > 0 && made < packed.len()) {
+                            break;
+                        }
+                    }
+                    if n == 0 {
+                        break;
+                    }
+                }
             }
-            timeout(io, data.write_all(&buf[..n])).await?;
             total += n as u64;
             progress(total);
             self.keep_control_alive(&mut last_noop).await?;
@@ -947,6 +1074,20 @@ impl FtpClient {
         drop(data);
         done?;
         Ok(total)
+    }
+}
+
+impl FtpClient {
+    /// CRC32 of a remote file computed by the server (`XCRC`); `None` when the server does
+    /// not know the command.
+    pub async fn xcrc(&mut self, remote: &str) -> Result<Option<u32>> {
+        let name = self.enter_parent(remote).await?;
+        let r = self.raw(&format!("XCRC {name}")).await?;
+        if !r.is_completion() {
+            return Ok(None);
+        }
+        let hex = r.text().split_whitespace().find(|w| w.len() == 8 && w.chars().all(|c| c.is_ascii_hexdigit()));
+        Ok(hex.and_then(|h| u32::from_str_radix(h, 16).ok()))
     }
 }
 

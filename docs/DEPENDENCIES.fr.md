@@ -40,6 +40,10 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `russh` | 0.65 | Apache-2.0 | proto | Client SSH (transport de SFTP) |
 | `russh-sftp` | 3.0 | Apache-2.0 | proto | Protocole SFTP |
 | `encoding_rs` | 0.8 | (Apache-2.0 / MIT) AND BSD-3-Clause | proto | Jeux de caractères des serveurs non UTF-8 |
+| `flate2` | 1.1 | MIT / Apache-2.0 | proto | `MODE Z` (compression zlib du canal de données), moteur en Rust pur |
+| `socket2` | 0.6 | MIT / Apache-2.0 | proto | Taille des tampons des connexions de données |
+| `crc32fast` | 1.5 | MIT / Apache-2.0 | core ; proto, gui (tests) | CRC32 des fichiers SFV et des vérifications |
+| `md-5` | 0.10 | MIT / Apache-2.0 | core | MD5 des fichiers `.md5` |
 | `thiserror` | 2.0 | MIT / Apache-2.0 | core, proto, script, sys, cli, gui | Erreurs typées |
 | `parking_lot` | 0.12 | MIT / Apache-2.0 | proto, cli, gui | Verrous sans empoisonnement (pas d'`unwrap` sur les verrous) |
 | `serde` | 1.0 | MIT / Apache-2.0 | core, gui | Sérialisation des sites et des options |
@@ -47,7 +51,7 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `regex` | 1.13 | MIT / Apache-2.0 | core | Masques en expressions régulières |
 | `roxmltree` | 0.21 | MIT / Apache-2.0 | core | Analyseur XML en lecture seule pour les imports |
 | `base64` | 0.23 | MIT / Apache-2.0 | core | Codage des secrets, imports |
-| `windows-sys` | 0.61 | MIT / Apache-2.0 | sys | API Win32 (fenêtres, mémoire partagée, DPAPI) |
+| `windows-sys` | 0.61 | MIT / Apache-2.0 | sys | API Win32 (fenêtres, mémoire partagée, DPAPI, alimentation, espace disque) |
 | `eframe` | 0.36 | MIT / Apache-2.0 | gui | Fenêtre native et rendu pour egui |
 | `egui_extras` | 0.36 | MIT / Apache-2.0 | gui | Tableaux des panneaux de fichiers et de la file |
 | `egui_dock` | 0.21 | MIT | gui | Panneaux réorganisables dans chaque onglet |
@@ -55,7 +59,7 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `sys-locale` | 0.3 | MIT / Apache-2.0 | i18n | Langue de l'interface de Windows |
 | `rand` | 0.10 | MIT / Apache-2.0 | proto (tests) | Données de test |
 | `rcgen` | 0.14 | MIT / Apache-2.0 | proto (tests) | Certificats de test du serveur FTPS de test |
-| `egui_kittest` | 0.36 | MIT / Apache-2.0 | gui (tests) | Tests de l'interface par l'arbre AccessKit (clavier, noms, taille des cibles) |
+| `egui_kittest` | 0.36 | MIT / Apache-2.0 | gui (tests) | Tests de l'interface par l'arbre AccessKit (clavier, noms, taille des cibles) ; captures de la documentation dessinées hors écran (`wgpu`) |
 
 « / » signifie « ou » (la crate laisse le choix de la licence).
 

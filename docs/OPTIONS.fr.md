@@ -56,6 +56,8 @@ dossier courant) : `Entrée` y va.
 | Tout sélectionner / plusieurs | `Ctrl`+clic, `Maj`+clic | `Ctrl+A`, `Maj`+déplacement, `Ctrl+Espace` (ligne du curseur) |
 | Copier le chemin complet | clic droit → Copier le chemin | — |
 | Copier l'adresse web | clic droit → Copier l'adresse HTTP (panneau distant d'un site qui a une adresse web) | — |
+| Transfert conditionnel | clic droit → Transfert conditionnel… (voir plus bas) | — |
+| Fichier SFV ou MD5 des fichiers sélectionnés | clic droit → Créer un fichier SFV / Créer un fichier MD5 (panneau local) | — |
 | Trier | clic sur un en-tête de colonne (à nouveau : ordre inverse) | — |
 
 Les touches de la liste agissent sur le panneau actif (marqué `▸`, curseur encadré) quand
@@ -63,6 +65,31 @@ aucun contrôle n'a le focus clavier. `Tab` / `Maj+Tab` passent d'un contrôle �
 `Échap` rend les touches à la liste.
 
 ![Raccourcis clavier](images/shortcuts.fr.png)
+
+Les fichiers SFV et MD5 portent le nom du dossier (`dossier.sfv`, `dossier.md5`) et y
+sont écrits, en arrière-plan ; le journal indique quand ils sont prêts.
+
+### Transfert conditionnel
+
+Clic droit → *Transfert conditionnel…* met la sélection en file vers l'autre panneau, avec
+des conditions :
+
+| Champ | Effet |
+|---|---|
+| Noms de dossiers / Noms de fichiers, Inclure et Exclure | Masques séparés par `;` (jokers, ou expressions régulières avec *Utiliser des expressions régulières*) ; `%F%` devant un masque le réserve aux fichiers, `%D%` aux dossiers |
+| Date entre | Premier et dernier jour (`AAAA-MM-JJ`, dernier jour inclus) |
+| Pas plus ancien que | Nombre de jours |
+| Taille de fichier entre | En Kio (maximum 0 : sans limite) |
+| Appliquer les dates aux dossiers aussi | Sinon les dates ne filtrent que les fichiers |
+| Ne pas utiliser la liste de fichiers ignorés | La liste des options est ignorée |
+| Inclure les sous-dossiers | Sinon seulement les fichiers des dossiers sélectionnés |
+| Se déconnecter une fois transféré | Les panneaux de l'onglet sont déconnectés quand la file est terminée |
+| Synchroniser | Seul ce qui diffère est transféré : un fichier absent, une taille différente (*Comparer les tailles*), une source plus récente (*Comparer les dates*, de plus d'une minute) ; *Supprimer ce que la source n'a pas* retire de la cible ce qui manque à la source ; *Fichiers existants seulement* met à jour les fichiers que la cible a déjà ; *Dans les deux sens* recopie ce que seule la cible possède |
+
+Les conditions s'appliquent aux éléments sélectionnés et au contenu des dossiers. *Schéma*
+enregistre le formulaire sous un nom (*Enregistrer*, *Supprimer*) dans `settings.json`.
+**Démarrer le transfert** met en file et démarre, **Ajouter à la file** met seulement en
+file.
 
 ### Accessibilité
 
@@ -77,10 +104,26 @@ aucun contrôle n'a le focus clavier. `Tab` / `Maj+Tab` passent d'un contrôle �
 
 ### File d'attente
 
-Boutons : **Démarrer**, **Tout arrêter**, **Relancer les échecs**, **Retirer les
-terminés**. Clic droit sur un élément : arrêter, relancer, tout en haut / monter /
-descendre / tout en bas, retirer de la file. États : en attente, en cours, terminé, ignoré
-(avec la raison), à confirmer, arrêté, échec.
+Boutons : **Démarrer** (**Reprendre** après une pause), **Pause**, **Tout arrêter**,
+**Relancer les échecs**, **Retirer les terminés**, et le menu **⋯ File** : *Informations
+sur la file…*, *Tout marquer en échec*, *Retirer les échecs*, *Vider la file (sauf en
+cours)*, *Charger un fichier de file…*, *Enregistrer la file dans un fichier…*.
+
+- **Pause** interrompt les transferts en cours : ils attendent à nouveau et reprennent
+  depuis leur fichier partiel avec *Reprendre*. **Tout arrêter** arrête les éléments en
+  cours et termine la file ; les autres restent en attente.
+- **Lignes** : un clic sélectionne, `Ctrl`+clic ajoute ou retire une ligne, `Maj`+clic
+  sélectionne une plage. Le menu du clic droit agit sur la sélection quand la ligne en fait
+  partie : arrêter, relancer, *Modifier…* (un élément : site et chemin de la source et de la
+  cible, mode de transfert, *Inverser le FXP*), *Inverser le FXP* (éléments de site à site),
+  *Marquer en échec*, tout en haut / monter / descendre / tout en bas, retirer.
+- **Informations sur la file** : éléments, téléchargements / envois / FXP, nombre par
+  état, tailles totale, transférée et restante, temps restant à la vitesse actuelle.
+- **Fichiers de file** (`.urq`) : les éléments non terminés de l'onglet, au format de
+  `queue.json` ; le chargement ajoute les éléments du fichier (ou d'un `queue.json`) à la
+  file de l'onglet.
+
+États : en attente, en cours, terminé, ignoré (avec la raison), à confirmer, arrêté, échec.
 
 ![File non terminée](images/queue-restore.fr.png)
 
@@ -125,6 +168,14 @@ Enregistrée automatiquement dans `settings.json` une seconde après une modific
 | Transferts simultanés en connexion rapide | 2 | Limite par site utilisée par la connexion rapide |
 | Délai de connexion (s) | 30 | Connexions de contrôle et de données |
 | Délai sans réponse du serveur (s) | 120 | Attente maximale d'une réponse ou d'un bloc de données |
+| Téléchargements / Envois / FXP : nombre de tentatives propre | désactivé | Tentatives de ce sens au lieu de la valeur générale (un réglage du site l'emporte toujours) |
+| Relancer les échecs à la fin de la file (tours) | 0 | Une fois la file terminée, les éléments en échec sont retentés ce nombre de fois |
+| Relance cyclique | désactivé | Un élément à relancer passe en bas de la file, les autres passent avant, sans délai |
+| Relancer les échecs quand une file démarre automatiquement | désactivé | `-r` au démarrage |
+| Déconnecter un site retire ses éléments en attente | désactivé | *Déconnecter* d'un panneau |
+| Source et cible de chaque élément dans le journal | désactivé | Une ligne quand un élément démarre, se termine ou est mis en pause |
+| Quand toutes les files sont terminées | Ne rien faire | Ne rien faire, Déconnecter les sites, Quitter UltraRushFTP, Veille, Veille prolongée, Éteindre l'ordinateur |
+| Secondes pour annuler | 30 | Quitter, la veille, la veille prolongée et l'arrêt sont demandés d'abord avec ce compte à rebours (*Annuler*, *Le faire maintenant*) |
 
 ### Débit
 
@@ -242,6 +293,33 @@ port, utilisateur, mot de passe ou anonyme, mode de transfert, *Chiffrer aussi l
 transferts*, transferts simultanés et limites par sens, dossiers distant et local, réglages
 de listing (mêmes champs que la fiche du site). L'hôte, les autres adresses, les signets et
 les clés de confiance restent toujours vides. *Valeurs par défaut* remet le modèle à zéro.
+
+### Transfert avancé
+
+![Transfert avancé](images/options-advanced.fr.png)
+
+| Option | Défaut | Effet |
+|---|---|---|
+| Mode de transfert | Automatique | Automatique : ASCII pour les fichiers de la liste ASCII, binaire pour les autres ; ou toujours binaire / toujours ASCII. *Modifier…* dans la file règle le mode d'un élément |
+| Fichiers ASCII | `*.txt;*.nfo;*.diz;*.sfv;*.md5;*.htm;*.html;*.ini;*.log;*.m3u;*.cue;*.xml;*.csv` | Masques de la liste ASCII |
+| Casse des noms envoyés / téléchargés | Inchangée | minuscules ou MAJUSCULES pour les noms créés sur la cible |
+| Ne jamais reprendre les fichiers ASCII | activé | Leur taille change avec les fins de ligne : retransférés depuis le début |
+| Mode actif (PORT) pour tous les sites | désactivé | Connexions de données en mode actif quel que soit le réglage du site |
+| XDUPE | désactivé | `SITE XDUPE 3` après la connexion ; les doublons listés dans un envoi refusé sont ignorés, et les suivants du dossier ne sont même pas essayés |
+| Compresser les transferts (MODE Z) | désactivé | Quand le serveur annonce `MODE Z` ; jamais pour les masques de *Jamais compressés* (archives, vidéo, images par défaut) |
+| Tampon TCP des connexions de données (Kio) | 0 (système) | Tampons d'envoi et de réception |
+| Recul avant de reprendre un téléchargement (Kio) | 0 | La fin d'un fichier partiel est coupée avant la reprise |
+| Espace à garder libre sur le disque local (Mio) | 0 | Un téléchargement qui en laisserait moins échoue |
+| Pas de limite de vitesse pour le réseau local | désactivé | Sites à une adresse privée, de bouclage ou de lien local |
+| Vérifier les téléchargements avec le fichier SFV | désactivé | CRC32 de chaque fichier téléchargé comparé au SFV de son dossier ; un SFV téléchargé en dernier vérifie les fichiers déjà là |
+| Vérifier les envois et le FXP avec XCRC | désactivé | Quand le serveur connaît `XCRC` |
+| Supprimer un fichier au CRC faux et le transférer à nouveau | activé | Sinon le CRC faux est seulement noté au journal |
+| Plusieurs fichiers SFV dans un dossier : n'en prendre aucun | désactivé | |
+| Supprimer les dossiers cibles laissés vides par un transfert | désactivé | À la fin de la file (contenu ignoré) |
+| Garder la date du serveur sur les fichiers téléchargés | désactivé | `MDTM` (ou les attributs SFTP) |
+| Entrer dans un dossier après l'avoir créé | désactivé | `📁+` / `F7` dans un panneau |
+| Ne pas transférer un sous-dossier qui porte le nom de son parent | désactivé | `release/release`, une erreur courante |
+| Supprimer le fichier cible de 0 octet quand la source d'un FXP refuse | activé | |
 
 ## Fiche de site
 
@@ -375,12 +453,33 @@ opérateurs (`or`/`and` bit à bit sur les drapeaux), `if/then/else`, `while`,
 |---|---|---|
 | `RushApp.FTP.Login`, `Logout`, `CWD`, `RAW`, `Delete`, `Transfer`, `RemoveQueue`, `EnableSite`, `DisableSite` ; `RushApp.DeleteEmptyTabs` (`DeleteEmptyContainers`) | `RushApp.Version`, `Language`, `StartDate`, `DayCount`, `TotalDownloadSize`, `TotalUploadSize`, `TotalFxpSize`, `CurDownloadSize`, `CurUploadSize`, `CurFxpSize`, `DownloadBW`, `UploadBW`, `PoolInfo`, `FTP.Splitter`, `Containers.ContainerCount`, `Containers.ConnectedSiteCount`, `Containers.TransferSiteCount` | `RushApp.FTP.Splitter` |
 
-Drapeaux gérés : `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`, `RS_DIRDES`, `RS_DIRSRC`,
-`RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`, `RS_FOLDER`, `RS_FULLPATH`, `RS_GHOST`,
-`RS_INVERT` (`-motdepasse`), `RS_LOGIN`, `RS_LOGOUT`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`,
-`RS_POPUP`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`. Les filtres et le nombre de répétitions
-de `Transfer` et l'`InputQuery` interactif sont reconnus mais pas encore pris en charge (un
-message l'indique).
+Drapeaux gérés : `RS_APPEND`, `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`,
+`RS_DELEMPTYTABS`, `RS_DIRDES`, `RS_DIRSRC`, `RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`,
+`RS_FOLDER`, `RS_FULLPATH`, `RS_GHOST`, `RS_INVERT` (`-motdepasse`), `RS_LOGIN`, `RS_LOGOUT`,
+`RS_NOCIRCLE`, `RS_NOMKD`, `RS_NOSKIP`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`, `RS_POPUP`,
+`RS_SORTDATE`, `RS_SORTDES`, `RS_SORTSIZE`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`.
+`RS_CHECKLOGIN` et l'`InputQuery` interactif sont reconnus mais pas encore pris en charge
+(un message l'indique).
+
+`RushApp.FTP.Transfer(Handle, SrcList, SrcFolder, SrcItem, DesList, DesFolder, DesItem,
+Flag, FolderAllow, FolderSkip, FileAllow, FileSkip, CompleteFlag, RepeatCount, RetryCount,
+Timeout, FolderSort, FileSort, Depth, SubCount)` :
+
+- plusieurs paires partent chacune dans un nouvel onglet et tournent en même temps ; avec
+  `RS_APPEND` (ou un `Handle`), elles partagent un onglet ; `RS_NOCIRCLE` fait attendre à
+  chaque paire que la précédente soit entièrement terminée ;
+- `FolderAllow` … `FileSkip` : masques séparés par `;` (`RS_EXPR` : expressions
+  régulières), `%F%` / `%D%` devant un masque pour les fichiers / dossiers seulement ;
+  `RS_NOSKIP` ignore la liste de fichiers ignorés ;
+- `RepeatCount` : le dossier est relu ce nombre de fois pour attraper les nouvelles
+  entrées, jusqu'à ce qu'un nom corresponde à `CompleteFlag` (expression régulière) ;
+  `RetryCount` : tentatives des éléments ;
+- `FolderSort` / `FileSort` : nom croissant par défaut, `RS_SORTDATE`, `RS_SORTSIZE`,
+  `RS_SORTDES` ; `SubCount` : seulement les premières entrées de chaque dossier ; `Depth` :
+  niveaux de sous-dossiers parcourus (0 : sans limite) ;
+- `RS_LOGOUT` déconnecte les panneaux et `RS_DELEMPTYTABS` ferme l'onglet une fois sa file
+  terminée ; `RS_NOMKD` correspond à la création habituelle des dossiers (on y entre quand
+  ils existent) ; `Timeout` n'est pas utilisé, comme dans FTPRush.
 
 ## DLL mIRC
 
@@ -429,3 +528,4 @@ Dans le dossier des données (`%APPDATA%\UltraRushFTP` par défaut) :
 | `settings.json` | Options ci-dessus (mot de passe du proxy `dpapi:…`) ; les clés absentes prennent leur valeur par défaut |
 | `stats.json` | Totaux des transferts et date de première utilisation (`RushApp.Total*`, `StartDate`) |
 | `queue.json` | File non terminée de chaque onglet (supprimé quand il ne reste rien à faire) |
+| `*.urq` | Fichiers de file enregistrés à la main (n'importe où), même format que `queue.json` |

@@ -10,11 +10,11 @@ pour les types de connexion.
 
 | Crate | Rôle | `unsafe` |
 |---|---|---|
-| `urftp-core` | Modèle : sites et signets, enregistrement du carnet, options, file d'attente, liste d'exclusion, priorités, règles « fichier existant », imports, secrets protégés par DPAPI | interdit |
+| `urftp-core` | Modèle : sites et signets, enregistrement du carnet, options, file d'attente et fichiers de file, options d'élément des scripts et du transfert conditionnel (`itemopts`), liste d'exclusion, priorités, règles « fichier existant », sommes SFV / MD5, imports, secrets protégés par DPAPI | interdit |
 | `urftp-proto` | Client FTP, FTPS explicite/implicite, SFTP, FXP, proxys, serveur Ident, moteur de file, limitation de débit, conversion fiche de site → profil de connexion | interdit |
 | `urftp-script` | Interpréteur du sous-ensemble Pascal Script de FTPRush (`RushApp.*`, drapeaux `RS_*`) | interdit |
 | `urftp-i18n` | Catalogues anglais et français (`locales/*.json`), macro `t!`, détection de la langue de Windows | interdit |
-| `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : fenêtre de la liaison mIRC (`TfmUltraRush`, ou `TfmRush` en mode compatibilité) et mémoire partagée (côté application du protocole mIRC), DPAPI, exports de `rushmirc.dll` (fonctionnalité `mirc-dll`) | autorisé, audité |
+| `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : fenêtre de la liaison mIRC (`TfmUltraRush`, ou `TfmRush` en mode compatibilité) et mémoire partagée (côté application du protocole mIRC), DPAPI, veille / veille prolongée / arrêt (`power`), espace disque libre, exports de `rushmirc.dll` (fonctionnalité `mirc-dll`) | autorisé, audité |
 | `rushmirc` | DLL mIRC (`cdylib`) : réexporte `urftp_sys::mirc`, sans code propre | interdit |
 | `urftp-cli` | Outil en ligne de commande `urftp` | interdit |
 | `urftp-gui` | Interface `UltraRushFTP.exe` (egui / eframe, egui_dock) | interdit |
@@ -55,7 +55,11 @@ les crates :
 - Les transferts sont exécutés par le moteur de file (`urftp-proto::engine`) sur un runtime
   tokio multi-fil séparé. Chaque onglet a sa `Queue` ; le moteur garde un réservoir de
   connexions par site et publie des `EngineEvent` (démarré, progression, terminé, ignoré,
-  échec…).
+  échec…). Il se met en pause (les éléments en cours attendent à nouveau) et s'arrête pour
+  de bon (*Tout arrêter*) ; les dossiers sont développés avec les options de leur élément
+  (filtres, profondeur, tri, relectures, synchronisation avec la liste de la cible), et les
+  transferts de fichiers suivent `TransferRules` (ASCII, `MODE Z`, noms, espace disque,
+  réseau local, `XDUPE`, contrôles SFV / `XCRC`).
 - Toute connexion (panneau, moteur, test de disponibilité) passe par
   `RemoteSession::open`, qui essaie à tour de rôle les autres adresses du site, et ouvre
   sa socket TCP avec `urftp-proto::net` (« happy eyeballs » IPv6/IPv4, RFC 8305).

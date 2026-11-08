@@ -26,7 +26,8 @@ use crate::cmdline::StartupOptions;
 use crate::options::{self, OptionsWindow};
 use crate::sites::{self, SiteManager};
 use crate::theme::{self, human_size};
-use urftp_core::settings::IdentSettings;
+use urftp_core::itemopts::{FolderEntry, ItemOptions};
+use urftp_core::settings::{ConditionScheme, IdentSettings, QueueEnd};
 use urftp_core::site::Site;
 use urftp_i18n::{Lang, language, t};
 use urftp_proto::ident::{IdentConfig, IdentServer};
@@ -57,6 +58,8 @@ struct FileRow {
     modified: String,
     /// Sort key of the date.
     mtime: i64,
+    /// Date in seconds since 1970 (conditional transfer).
+    epoch: Option<i64>,
 }
 
 impl FileRow {
@@ -67,6 +70,7 @@ impl FileRow {
             size: e.size,
             modified: e.modified.map(fmt_time).unwrap_or_default(),
             mtime: e.modified.map(time_key).unwrap_or(0),
+            epoch: e.modified.map(|t| t.epoch(FtpTime::now_epoch())),
         }
     }
 }
@@ -125,6 +129,8 @@ fn skip_text(r: &urftp_core::skiplist::SkipReason) -> String {
         SkipReason::Rule(mask) => t!("skip.reason_rule", mask = mask),
         SkipReason::ZeroByte => t!("skip.reason_zero"),
         SkipReason::AlreadyPresent => t!("skip.reason_present"),
+        SkipReason::Dupe => t!("skip.reason_dupe"),
+        SkipReason::SeveralSfv => t!("skip.reason_several_sfv"),
     }
 }
 
@@ -200,17 +206,19 @@ impl LocalView {
                     .flatten()
                     .filter_map(|e| {
                         let meta = e.metadata().ok()?;
-                        let t = meta
+                        let secs = meta
                             .modified()
                             .ok()
                             .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| urftp_proto::sftp::unix_to_ftptime(d.as_secs() as i64));
+                            .and_then(|d| i64::try_from(d.as_secs()).ok());
+                        let t = secs.map(urftp_proto::sftp::unix_to_ftptime);
                         Some(FileRow {
                             name: e.file_name().to_string_lossy().into_owned(),
                             is_dir: meta.is_dir(),
                             size: meta.len(),
                             modified: t.map(fmt_time).unwrap_or_default(),
                             mtime: t.map(time_key).unwrap_or(0),
+                            epoch: secs,
                         })
                     })
                     .collect();
@@ -456,6 +464,61 @@ struct Container {
     script_out: Vec<(bool, String)>,
     /// Replies to raw commands (`RushApp.FTP.RAW`): (site, command, lines, success).
     raw_replies: Vec<(String, String, Vec<String>, bool)>,
+    /// Selected rows of the queue, and the row a `Shift` range starts from.
+    queue_sel: BTreeSet<ItemId>,
+    queue_anchor: Option<ItemId>,
+    /// Item being edited ("Edit queue").
+    queue_edit: Option<QueueEdit>,
+    /// "Queue information" window.
+    queue_info: bool,
+    /// The engine of the tab has just finished (end-of-queue action).
+    just_finished: bool,
+    /// `RS_LOGOUT`: log the panels out once the queue is finished.
+    logout_when_done: bool,
+    /// `RS_DELEMPTYTABS`: close the tab once its queue is finished and nothing is connected.
+    close_when_done: bool,
+    /// "Conditional transfer" dialog of a panel.
+    condition: Option<ConditionDialog>,
+    /// Messages of work done in the background (SFV / MD5 files).
+    background: Vec<std::sync::mpsc::Receiver<(LogKind, String)>>,
+}
+
+/// Form of the conditional transfer dialog for the selection of panel `side`.
+struct ConditionDialog {
+    side: usize,
+    form: ConditionScheme,
+    error: Option<String>,
+}
+
+/// Form of the "Edit queue" dialog: an empty site is the local disk.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QueueEdit {
+    id: ItemId,
+    mode: urftp_core::TransferMode,
+    src_site: String,
+    src_path: String,
+    dst_site: String,
+    dst_path: String,
+    /// Shown when both ends are local.
+    error: bool,
+}
+
+impl QueueEdit {
+    fn of(it: &QueueItem) -> Self {
+        Self {
+            id: it.id,
+            mode: it.mode,
+            src_site: it.src.site.clone().unwrap_or_default(),
+            src_path: it.src.path.clone(),
+            dst_site: it.dst.site.clone().unwrap_or_default(),
+            dst_path: it.dst.path.clone(),
+            error: false,
+        }
+    }
+
+    fn endpoint(site: &str, path: &str) -> Endpoint {
+        if site.is_empty() { Endpoint::local(path.trim()) } else { Endpoint::remote(site, path.trim()) }
+    }
 }
 
 fn default_dock() -> DockState<Pane> {
@@ -508,6 +571,15 @@ impl Container {
             invoke: "RushApp.Version".into(),
             script_out: Vec::new(),
             raw_replies: Vec::new(),
+            queue_sel: BTreeSet::new(),
+            queue_anchor: None,
+            queue_edit: None,
+            queue_info: false,
+            just_finished: false,
+            logout_when_done: false,
+            close_when_done: false,
+            condition: None,
+            background: Vec::new(),
         }
     }
 
@@ -529,7 +601,73 @@ impl Container {
 
     /// Collects the events of the browsing connections and of the engine. Returns the bytes
     /// transferred since the last call, per direction (for statistics and rates).
-    fn poll(&mut self) -> Vec<(TransferKind, u64)> {
+    /// Source → target of an item, for the log.
+    fn item_paths(&self, id: ItemId) -> String {
+        let q = self.queue.lock();
+        let end = |e: &Endpoint| match &e.site {
+            Some(site) => format!("{site}:{}", e.path),
+            None => e.path.clone(),
+        };
+        q.get(id).map(|i| format!("{} → {}", end(&i.src), end(&i.dst))).unwrap_or_default()
+    }
+
+    /// Writes an SFV (`md5` false) or MD5 file of the selected files of the local panel
+    /// `side`, named after its folder, in the background.
+    fn write_checksums(&mut self, side: usize, md5: bool, ctx: &egui::Context) {
+        let Side::Local(l) = &self.sides[side] else { return };
+        let dir = l.path.clone();
+        let files: Vec<String> = self.sides[side].picked().into_iter().filter(|(_, d)| !d).map(|(n, _)| n).collect();
+        if files.is_empty() {
+            return;
+        }
+        let base = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "files".into());
+        let target = dir.join(format!("{base}.{}", if md5 { "md5" } else { "sfv" }));
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.background.push(rx);
+        self.push_log(side, LogKind::Status, t!("log.checksum_started", n = files.len(), path = target.display()));
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            use urftp_core::checksum::{file_crc32, file_md5, write_md5, write_sfv};
+            let result = if md5 {
+                files
+                    .iter()
+                    .map(|n| file_md5(&dir.join(n)).map(|s| (n.clone(), s)))
+                    .collect::<std::io::Result<Vec<_>>>()
+                    .map(|v| write_md5(&v))
+            } else {
+                files
+                    .iter()
+                    .map(|n| file_crc32(&dir.join(n)).map(|c| (n.clone(), c)))
+                    .collect::<std::io::Result<Vec<_>>>()
+                    .map(|v| write_sfv(&v))
+            };
+            let msg = match result.and_then(|text| std::fs::write(&target, text)) {
+                Ok(()) => (LogKind::Status, t!("log.checksum_written", path = target.display())),
+                Err(e) => (LogKind::Error, t!("log.checksum_failed", path = target.display(), error = e)),
+            };
+            let _ = tx.send(msg);
+            ctx.request_repaint();
+        });
+    }
+
+    /// `log_paths`: source and target of each item in the log.
+    fn poll(&mut self, log_paths: bool) -> Vec<(TransferKind, u64)> {
+        let mut done = Vec::new();
+        self.background.retain(|rx| match rx.try_recv() {
+            Ok(m) => {
+                done.push(m);
+                false
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => true,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
+        });
+        let refresh = !done.is_empty();
+        for (kind, text) in done {
+            self.push_log(0, kind, text);
+        }
+        if refresh {
+            self.refresh_both();
+        }
         let mut traffic = Vec::new();
         for side in 0..2 {
             let mut events = Vec::new();
@@ -558,10 +696,34 @@ impl Container {
                         traffic.push((k, bytes.saturating_sub(before)));
                     }
                 }
+                EngineEvent::Started { id } if log_paths => {
+                    let paths = self.item_paths(id);
+                    self.push_log(0, LogKind::Status, t!("log.item_started", paths = paths));
+                }
                 EngineEvent::Done { id, bytes } => {
                     if self.queue.lock().get(id).map(QueueItem::kind) == Some(TransferKind::Fxp) {
                         traffic.push((TransferKind::Fxp, bytes));
                     }
+                    if log_paths {
+                        let paths = self.item_paths(id);
+                        self.push_log(0, LogKind::Status, t!("log.item_done", paths = paths));
+                    }
+                }
+                EngineEvent::Paused { id } if log_paths => {
+                    let paths = self.item_paths(id);
+                    self.push_log(0, LogKind::Status, t!("log.item_paused", paths = paths));
+                }
+                EngineEvent::CrcChecked { path, ok, .. } => {
+                    let (kind, text) = if ok {
+                        (LogKind::Status, t!("log.crc_ok", path = path))
+                    } else {
+                        (LogKind::Error, t!("log.crc_bad", path = path))
+                    };
+                    self.push_log(0, kind, text);
+                }
+                EngineEvent::SyncDeleted { path, .. } => self.push_log(0, LogKind::Status, t!("log.sync_deleted", path = path)),
+                EngineEvent::RetryRound { round, items } => {
+                    self.push_log(0, LogKind::Status, t!("log.retry_round", round = round, n = items))
                 }
                 EngineEvent::Failed { id, error } => self.push_log(0, LogKind::Error, t!("log.item_failed", id = id, error = error)),
                 EngineEvent::Retrying { id, attempt, error } => {
@@ -574,6 +736,7 @@ impl Container {
             self.engine_events = None;
             self.engine = None;
             self.push_log(0, LogKind::Status, t!("log.queue_finished"));
+            self.just_finished = true;
             self.refresh_both();
         }
         traffic
@@ -698,23 +861,45 @@ impl Container {
 
     /// Adds the selection of panel `from` to the queue, towards the folder of the other panel.
     fn enqueue_selection(&mut self, from: usize) {
+        self.enqueue_selection_with(from, None);
+    }
+
+    /// [`Container::enqueue_selection`] with the options of a conditional transfer: the
+    /// selected items themselves must pass its filters and conditions. Returns how many
+    /// items were queued.
+    fn enqueue_selection_with(&mut self, from: usize, options: Option<Arc<ItemOptions>>) -> usize {
         let to = 1 - from;
         let picks: Vec<FileRow> = self.sides[from].selected().iter().filter_map(|&i| self.sides[from].rows().get(i).cloned()).collect();
         if picks.is_empty() {
-            return;
+            return 0;
         }
         if self.sides[from].profile().is_none() && self.sides[to].profile().is_none() {
             self.push_log(from, LogKind::Error, t!("log.local_to_local"));
-            return;
+            return 0;
         }
         let mut q = self.queue.lock();
+        let mut added = 0;
         for row in &picks {
+            if let Some(o) = &options {
+                let entry = FolderEntry {
+                    name: row.name.clone(),
+                    is_dir: row.is_dir,
+                    size: (!row.is_dir).then_some(row.size),
+                    modified: row.epoch,
+                };
+                if !o.filter.allows(&row.name, row.is_dir) || !o.conditions.allows(&entry) {
+                    continue;
+                }
+            }
             let src = self.sides[from].endpoint(&row.name);
             let dst = self.sides[to].endpoint(&row.name);
-            q.push(src, dst, row.is_dir, (!row.is_dir).then_some(row.size), None);
+            let id = q.push(src, dst, row.is_dir, (!row.is_dir).then_some(row.size), None);
+            q.set_options(id, options.clone(), None);
+            added += 1;
         }
         drop(q);
-        self.push_log(from, LogKind::Status, t!("log.items_queued", n = picks.len()));
+        self.push_log(from, LogKind::Status, t!("log.items_queued", n = added));
+        added
     }
 
     /// Starts the engine. `extra`: profiles of the queue sites missing from the panels
@@ -764,7 +949,8 @@ impl Container {
     }
 
     /// Runs a confirmed dialog (local: at once; remote: through the panel connection).
-    fn run_prompt(&mut self, p: Prompt) {
+    /// `enter`: go into a folder just created ("Enter a folder after creating it").
+    fn run_prompt(&mut self, p: Prompt, enter: bool) {
         match p {
             Prompt::NewFolder { side, name } => {
                 let name = name.trim().to_string();
@@ -773,11 +959,17 @@ impl Container {
                 }
                 let full = self.sides[side].full_path(&name);
                 if let Side::Remote(r) = &self.sides[side] {
-                    r.handle.send(BrowserCmd::Mkdir(full));
+                    r.handle.send(BrowserCmd::Mkdir(full.clone()));
+                    if enter {
+                        r.handle.send(BrowserCmd::Cwd(full));
+                    }
                 } else {
                     match std::fs::create_dir(&full) {
                         Ok(()) => {
                             if let Side::Local(l) = &mut self.sides[side] {
+                                if enter {
+                                    l.path = PathBuf::from(&full);
+                                }
                                 l.reload();
                             }
                         }
@@ -848,6 +1040,40 @@ impl Container {
         if let Some(e) = &self.engine {
             e.stop_all();
         }
+    }
+
+    fn paused(&self) -> bool {
+        self.engine.as_ref().is_some_and(|e| e.is_paused())
+    }
+
+    /// Click on a queue row: alone, `Ctrl` adds or removes it, `Shift` takes the range from
+    /// the previous click.
+    fn select_queue_row(&mut self, id: ItemId, toggle: bool, range: bool) {
+        let order = self.queue.lock().ids();
+        match (range, self.queue_anchor) {
+            (true, Some(anchor)) => {
+                let pos = |x| order.iter().position(|&i| i == x);
+                if let (Some(a), Some(b)) = (pos(anchor), pos(id)) {
+                    self.queue_sel = order[a.min(b)..=a.max(b)].iter().copied().collect();
+                }
+            }
+            _ if toggle => {
+                if !self.queue_sel.remove(&id) {
+                    self.queue_sel.insert(id);
+                }
+                self.queue_anchor = Some(id);
+            }
+            _ => {
+                self.queue_sel = BTreeSet::from([id]);
+                self.queue_anchor = Some(id);
+            }
+        }
+    }
+
+    /// Forgets the selected rows that left the queue.
+    fn prune_queue_selection(&mut self) {
+        let q = self.queue.lock();
+        self.queue_sel.retain(|id| q.get(*id).is_some());
     }
 
     fn retry_item(&mut self, id: ItemId) {
@@ -941,6 +1167,10 @@ pub struct UltraRushApp {
     shortcuts_open: bool,
     /// "About" window (Help menu).
     about_open: bool,
+    /// End-of-queue action waiting for its countdown: (action, when it runs).
+    queue_end: Option<(QueueEnd, std::time::Instant)>,
+    /// Runs sleep / hibernate / shut down (replaced in the tests).
+    power: fn(QueueEnd) -> Result<(), String>,
     /// mIRC link (`TfmRush` window); off in the interface tests.
     ipc_enabled: bool,
 }
@@ -1019,6 +1249,23 @@ enum Action {
     QueueRemove(ItemId),
     QueueRetry(ItemId),
     QueueRetryAll,
+    QueuePause,
+    /// Click on a queue row: (item, `Ctrl`, `Shift`).
+    QueueSelect(ItemId, bool, bool),
+    QueueEdit(ItemId),
+    QueueInvert(Vec<ItemId>),
+    QueueMarkFailed(Vec<ItemId>),
+    QueueMarkAllFailed,
+    QueueClearFailed,
+    /// Removes every item but the running ones.
+    QueueClearAll,
+    QueueInfo,
+    QueueSaveFile,
+    QueueLoadFile,
+    /// Opens the conditional transfer dialog for the selection of a panel.
+    Conditional(usize),
+    /// SFV (`false`) or MD5 (`true`) file of the selection of a local panel.
+    Checksums(usize, bool),
     /// Console: run the script of the tab / evaluate its expression.
     RunScript,
     Invoke,
@@ -1069,6 +1316,8 @@ impl UltraRushApp {
             // Development (screenshots): `URUSHFTP_OPEN_SHORTCUTS=1` opens the shortcuts window.
             shortcuts_open: std::env::var_os("URUSHFTP_OPEN_SHORTCUTS").is_some(),
             about_open: std::env::var_os("URUSHFTP_OPEN_ABOUT").is_some(),
+            queue_end: None,
+            power: run_power_action,
             ipc_enabled: true,
         };
         // The URUSHFTP_THEME variable wins over the stored option.
@@ -1421,6 +1670,408 @@ impl UltraRushApp {
         }
     }
 
+    /// End of the queues: once every tab is idle with nothing left to do, runs the action
+    /// of the options (logging out at once, the others after a countdown).
+    fn check_queue_end(&mut self, ctx: &egui::Context) {
+        let finished: Vec<usize> = (0..self.tabs.len()).filter(|&i| std::mem::take(&mut self.tabs[i].just_finished)).collect();
+        // Requests of `RushApp.FTP.Transfer` (RS_LOGOUT, RS_DELEMPTYTABS), last tab first.
+        for &i in finished.iter().rev() {
+            let t = &mut self.tabs[i];
+            if t.queue.lock().has_pending() {
+                continue;
+            }
+            if std::mem::take(&mut t.logout_when_done) {
+                t.disconnect_side(0);
+                t.disconnect_side(1);
+            }
+            let local = t.sides.iter().chain(t.parked.iter().flatten()).all(|s| matches!(s, Side::Local(_)));
+            if std::mem::take(&mut t.close_when_done) && local && self.tabs.len() > 1 {
+                self.tabs.remove(i);
+                self.active = self.active.min(self.tabs.len() - 1);
+            }
+        }
+        let finished: Vec<usize> = finished.into_iter().filter(|&i| i < self.tabs.len()).collect();
+        let action = self.options.settings.transfer.on_queue_end;
+        let idle = self.tabs.iter().all(|t| t.engine_events.is_none() && !t.queue.lock().has_pending());
+        if !finished.is_empty() && action == QueueEnd::Disconnect {
+            for &i in &finished {
+                if !self.tabs[i].queue.lock().has_pending() {
+                    self.tabs[i].disconnect_side(0);
+                    self.tabs[i].disconnect_side(1);
+                }
+            }
+        } else if !finished.is_empty() && idle && action.needs_countdown() && self.queue_end.is_none() {
+            let secs = u64::from(self.options.settings.transfer.queue_end_countdown_secs);
+            self.queue_end = Some((action, std::time::Instant::now() + Duration::from_secs(secs)));
+        }
+        if let Some((action, when)) = self.queue_end {
+            if std::time::Instant::now() >= when {
+                self.queue_end = None;
+                self.perform_queue_end(action, ctx);
+            } else {
+                ctx.request_repaint_after(Duration::from_millis(250));
+            }
+        }
+    }
+
+    /// Runs an end-of-queue action that needed a countdown.
+    fn perform_queue_end(&mut self, action: QueueEnd, ctx: &egui::Context) {
+        let a = self.active;
+        self.tabs[a].push_log(0, LogKind::Status, t!("log.queue_end_run", action = queue_end_label(action)));
+        if action == QueueEnd::Exit {
+            self.stats.save();
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else if let Err(e) = (self.power)(action) {
+            self.tabs[a].push_log(0, LogKind::Error, t!("log.queue_end_failed", action = queue_end_label(action), error = e));
+        }
+    }
+
+    /// Countdown before the end-of-queue action: run it now or cancel it.
+    fn queue_end_dialog(&mut self, ctx: &egui::Context) {
+        let Some((action, when)) = self.queue_end else { return };
+        let left = when.saturating_duration_since(std::time::Instant::now()).as_secs() + 1;
+        let mut choice: Option<bool> = None;
+        egui::Modal::new(egui::Id::new("queue-end")).show(ctx, |ui| {
+            ui.set_min_width(380.0);
+            ui.heading(t!("queue_end.title"));
+            ui.label(t!("queue_end.countdown", action = queue_end_label(action), n = left));
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let cancel = ui.button(t!("common.cancel"));
+                // The keyboard starts on Cancel: the action may stop the computer.
+                focus_once(ui, &cancel);
+                if cancel.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    choice = Some(false);
+                }
+                if theme::danger_button(ui, t!("queue_end.now")).clicked() {
+                    choice = Some(true);
+                }
+            });
+        });
+        match choice {
+            Some(true) => {
+                self.queue_end = None;
+                self.perform_queue_end(action, ctx);
+            }
+            Some(false) => {
+                self.queue_end = None;
+                let a = self.active;
+                self.tabs[a].push_log(0, LogKind::Status, t!("log.queue_end_cancelled", action = queue_end_label(action)));
+            }
+            None => {}
+        }
+    }
+
+    /// Writes the unfinished items of the active tab to a queue file ("Save queue").
+    pub(crate) fn save_queue_file(&mut self, path: &Path) {
+        let a = self.active;
+        let tab = urftp_core::queuestore::SavedTab::of_queue(self.tabs[a].title(a + 1), &self.tabs[a].queue.lock());
+        let msg = match tab.save_file(path) {
+            Ok(()) => (LogKind::Status, t!("log.queue_saved", n = tab.items.len(), path = path.display())),
+            Err(e) => (LogKind::Error, t!("log.queue_save_failed", path = path.display(), error = e)),
+        };
+        self.tabs[a].push_log(0, msg.0, msg.1);
+    }
+
+    /// Adds the items of a queue file to the queue of the active tab ("Load queue").
+    pub(crate) fn load_queue_file(&mut self, path: &Path) {
+        let a = self.active;
+        let msg = match urftp_core::queuestore::SavedTab::load_file(path) {
+            Ok(saved) => {
+                let n = saved.items.len();
+                let loaded = saved.into_queue();
+                self.tabs[a]
+                    .queue
+                    .lock()
+                    .append(loaded.items().iter().map(|i| (i.src.clone(), i.dst.clone(), i.is_dir, i.size, i.priority, i.state.clone())));
+                (LogKind::Status, t!("log.queue_loaded", n = n, path = path.display()))
+            }
+            Err(e) => (LogKind::Error, t!("log.queue_load_failed", path = path.display(), error = e)),
+        };
+        self.tabs[a].push_log(0, msg.0, msg.1);
+    }
+
+    /// "Edit queue" dialog: source and target of an item, FXP inverted by a button.
+    fn queue_edit_dialog(&mut self, ctx: &egui::Context) {
+        let mut names: Vec<String> = self.sites.book.all_sites().into_iter().map(|(_, s)| s.name.clone()).collect();
+        let tab = &mut self.tabs[self.active];
+        let Some(form) = &mut tab.queue_edit else { return };
+        for n in [&form.src_site, &form.dst_site] {
+            if !n.is_empty() && !names.contains(n) {
+                names.push(n.clone());
+            }
+        }
+        let mut done: Option<bool> = None;
+        egui::Modal::new(egui::Id::new(("queue-edit", tab.id))).show(ctx, |ui| {
+            ui.set_min_width(520.0);
+            ui.heading(t!("queue.edit_title"));
+            ui.add_space(4.0);
+            egui::Grid::new("queue-edit-grid").num_columns(3).spacing([10.0, 8.0]).show(ui, |ui| {
+                for (label, site, path, salt) in [
+                    (t!("queue.edit_source"), &mut form.src_site, &mut form.src_path, "src"),
+                    (t!("queue.edit_target"), &mut form.dst_site, &mut form.dst_path, "dst"),
+                ] {
+                    ui.label(&label);
+                    let shown = if site.is_empty() { t!("queue.edit_local") } else { site.clone() };
+                    let combo =
+                        egui::ComboBox::from_id_salt(("queue-edit-site", salt)).selected_text(shown).width(170.0).show_ui(ui, |ui| {
+                            ui.selectable_value(site, String::new(), t!("queue.edit_local"));
+                            for n in &names {
+                                ui.selectable_value(site, n.clone(), n);
+                            }
+                        });
+                    theme::name(&combo.response, t!("queue.edit_site_of", side = &label));
+                    let r = ui.add(theme::single_line(path).desired_width(300.0));
+                    theme::name(&r, t!("queue.edit_path_of", side = &label));
+                    ui.end_row();
+                }
+            });
+            ui.horizontal(|ui| {
+                let l = ui.label(t!("queue.edit_mode"));
+                let combo = egui::ComboBox::from_id_salt("queue-edit-mode")
+                    .selected_text(options::mode_label(form.mode))
+                    .width(170.0)
+                    .show_ui(ui, |ui| {
+                        for m in [urftp_core::TransferMode::Auto, urftp_core::TransferMode::Binary, urftp_core::TransferMode::Ascii] {
+                            ui.selectable_value(&mut form.mode, m, options::mode_label(m));
+                        }
+                    });
+                combo.response.labelled_by(l.id);
+            });
+            if form.error {
+                ui.colored_label(theme::colors(ui).error, t!("queue.edit_local_to_local"));
+            }
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if theme::primary_button(ui, t!("common.validate")).clicked() {
+                    done = Some(true);
+                }
+                if ui.button(t!("queue.invert")).on_hover_text(t!("queue.invert_hint")).clicked() {
+                    std::mem::swap(&mut form.src_site, &mut form.dst_site);
+                    std::mem::swap(&mut form.src_path, &mut form.dst_path);
+                }
+                if ui.button(t!("common.cancel")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    done = Some(false);
+                }
+            });
+        });
+        match done {
+            Some(true) if form.src_site.is_empty() && form.dst_site.is_empty() => form.error = true,
+            Some(true) => {
+                let src = QueueEdit::endpoint(&form.src_site, &form.src_path);
+                let dst = QueueEdit::endpoint(&form.dst_site, &form.dst_path);
+                let (id, mode) = (form.id, form.mode);
+                let mut q = tab.queue.lock();
+                q.edit(id, src, dst);
+                q.set_mode(id, mode);
+                drop(q);
+                tab.queue_edit = None;
+            }
+            Some(false) => tab.queue_edit = None,
+            None => {}
+        }
+    }
+
+    /// "Conditional transfer" dialog: filters, dates, sizes, synchronisation, schemes.
+    fn conditional_dialog(&mut self, ctx: &egui::Context) {
+        let a = self.active;
+        let rt = self.rt.clone();
+        let opts = self.engine_options();
+        let extra = self.queue_site_profiles(a);
+        let schemes = &mut self.options.settings.condition_schemes;
+        let tab = &mut self.tabs[a];
+        let Some(dlg) = &mut tab.condition else { return };
+        // None: open; Some(None): cancel; Some(Some(start)): queue, then start or not.
+        let mut done: Option<Option<bool>> = None;
+        let mut schemes_changed = false;
+        egui::Modal::new(egui::Id::new(("conditional", tab.id))).show(ctx, |ui| {
+            ui.set_min_width(560.0);
+            ui.heading(t!("cond.title"));
+            let f = &mut dlg.form;
+            ui.horizontal(|ui| {
+                let l = ui.label(t!("cond.scheme"));
+                let combo = egui::ComboBox::from_id_salt("cond-scheme").selected_text(f.name.clone()).width(180.0).show_ui(ui, |ui| {
+                    for sc in schemes.iter() {
+                        if ui.selectable_label(sc.name == f.name, &sc.name).clicked() {
+                            *f = sc.clone();
+                        }
+                    }
+                });
+                combo.response.labelled_by(l.id);
+                let n = ui.add(theme::single_line(&mut f.name).hint_text(t!("cond.scheme_name")).desired_width(150.0));
+                theme::name(&n, t!("cond.scheme_name"));
+                if ui.add_enabled(!f.name.trim().is_empty(), egui::Button::new(t!("cond.save"))).clicked() {
+                    f.name = f.name.trim().to_string();
+                    match schemes.iter_mut().find(|sc| sc.name == f.name) {
+                        Some(sc) => *sc = f.clone(),
+                        None => schemes.push(f.clone()),
+                    }
+                    schemes_changed = true;
+                }
+                if ui.add_enabled(schemes.iter().any(|sc| sc.name == f.name), egui::Button::new(t!("cond.delete"))).clicked() {
+                    schemes.retain(|sc| sc.name != f.name);
+                    schemes_changed = true;
+                }
+            });
+            ui.separator();
+            egui::Grid::new("cond-names").num_columns(3).spacing([10.0, 6.0]).show(ui, |ui| {
+                ui.label("");
+                ui.label(RichText::new(t!("cond.include")).strong());
+                ui.label(RichText::new(t!("cond.exclude")).strong());
+                ui.end_row();
+                for (label, inc, exc) in [
+                    (t!("cond.folders"), &mut f.folder_include, &mut f.folder_exclude),
+                    (t!("cond.files"), &mut f.file_include, &mut f.file_exclude),
+                ] {
+                    ui.label(&label);
+                    let i = ui.add(theme::single_line(inc).desired_width(220.0));
+                    theme::name(&i, format!("{label} — {}", t!("cond.include")));
+                    let e = ui.add(theme::single_line(exc).desired_width(220.0));
+                    theme::name(&e, format!("{label} — {}", t!("cond.exclude")));
+                    ui.end_row();
+                }
+            });
+            ui.label(RichText::new(t!("cond.masks_note")).weak());
+            ui.checkbox(&mut f.regex, t!("cond.regex"));
+            ui.add_space(4.0);
+            ui.label(RichText::new(t!("cond.advanced")).strong());
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut f.date_between, t!("cond.date_between"));
+                let from = ui
+                    .add_enabled(f.date_between, theme::single_line(&mut f.date_from).hint_text(t!("cond.date_hint")).desired_width(100.0));
+                theme::name(&from, t!("cond.date_from"));
+                let to =
+                    ui.add_enabled(f.date_between, theme::single_line(&mut f.date_to).hint_text(t!("cond.date_hint")).desired_width(100.0));
+                theme::name(&to, t!("cond.date_to"));
+            });
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut f.not_older, t!("cond.not_older"));
+                let d = ui.add_enabled(f.not_older, egui::DragValue::new(&mut f.not_older_days).range(0..=36500));
+                theme::name(&d, t!("cond.not_older"));
+                ui.label(t!("cond.days"));
+            });
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut f.size_range, t!("cond.size"));
+                let min = ui.add_enabled(f.size_range, egui::DragValue::new(&mut f.min_kib).speed(16));
+                theme::name(&min, t!("cond.size_min"));
+                let max = ui.add_enabled(f.size_range, egui::DragValue::new(&mut f.max_kib).speed(16));
+                theme::name(&max, t!("cond.size_max"));
+                ui.label(t!("cond.kib"));
+            });
+            ui.checkbox(&mut f.dates_on_folders, t!("cond.dates_on_folders"));
+            ui.checkbox(&mut f.no_skiplist, t!("cond.no_skiplist"));
+            ui.checkbox(&mut f.sub_dirs, t!("cond.sub_dirs"));
+            ui.checkbox(&mut f.disconnect_after, t!("cond.disconnect_after"));
+            ui.add_space(4.0);
+            ui.checkbox(&mut f.sync, RichText::new(t!("cond.sync")).strong());
+            ui.add_enabled_ui(f.sync, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(&mut f.delete_missing, t!("cond.delete_missing"));
+                    ui.checkbox(&mut f.compare_date, t!("cond.compare_date"));
+                    ui.checkbox(&mut f.compare_size, t!("cond.compare_size"));
+                    ui.checkbox(&mut f.existing_only, t!("cond.existing_only"));
+                    ui.checkbox(&mut f.both_sides, t!("cond.both_sides"));
+                });
+            });
+            if let Some(e) = &dlg.error {
+                ui.colored_label(theme::colors(ui).error, e);
+            }
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if theme::primary_button(ui, t!("cond.begin")).clicked() {
+                    done = Some(Some(true));
+                }
+                if ui.button(t!("cond.add")).clicked() {
+                    done = Some(Some(false));
+                }
+                if ui.button(t!("common.cancel")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    done = Some(None);
+                }
+            });
+        });
+        match done {
+            Some(Some(start)) => match dlg.form.to_options(FtpTime::now_epoch()) {
+                Err(e) => dlg.error = Some(e.to_string()),
+                Ok(options) => {
+                    let (side, logout) = (dlg.side, dlg.form.disconnect_after);
+                    tab.condition = None;
+                    let options = (!options.is_default()).then(|| Arc::new(options));
+                    if tab.enqueue_selection_with(side, options) > 0 {
+                        tab.logout_when_done |= logout;
+                        if start {
+                            tab.start_queue(&rt, ctx, opts, &extra);
+                        }
+                    }
+                }
+            },
+            Some(None) => tab.condition = None,
+            None => {}
+        }
+        if schemes_changed {
+            self.options.touch(ctx);
+        }
+    }
+
+    /// "Queue information" window: counts, sizes, time left at the current speed.
+    fn queue_info_window(&mut self, ctx: &egui::Context) {
+        let (down, up) = self.stats.bandwidth();
+        let rate = ((down + up) * 1024.0) as u64;
+        let tab = &mut self.tabs[self.active];
+        if !tab.queue_info {
+            return;
+        }
+        let st = tab.queue.lock().stats();
+        let mut open = true;
+        egui::Window::new(t!("queue.info_title"))
+            .id(egui::Id::new(("queue-info", tab.id)))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                egui::Grid::new("queue-info-grid").num_columns(2).spacing([24.0, 4.0]).striped(true).show(ui, |ui| {
+                    let rows = [
+                        (t!("queue.info_items"), t!("queue.info_items_value", files = st.files, folders = st.folders)),
+                        (t!("queue.info_kinds"), t!("queue.info_kinds_value", down = st.downloads, up = st.uploads, fxp = st.fxp)),
+                        (t!("state.waiting"), st.waiting.to_string()),
+                        (t!("state.running"), st.running.to_string()),
+                        (t!("state.done"), st.done.to_string()),
+                        (t!("queue.info_skipped"), st.skipped.to_string()),
+                        (t!("queue.info_failed"), st.failed.to_string()),
+                        (t!("state.stopped"), st.stopped.to_string()),
+                        (t!("state.confirm"), st.to_confirm.to_string()),
+                        (t!("queue.info_total"), human_size(st.total_bytes)),
+                        (t!("queue.info_done"), human_size(st.done_bytes)),
+                        (
+                            t!("queue.info_left"),
+                            if st.unknown_sizes > 0 {
+                                t!("queue.info_left_unknown", size = human_size(st.left_bytes), n = st.unknown_sizes)
+                            } else {
+                                human_size(st.left_bytes)
+                            },
+                        ),
+                        (
+                            t!("queue.info_eta"),
+                            st.eta(rate).map_or_else(
+                                || t!("queue.info_eta_none"),
+                                |d| {
+                                    let s = d.as_secs();
+                                    format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
+                                },
+                            ),
+                        ),
+                    ];
+                    for (k, v) in rows {
+                        ui.label(k);
+                        ui.label(RichText::new(v).strong());
+                        ui.end_row();
+                    }
+                });
+            });
+        if !open {
+            tab.queue_info = false;
+        }
+    }
+
     /// Connects panel `side` of the active tab to a site record (connection bar and menu of
     /// the panel); the local folder of the site goes to the other panel when it is local.
     fn connect_site_in(&mut self, site: Site, variant: sites::LoginVariant, side: usize, ctx: &egui::Context) {
@@ -1478,7 +2129,11 @@ impl UltraRushApp {
         if o.run_queues {
             let rt = self.rt.clone();
             let opts = self.engine_options();
+            let reset = self.options.settings.transfer.reset_failed_on_auto_start;
             for t in 0..self.tabs.len() {
+                if reset {
+                    self.tabs[t].queue.lock().retry_failed_only();
+                }
                 if self.tabs[t].queue.lock().has_pending() {
                     let extra = self.queue_site_profiles(t);
                     self.tabs[t].start_queue(&rt, ctx, opts.clone(), &extra);
@@ -1708,6 +2363,9 @@ impl UltraRushApp {
         let extra = self.queue_site_profiles(self.active);
         let mut scripts = Vec::new();
         let (mut connects, mut reconnects, mut open_sites) = (Vec::new(), Vec::new(), false);
+        let clear_on_logout = self.options.settings.transfer.clear_queue_on_logout;
+        // Queue file: Some(true) = save, Some(false) = load (file dialog after the loop).
+        let mut queue_file: Option<bool> = None;
         let tab = &mut self.tabs[self.active];
         for a in actions {
             match a {
@@ -1725,7 +2383,23 @@ impl UltraRushApp {
                     Side::Local(l) => l.reload(),
                     Side::Remote(r) => r.handle.send(BrowserCmd::Refresh),
                 },
-                Action::Disconnect(side) => tab.disconnect_side(side),
+                Action::Disconnect(side) => {
+                    if clear_on_logout {
+                        let site =
+                            [&tab.sides[side]].into_iter().chain(tab.parked[side].iter()).find_map(|s| s.profile().map(|p| p.name.clone()));
+                        if let Some(site) = site {
+                            let n = tab.queue.lock().remove_where(|i| {
+                                i.state == ItemState::Waiting
+                                    && (i.src.site.as_deref() == Some(&site) || i.dst.site.as_deref() == Some(&site))
+                            });
+                            if n > 0 {
+                                tab.push_log(side, LogKind::Status, t!("log.queue_cleared_logout", n = n, site = site));
+                            }
+                            tab.prune_queue_selection();
+                        }
+                    }
+                    tab.disconnect_side(side);
+                }
                 Action::SwitchSide(side) => tab.switch_side(side),
                 Action::RemoteCwd(side, dir) => {
                     if let Side::Remote(r) = &tab.sides[side]
@@ -1741,7 +2415,52 @@ impl UltraRushApp {
                     tab.enqueue_selection(side);
                     tab.start_queue(&rt, ctx, opts.clone(), &extra);
                 }
-                Action::StartQueue => tab.start_queue(&rt, ctx, opts.clone(), &extra),
+                Action::StartQueue => match &tab.engine {
+                    Some(e) if e.is_paused() => {
+                        e.resume();
+                        tab.push_log(0, LogKind::Status, t!("log.queue_resumed"));
+                    }
+                    _ => tab.start_queue(&rt, ctx, opts.clone(), &extra),
+                },
+                Action::QueuePause => {
+                    if let Some(e) = &tab.engine {
+                        e.pause();
+                        tab.push_log(0, LogKind::Status, t!("log.queue_paused"));
+                    }
+                }
+                Action::QueueSelect(id, toggle, range) => tab.select_queue_row(id, toggle, range),
+                Action::QueueEdit(id) => tab.queue_edit = tab.queue.lock().get(id).map(QueueEdit::of),
+                Action::QueueInvert(ids) => {
+                    let mut q = tab.queue.lock();
+                    let n = ids.iter().filter(|&&id| q.invert_fxp(id)).count();
+                    drop(q);
+                    tab.push_log(0, LogKind::Status, t!("log.queue_inverted", n = n));
+                }
+                Action::QueueMarkFailed(ids) => {
+                    tab.queue.lock().mark_failed(&ids, &t!("queue.marked_failed"));
+                }
+                Action::QueueMarkAllFailed => {
+                    let mut q = tab.queue.lock();
+                    let ids = q.ids();
+                    q.mark_failed(&ids, &t!("queue.marked_failed"));
+                }
+                Action::QueueClearFailed => {
+                    tab.queue.lock().clear_failed();
+                    tab.prune_queue_selection();
+                }
+                Action::QueueClearAll => {
+                    tab.queue.lock().remove_where(|_| true);
+                    tab.prune_queue_selection();
+                }
+                Action::QueueInfo => tab.queue_info = true,
+                Action::QueueSaveFile => queue_file = Some(true),
+                Action::Checksums(side, md5) => tab.write_checksums(side, md5, ctx),
+                Action::Conditional(side) => {
+                    if !tab.sides[side].selected().is_empty() {
+                        tab.condition = Some(ConditionDialog { side, form: ConditionScheme::default(), error: None });
+                    }
+                }
+                Action::QueueLoadFile => queue_file = Some(false),
                 Action::ClearFinished => {
                     tab.queue.lock().remove_where(|i| i.state.is_finished());
                 }
@@ -1776,6 +2495,7 @@ impl UltraRushApp {
                 Action::QueueMove(id, m) => tab.move_item(id, m),
                 Action::QueueRemove(id) => {
                     tab.queue.lock().remove_where(|i| i.id == id);
+                    tab.prune_queue_selection();
                 }
                 Action::QueueRetry(id) => {
                     tab.retry_item(id);
@@ -1789,6 +2509,29 @@ impl UltraRushApp {
         }
         if open_sites {
             self.sites.open = true;
+        }
+        match queue_file {
+            Some(true) => {
+                let name = format!("{}.urq", self.tabs[self.active].title(self.active + 1));
+                if let Some(path) = rfd::FileDialog::new()
+                    .set_title(t!("queue.save_file"))
+                    .add_filter(t!("queue.file_filter"), &["urq", "json"])
+                    .set_file_name(name)
+                    .save_file()
+                {
+                    self.save_queue_file(&path);
+                }
+            }
+            Some(false) => {
+                if let Some(path) = rfd::FileDialog::new()
+                    .set_title(t!("queue.load_file"))
+                    .add_filter(t!("queue.file_filter"), &["urq", "json"])
+                    .pick_file()
+                {
+                    self.load_queue_file(&path);
+                }
+            }
+            None => {}
         }
         // Connections need the site manager: after the actions of the tab.
         for (side, id, variant) in connects {
@@ -1861,7 +2604,9 @@ impl UltraRushApp {
         }
         let tab = &self.tabs[self.active];
         let busy = ctx.egui_wants_keyboard_input() || ctx.memory(|m| m.focused().is_some());
-        if busy || self.sites.open || self.options.open || self.shortcuts_open || self.about_open {
+        let queue_dialog =
+            self.queue_end.is_some() || self.tabs.get(self.active).is_some_and(|t| t.queue_edit.is_some() || t.condition.is_some());
+        if busy || queue_dialog || self.sites.open || self.options.open || self.shortcuts_open || self.about_open {
             return Vec::new();
         }
         let side = tab.focus;
@@ -1939,6 +2684,7 @@ impl UltraRushApp {
 
     /// Input dialogs (new folder, rename) and confirmation (delete).
     fn prompt_dialog(&mut self, ctx: &egui::Context) {
+        let enter = self.options.settings.transfer.enter_new_folder;
         let tab = &mut self.tabs[self.active];
         let Some(prompt) = &mut tab.prompt else { return };
         let mut done: Option<bool> = None;
@@ -1996,7 +2742,7 @@ impl UltraRushApp {
             && let Some(p) = tab.prompt.take()
             && ok
         {
-            tab.run_prompt(p);
+            tab.run_prompt(p, enter);
         }
     }
 
@@ -2064,6 +2810,29 @@ fn focus_once(ui: &egui::Ui, r: &egui::Response) {
     }
 }
 
+/// Sleep, hibernate or shut down the computer.
+fn run_power_action(action: QueueEnd) -> Result<(), String> {
+    let r = match action {
+        QueueEnd::Sleep => urftp_sys::power::sleep(),
+        QueueEnd::Hibernate => urftp_sys::power::hibernate(),
+        QueueEnd::ShutDown => urftp_sys::power::shut_down(),
+        QueueEnd::Nothing | QueueEnd::Disconnect | QueueEnd::Exit => Ok(()),
+    };
+    r.map_err(|e| e.to_string())
+}
+
+/// Translated name of an end-of-queue action.
+pub(crate) fn queue_end_label(a: QueueEnd) -> String {
+    match a {
+        QueueEnd::Nothing => t!("queue_end.nothing"),
+        QueueEnd::Disconnect => t!("queue_end.disconnect"),
+        QueueEnd::Exit => t!("queue_end.exit"),
+        QueueEnd::Sleep => t!("queue_end.sleep"),
+        QueueEnd::Hibernate => t!("queue_end.hibernate"),
+        QueueEnd::ShutDown => t!("queue_end.shut_down"),
+    }
+}
+
 impl Drop for UltraRushApp {
     fn drop(&mut self) {
         self.save_queue();
@@ -2074,8 +2843,10 @@ impl eframe::App for UltraRushApp {
     // Called on every frame, and also while the window is minimised: transfers, statistics
     // and mIRC requests keep being processed.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(Container::poll).collect();
+        let log_paths = self.options.settings.transfer.log_paths;
+        let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(|t| t.poll(log_paths)).collect();
         self.stats.record(&traffic);
+        self.check_queue_end(ctx);
         self.forward_raw_replies();
         if self.ipc_enabled {
             self.sync_ipc_class();
@@ -2139,7 +2910,8 @@ impl eframe::App for UltraRushApp {
             let running = tab.engine.is_some();
             let switch = [tab.switch_label(0), tab.switch_label(1)];
             let parked_remote = [0, 1].map(|s| matches!(tab.parked[s], Some(Side::Remote(_))));
-            let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, .. } = tab;
+            let paused = tab.paused();
+            let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, .. } = tab;
             let mut viewer = PaneViewer {
                 sides,
                 queue,
@@ -2154,6 +2926,8 @@ impl eframe::App for UltraRushApp {
                 sites: &entries,
                 switch,
                 parked_remote,
+                queue_sel,
+                paused,
             };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
@@ -2169,6 +2943,10 @@ impl eframe::App for UltraRushApp {
         self.trust_dialog(&ctx);
         self.shortcuts_window(&ctx);
         self.about_window(&ctx);
+        self.queue_edit_dialog(&ctx);
+        self.queue_info_window(&ctx);
+        self.queue_end_dialog(&ctx);
+        self.conditional_dialog(&ctx);
         self.sites.show(&ctx, &self.options.settings);
         if self.options.show(&ctx) {
             self.apply_settings(&ctx);
@@ -2201,6 +2979,10 @@ struct PaneViewer<'a> {
     switch: [Option<String>; 2],
     /// A connection is kept behind the local folder of the panel.
     parked_remote: [bool; 2],
+    /// Selected rows of the queue.
+    queue_sel: &'a BTreeSet<ItemId>,
+    /// The engine of the tab is paused.
+    paused: bool,
 }
 
 /// A site of the site manager, for the connection menus.
@@ -2371,6 +3153,7 @@ impl PaneViewer<'_> {
 
         let rows: Vec<FileRow> = self.sides[side].rows().to_vec();
         let http = matches!(&self.sides[side], Side::Remote(r) if r.http.is_set());
+        let local_panel = matches!(&self.sides[side], Side::Local(_));
         let selected = self.sides[side].selected().clone();
         let sort = self.sides[side].sort();
         let cursor = self.sides[side].cursor();
@@ -2459,6 +3242,20 @@ impl PaneViewer<'_> {
                                 menu.push(Action::Transfer(side));
                                 ui.close();
                             }
+                            if ui.button(t!("files.ctx_conditional")).clicked() {
+                                menu.push(Action::Conditional(side));
+                                ui.close();
+                            }
+                            if local_panel {
+                                if ui.button(t!("files.ctx_create_sfv")).clicked() {
+                                    menu.push(Action::Checksums(side, false));
+                                    ui.close();
+                                }
+                                if ui.button(t!("files.ctx_create_md5")).clicked() {
+                                    menu.push(Action::Checksums(side, true));
+                                    ui.close();
+                                }
+                            }
                             if f.is_dir && ui.button(t!("files.ctx_open")).clicked() {
                                 menu.push(Action::Open(side, f.name.clone()));
                                 ui.close();
@@ -2531,9 +3328,14 @@ impl PaneViewer<'_> {
         let items = self.queue.lock().items().to_vec();
         let p = theme::colors(ui);
         let failed = items.iter().filter(|i| matches!(i.state, ItemState::Failed(_) | ItemState::Stopped)).count();
+        let paused = self.paused;
         ui.horizontal(|ui| {
-            if ui.button(t!("queue.start")).clicked() {
+            if ui.button(if paused { t!("queue.resume") } else { t!("queue.start") }).clicked() {
                 self.actions.push(Action::StartQueue);
+            }
+            if ui.add_enabled(self.running && !paused, egui::Button::new(t!("queue.pause"))).on_hover_text(t!("queue.pause_hint")).clicked()
+            {
+                self.actions.push(Action::QueuePause);
             }
             if ui.add_enabled(self.running, egui::Button::new(t!("queue.stop_all"))).clicked() {
                 self.actions.push(Action::QueueStopAll);
@@ -2544,7 +3346,29 @@ impl PaneViewer<'_> {
             if ui.button(t!("queue.clear_finished")).clicked() {
                 self.actions.push(Action::ClearFinished);
             }
-            ui.label(RichText::new(t!("queue.summary", n = items.len())).weak());
+            let actions = &mut *self.actions;
+            ui.menu_button(t!("queue.more"), |ui| {
+                for (label, action) in [
+                    (t!("queue.info"), Action::QueueInfo),
+                    (t!("queue.mark_all_failed"), Action::QueueMarkAllFailed),
+                    (t!("queue.clear_failed"), Action::QueueClearFailed),
+                    (t!("queue.clear_all"), Action::QueueClearAll),
+                ] {
+                    if ui.button(label).clicked() {
+                        actions.push(action);
+                        ui.close();
+                    }
+                }
+                ui.separator();
+                for (label, action) in [(t!("queue.load_file"), Action::QueueLoadFile), (t!("queue.save_file"), Action::QueueSaveFile)] {
+                    if ui.button(label).clicked() {
+                        actions.push(action);
+                        ui.close();
+                    }
+                }
+            });
+            let summary = if paused { t!("queue.summary_paused", n = items.len()) } else { t!("queue.summary", n = items.len()) };
+            ui.label(RichText::new(summary).weak());
         });
         ui.separator();
         let running = self.running;
@@ -2568,6 +3392,7 @@ impl PaneViewer<'_> {
             .body(|body| {
                 body.rows(24.0, items.len(), |mut row| {
                     let it = &items[row.index()];
+                    row.set_selected(self.queue_sel.contains(&it.id));
                     let dir = match it.kind() {
                         urftp_core::TransferKind::Upload => "⬆",
                         urftp_core::TransferKind::Download => "⬇",
@@ -2619,15 +3444,44 @@ impl PaneViewer<'_> {
                         ui.label(RichText::new(&text).color(color)).on_hover_text(text);
                     });
                     let id = it.id;
-                    let is_running = it.state == ItemState::Running;
-                    let retryable = matches!(it.state, ItemState::Failed(_) | ItemState::Stopped | ItemState::NeedsConfirmation);
-                    row.response().context_menu(|ui| {
-                        if ui.add_enabled(running && is_running, egui::Button::new(t!("queue.stop"))).clicked() {
-                            menu.push(Action::QueueStop(id));
+                    let response = row.response();
+                    if response.clicked() || response.secondary_clicked() && !self.queue_sel.contains(&id) {
+                        let m = response.ctx.input(|i| i.modifiers);
+                        menu.push(Action::QueueSelect(id, m.command && response.clicked(), m.shift && response.clicked()));
+                    }
+                    // The menu acts on the selection when the row is part of it.
+                    let targets: Vec<&QueueItem> = if self.queue_sel.contains(&id) {
+                        items.iter().filter(|i| self.queue_sel.contains(&i.id)).collect()
+                    } else {
+                        vec![it]
+                    };
+                    let ids: Vec<ItemId> = targets.iter().map(|i| i.id).collect();
+                    let any_running = targets.iter().any(|i| i.state == ItemState::Running);
+                    let retryable =
+                        targets.iter().any(|i| matches!(i.state, ItemState::Failed(_) | ItemState::Stopped | ItemState::NeedsConfirmation));
+                    let to_do =
+                        targets.iter().any(|i| matches!(i.state, ItemState::Waiting | ItemState::Stopped | ItemState::NeedsConfirmation));
+                    let fxp = targets.iter().any(|i| i.kind() == urftp_core::TransferKind::Fxp && i.state != ItemState::Running);
+                    let editable = targets.len() == 1 && !any_running;
+                    response.context_menu(|ui| {
+                        if ui.add_enabled(running && any_running, egui::Button::new(t!("queue.stop"))).clicked() {
+                            menu.extend(targets.iter().filter(|i| i.state == ItemState::Running).map(|i| Action::QueueStop(i.id)));
                             ui.close();
                         }
                         if ui.add_enabled(retryable, egui::Button::new(t!("queue.retry"))).clicked() {
-                            menu.push(Action::QueueRetry(id));
+                            menu.extend(ids.iter().map(|&i| Action::QueueRetry(i)));
+                            ui.close();
+                        }
+                        if ui.add_enabled(editable, egui::Button::new(t!("queue.edit"))).clicked() {
+                            menu.push(Action::QueueEdit(id));
+                            ui.close();
+                        }
+                        if ui.add_enabled(fxp, egui::Button::new(t!("queue.invert"))).on_hover_text(t!("queue.invert_hint")).clicked() {
+                            menu.push(Action::QueueInvert(ids.clone()));
+                            ui.close();
+                        }
+                        if ui.add_enabled(to_do, egui::Button::new(t!("queue.mark_failed"))).clicked() {
+                            menu.push(Action::QueueMarkFailed(ids.clone()));
                             ui.close();
                         }
                         ui.separator();
@@ -2643,8 +3497,11 @@ impl PaneViewer<'_> {
                             }
                         }
                         ui.separator();
-                        if ui.add_enabled(!is_running, egui::Button::new(t!("queue.remove"))).clicked() {
-                            menu.push(Action::QueueRemove(id));
+                        if ui
+                            .add_enabled(targets.iter().any(|i| i.state != ItemState::Running), egui::Button::new(t!("queue.remove")))
+                            .clicked()
+                        {
+                            menu.extend(ids.iter().map(|&i| Action::QueueRemove(i)));
                             ui.close();
                         }
                     });

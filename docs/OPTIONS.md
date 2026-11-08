@@ -56,6 +56,8 @@ one): `Enter` goes there.
 | Select all / several | `Ctrl`+click, `Shift`+click | `Ctrl+A`, `Shift`+movement, `Ctrl+Space` (row at the cursor) |
 | Copy the full path | right-click → Copy path | — |
 | Copy the web address | right-click → Copy HTTP address (remote panel of a site with a web address) | — |
+| Conditional transfer | right-click → Conditional transfer… (see below) | — |
+| SFV or MD5 file of the selected files | right-click → Create an SFV file / Create an MD5 file (local panel) | — |
 | Sort | click a column header (again: reverse order) | — |
 
 The file-list keys act on the active panel (marked `▸`, cursor outlined) when no control
@@ -63,6 +65,30 @@ has the keyboard focus. `Tab` / `Shift+Tab` move between the controls of the win
 `Esc` gives the keys back to the list.
 
 ![Keyboard shortcuts](images/shortcuts.en.png)
+
+The SFV and MD5 files are named after the folder (`folder.sfv`, `folder.md5`) and written
+in it, in the background; the log says when they are ready.
+
+### Conditional transfer
+
+Right-click → *Conditional transfer…* queues the selection towards the other panel with
+conditions:
+
+| Field | Effect |
+|---|---|
+| Folder names / File names, Include and Exclude | Masks separated by `;` (wildcards, or regular expressions with *Use regular expressions*); `%F%` before a mask makes it apply to files only, `%D%` to folders only |
+| Date between | First and last day (`YYYY-MM-DD`, the last day included) |
+| Not older than | Number of days |
+| File size between | In KiB (maximum 0: no limit) |
+| Apply the dates to folders too | Otherwise the dates only filter the files |
+| Do not use the global skip list | The skip list of the options is ignored |
+| Include sub-folders | Otherwise only the files of the selected folders |
+| Log out once transferred | The panels of the tab are logged out when the queue is finished |
+| Synchronise | Only what differs is transferred: a missing file, a different size (*Compare sizes*), a newer source (*Compare dates*, more than a minute); *Delete what the source does not have* removes from the target what the source lacks; *Existing files only* updates the files the target already has; *Both sides* copies back what only the target has |
+
+The conditions apply to the selected items and to the contents of the folders. *Scheme*
+saves the form under a name (*Save*, *Delete*) in `settings.json`. **Begin transfer**
+queues and starts, **Add to queue** only queues.
 
 ### Accessibility
 
@@ -76,9 +102,26 @@ has the keyboard focus. `Tab` / `Shift+Tab` move between the controls of the win
 
 ### Queue
 
-Buttons: **Start**, **Stop all**, **Retry failed**, **Remove finished**. Right-click on an
-item: stop, retry, move to top / up / down / to bottom, remove from the queue. States:
-waiting, running, done, skipped (with the reason), needs confirmation, stopped, failed.
+Buttons: **Start** (**Resume** after a pause), **Pause**, **Stop all**, **Retry failed**,
+**Remove finished**, and the **⋯ Queue** menu: *Queue information…*, *Mark all as failed*,
+*Remove the failed items*, *Clear the queue (except running)*, *Load a queue file…*, *Save
+the queue to a file…*.
+
+- **Pause** interrupts the running transfers: they wait again and resume from their partial
+  file on *Resume*. **Stop all** stops the running items and ends the queue; the others
+  stay waiting.
+- **Rows**: click selects, `Ctrl`+click adds or removes a row, `Shift`+click selects a
+  range. The right-click menu acts on the selection when the row is part of it: stop, retry,
+  *Edit…* (one item: source and target site and path, transfer mode, *Invert FXP*),
+  *Invert FXP* (site-to-site items), *Mark as failed*, move to top / up / down / to bottom,
+  remove.
+- **Queue information**: items, downloads / uploads / FXP, counts per state, total,
+  transferred and left sizes, time left at the current speed.
+- **Queue files** (`.urq`): the unfinished items of the tab, in the format of `queue.json`;
+  loading adds the items of the file (or of a `queue.json`) to the queue of the tab.
+
+States: waiting, running, done, skipped (with the reason), needs confirmation, stopped,
+failed.
 
 ![Unfinished queue](images/queue-restore.en.png)
 
@@ -121,6 +164,14 @@ Saved automatically in `settings.json` one second after a change.
 | Simultaneous transfers for quick connect | 2 | Per-site limit used by quick connect |
 | Connection timeout (s) | 30 | Control and data connections |
 | Server idle timeout (s) | 120 | Maximum wait for a reply or a data block |
+| Downloads / Uploads / FXP: own number of retries | off | Retries of that direction instead of the general value (a site setting still wins) |
+| Retry the failed items when the queue ends (rounds) | 0 | Once the queue is finished, the failed items are tried again this many times |
+| Cycle retry | off | An item to retry goes to the bottom of the queue, the others run first, without delay |
+| Retry the failed items when a queue starts automatically | off | `-r` at startup |
+| Logging out a site removes its waiting items | off | *Disconnect* of a panel |
+| Source and target of each item in the log | off | A line when an item starts, ends or is paused |
+| When every queue is finished | Do nothing | Do nothing, Log out the sites, Quit UltraRushFTP, Sleep, Hibernate, Shut the computer down |
+| Seconds to cancel | 30 | Quitting, sleeping, hibernating and shutting down are asked first with this countdown (*Cancel*, *Do it now*) |
 
 ### Speed
 
@@ -237,6 +288,33 @@ password or anonymous, transfer mode, *Also encrypt transfers*, simultaneous tra
 limits per direction, remote and local folders, listing settings (same fields as the site
 record). The host, the other addresses, the bookmarks and the trusted keys are always empty.
 *Default values* resets the model.
+
+### Advanced transfer
+
+![Advanced transfer](images/options-advanced.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Transfer mode | Automatic | Automatic: ASCII for the files of the ASCII list, binary for the others; or always binary / always ASCII. *Edit…* in the queue sets the mode of one item |
+| ASCII files | `*.txt;*.nfo;*.diz;*.sfv;*.md5;*.htm;*.html;*.ini;*.log;*.m3u;*.cue;*.xml;*.csv` | Masks of the ASCII list |
+| Case of the uploaded / downloaded names | Unchanged | lower case or UPPER CASE for the names created on the target |
+| Never resume ASCII files | on | Their size changes with the line ends: transferred again from the start |
+| Active mode (PORT) for every site | off | Data connections in active mode whatever the site says |
+| XDUPE | off | `SITE XDUPE 3` after login; the dupes listed in a refused upload are skipped, and the next ones of the folder are not even tried |
+| Compress the transfers (MODE Z) | off | When the server announces `MODE Z`; never for the masks of *Never compressed* (archives, video, pictures by default) |
+| TCP buffer of the data connections (KiB) | 0 (system) | Send and receive buffers |
+| Roll back before resuming a download (KiB) | 0 | The end of a partial file is cut off before resuming |
+| Keep free on the local disk (MiB) | 0 | A download that would leave less fails |
+| No speed limit for the local network | off | Sites on a private, loopback or link-local address |
+| Check the downloads against the SFV file | off | CRC32 of each downloaded file against the SFV of its folder; an SFV downloaded last checks the files already there |
+| Check the uploads and FXP with XCRC | off | When the server knows `XCRC` |
+| Remove a file with a bad CRC and transfer it again | on | Otherwise the bad CRC is only logged |
+| Several SFV files in a folder: take none | off | |
+| Remove the target folders a transfer leaves empty | off | At the end of the queue (skipped contents) |
+| Keep the server date on the downloaded files | off | `MDTM` (or the SFTP attributes) |
+| Enter a folder after creating it | off | `📁+` / `F7` in a panel |
+| Do not transfer a sub-folder named like its parent | off | `release/release`, a common mistake |
+| Remove the 0-byte target file when the source of an FXP refuses | on | |
 
 ## Site record
 
@@ -369,12 +447,30 @@ mIRC. Supported language: variables, strings, integers, booleans, operators (bit
 |---|---|---|
 | `RushApp.FTP.Login`, `Logout`, `CWD`, `RAW`, `Delete`, `Transfer`, `RemoveQueue`, `EnableSite`, `DisableSite`; `RushApp.DeleteEmptyTabs` (`DeleteEmptyContainers`) | `RushApp.Version`, `Language`, `StartDate`, `DayCount`, `TotalDownloadSize`, `TotalUploadSize`, `TotalFxpSize`, `CurDownloadSize`, `CurUploadSize`, `CurFxpSize`, `DownloadBW`, `UploadBW`, `PoolInfo`, `FTP.Splitter`, `Containers.ContainerCount`, `Containers.ConnectedSiteCount`, `Containers.TransferSiteCount` | `RushApp.FTP.Splitter` |
 
-Flags handled: `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`, `RS_DIRDES`, `RS_DIRSRC`,
-`RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`, `RS_FOLDER`, `RS_FULLPATH`, `RS_GHOST`,
-`RS_INVERT` (`-password`), `RS_LOGIN`, `RS_LOGOUT`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`,
-`RS_POPUP`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`. The filters and repeat count of
-`Transfer` and interactive `InputQuery` are recognised but not supported yet (a message
-says so).
+Flags handled: `RS_APPEND`, `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`, `RS_DELEMPTYTABS`,
+`RS_DIRDES`, `RS_DIRSRC`, `RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`, `RS_FOLDER`,
+`RS_FULLPATH`, `RS_GHOST`, `RS_INVERT` (`-password`), `RS_LOGIN`, `RS_LOGOUT`, `RS_NOCIRCLE`,
+`RS_NOMKD`, `RS_NOSKIP`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`, `RS_POPUP`, `RS_SORTDATE`,
+`RS_SORTDES`, `RS_SORTSIZE`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`. `RS_CHECKLOGIN` and the
+interactive `InputQuery` are recognised but not supported yet (a message says so).
+
+`RushApp.FTP.Transfer(Handle, SrcList, SrcFolder, SrcItem, DesList, DesFolder, DesItem,
+Flag, FolderAllow, FolderSkip, FileAllow, FileSkip, CompleteFlag, RepeatCount, RetryCount,
+Timeout, FolderSort, FileSort, Depth, SubCount)`:
+
+- several pairs go each to a new tab and run at the same time; with `RS_APPEND` (or a
+  `Handle`) they share one tab; `RS_NOCIRCLE` makes each pair wait until the previous one
+  is all over;
+- `FolderAllow` … `FileSkip`: masks separated by `;` (`RS_EXPR`: regular expressions),
+  `%F%` / `%D%` before a mask for files / folders only; `RS_NOSKIP` ignores the skip list;
+- `RepeatCount`: the folder is listed again this many times to catch new entries, until a
+  name matches `CompleteFlag` (regular expression); `RetryCount`: retries of the items;
+- `FolderSort` / `FileSort`: name ascending by default, `RS_SORTDATE`, `RS_SORTSIZE`,
+  `RS_SORTDES`; `SubCount`: only the first entries of each folder; `Depth`: levels of
+  sub-folders entered (0: no limit);
+- `RS_LOGOUT` logs the panels out and `RS_DELEMPTYTABS` closes the tab once its queue is
+  finished; `RS_NOMKD` is how folders are always created (entered when they exist);
+  `Timeout` is not used, as in FTPRush.
 
 ## mIRC DLL
 
@@ -422,3 +518,4 @@ In the data folder (`%APPDATA%\UltraRushFTP` by default):
 | `settings.json` | Options above (proxy password `dpapi:…`); missing keys take their default value |
 | `stats.json` | Transfer totals and first-use date (`RushApp.Total*`, `StartDate`) |
 | `queue.json` | Unfinished queue of every tab (removed when nothing is left to do) |
+| `*.urq` | Queue files saved by hand (anywhere), same format as `queue.json` |

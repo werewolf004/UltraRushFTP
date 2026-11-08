@@ -10,11 +10,49 @@ la traduction.
 
 ## [Non publié]
 
+File et transferts (bloc H).
+
+### Ajouté
+
+- **File** : pause et reprise (les transferts interrompus reprennent depuis leur fichier
+  partiel), sélection de lignes (`Ctrl`, `Maj`), *Modifier…* (source, cible, mode),
+  *Inverser le FXP*, *Marquer en échec*, *Retirer les échecs*, *Vider la file*,
+  *Informations sur la file* (nombres, tailles, temps restant), fichiers de file `.urq`
+  chargés et enregistrés à la main.
+- **Nouvelles tentatives** : par sens, relance cyclique, tours de relance une fois la file
+  terminée, relance des échecs quand une file démarre automatiquement.
+- **Fin de la file** : déconnecter, quitter, veille, veille prolongée ou arrêt, avec un
+  compte à rebours annulable ; déconnecter un site retire ses éléments en attente (option) ;
+  source et cible de chaque élément dans le journal (option).
+- **`RushApp.FTP.Transfer`** : tous les paramètres — filtres de dossiers et de fichiers
+  avec `%F%` / `%D%`, `RS_EXPR`, `RS_NOSKIP`, `CompleteFlag` et `RepeatCount` (dossier
+  relu), `RetryCount`, `FolderSort` / `FileSort`, `Depth`, `SubCount`, `RS_NOCIRCLE`,
+  `RS_APPEND` (sinon un onglet par paire), `RS_LOGOUT`, `RS_DELEMPTYTABS`.
+- **Transfert conditionnel** (clic droit dans un panneau) : masques de noms, dates,
+  tailles, liste d'exclusion ignorée, sous-dossiers, déconnexion à la fin ;
+  **synchronisation** (comparaison des tailles et des dates, suppression de ce qui manque à
+  la source, fichiers existants seulement, dans les deux sens) ; schémas enregistrés.
+- Options **Transfert avancé** : mode de transfert et liste ASCII (pas de reprise pour les
+  fichiers ASCII), casse des noms cibles, mode actif pour tous les sites, `XDUPE`,
+  `MODE Z` avec exceptions, tampon TCP, recul avant reprise, espace disque gardé libre,
+  pas de limite de vitesse sur le réseau local.
+- **CRC** : vérification SFV des téléchargements (aussi quand le SFV arrive en dernier),
+  `XCRC` après les envois et le FXP, fichiers défectueux supprimés et retransférés, un seul
+  SFV par dossier ; *Créer un fichier SFV / MD5* dans le panneau local.
+- **Règles de dossiers** : dossiers cibles vides supprimés, date du serveur gardée,
+  nouveau dossier ouvert, sous-dossier homonyme du parent refusé, cible de 0 octet d'un FXP
+  refusé supprimée.
+
 ### Modifié
 
 - Les captures de la documentation sont dessinées hors écran : aucune fenêtre ne s'ouvre
   et rien ne prend le focus pendant leur création. Elles ne montrent plus la barre de titre
   de Windows.
+
+### Corrigé
+
+- **Tout arrêter** termine la file : les éléments en attente démarraient dès que ceux en
+  cours s'étaient arrêtés.
 
 ## [0.3.0] - 2026-11-07
 

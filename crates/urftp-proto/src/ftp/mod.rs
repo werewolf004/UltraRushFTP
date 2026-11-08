@@ -13,7 +13,7 @@ mod tls;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
-pub use client::{FtpClient, FtpConfig, LogLine, LogSink, TransferType};
+pub use client::{DataOptions, FtpClient, FtpConfig, LogLine, LogSink, TransferType};
 pub use features::Features;
 pub use fxp::{FxpMode, FxpOptions, FxpOutcome, FxpSecurity, fxp};
 pub use listing::{EntryKind, FtpTime, ListFormat, RemoteEntry};

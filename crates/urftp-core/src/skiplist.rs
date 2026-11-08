@@ -18,6 +18,12 @@ pub enum SkipReason {
     /// The target already exists and the "existing file" rule says skip.
     #[error("already present")]
     AlreadyPresent,
+    /// The server lists it as a dupe (`XDUPE`).
+    #[error("dupe on the server")]
+    Dupe,
+    /// Several SFV files in the folder: none is taken.
+    #[error("several SFV files")]
+    SeveralSfv,
 }
 
 /// Effect of a rule.

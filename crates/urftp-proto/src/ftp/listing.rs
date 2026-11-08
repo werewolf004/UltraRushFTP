@@ -21,6 +21,34 @@ pub struct FtpTime {
 }
 
 impl FtpTime {
+    /// Seconds since 1970 (`now`, also in seconds since 1970, places a date without a year:
+    /// this year, or the previous one when that would be in the future, as `ls` does).
+    pub fn epoch(self, now: i64) -> i64 {
+        let at = |year: i64| {
+            urftp_core::itemopts::epoch_seconds(
+                year,
+                u32::from(self.month),
+                u32::from(self.day),
+                u32::from(self.hour),
+                u32::from(self.minute),
+                u32::from(self.second),
+            )
+        };
+        match self.year {
+            Some(y) => at(i64::from(y)),
+            None => {
+                let this_year = 1970 + now.div_euclid(31_556_952);
+                let guess = at(this_year);
+                if guess > now + 86_400 { at(this_year - 1) } else { guess }
+            }
+        }
+    }
+
+    /// Now, in seconds since 1970.
+    pub fn now_epoch() -> i64 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().and_then(|d| i64::try_from(d.as_secs()).ok()).unwrap_or(0)
+    }
+
     /// Date moved by `minutes` (time zone of the server). A date without a year is moved
     /// within a leap year, so that 29 February stays valid; a date that is not valid is
     /// returned unchanged.

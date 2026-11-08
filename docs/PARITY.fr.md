@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
+Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 
 ## Fenêtre principale et menus
 
@@ -72,18 +72,18 @@ Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Démarrer / mettre en pause la file | 🟡 | Démarrer et arrêter ; pas de pause qui garde les connexions |
+| Démarrer / mettre en pause la file | ✅ | La pause interrompt les transferts, qui reprennent depuis leur fichier partiel |
 | Ajouter la sélection à la file | ✅ | Bouton Transférer, `Espace`, glisser-déposer |
-| Transfert conditionnel | ⬜ | Masques inclure/exclure, dates, tailles, synchronisation |
-| Vider la file courante | 🟡 | « Retirer les terminés » et retrait d'un élément ; pas « tous les éléments en attente » |
+| Transfert conditionnel | ✅ | Masques, dates, tailles, synchronisation, schémas enregistrés |
+| Vider la file courante | ✅ | ⋯ File → Vider la file (sauf en cours) |
 | Monter / descendre / tout en haut / tout en bas | ✅ | Clic droit |
-| Modifier un élément de la file | ⬜ | Changer source, cible, mode ; inverser un FXP |
+| Modifier un élément de la file | ✅ | Source, cible, mode ; inverser le FXP |
 | Relancer tous les échecs | ✅ | « Relancer les échecs » |
 | Relancer les échecs sélectionnés | ✅ | Clic droit → Relancer |
-| Retirer tous les échecs | ⬜ | |
-| Marquer la sélection / tout en échec | ⬜ | |
-| Informations sur la file | ⬜ | Nombres, tailles, durées |
-| Restaurer la file, charger / enregistrer un fichier de file | 🟡 | La file non terminée est restaurée au démarrage ; pas de fichier de file à charger ou enregistrer à la main |
+| Retirer tous les échecs | ✅ | |
+| Marquer la sélection / tout en échec | ✅ | Clic droit sur la sélection, ou ⋯ File |
+| Informations sur la file | ✅ | Nombres, tailles, temps restant |
+| Restaurer la file, charger / enregistrer un fichier de file | ✅ | File non terminée au démarrage ; fichiers `.urq` à la main |
 | Planifier la file en tâche | ⬜ | |
 | Bascules de limite de vitesse d'envoi / de réception | 🟡 | Limites dans les options ; pas de bascule en un clic |
 
@@ -103,11 +103,11 @@ Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | Gestionnaire de raccourcis | ⬜ | Raccourcis fixes (liste : `F1`) |
 | Téléchargement manuel depuis un site, liste d'URL incrémentées | ⬜ | |
 | Surveiller le presse-papiers, transfert automatique | ⬜ | |
-| Mode de transfert auto / binaire / ASCII | 🟡 | `TYPE A` géré par la couche protocole ; pas de réglage ni de liste ASCII |
-| À la fin des transferts : déconnecter / rester connecté | ⬜ | |
-| À la fin des transferts : éteindre / veille / veille prolongée | ⬜ | |
-| À la fin des transferts : quitter | 🟡 | Ligne de commande `-rx` seulement |
-| Créer un fichier SFV ou MD5 | ⬜ | |
+| Mode de transfert auto / binaire / ASCII | ✅ | Options › Transfert avancé, et par élément (Modifier) |
+| À la fin des transferts : déconnecter / rester connecté | ✅ | Options › Transferts |
+| À la fin des transferts : éteindre / veille / veille prolongée | ✅ | Avec un compte à rebours annulable |
+| À la fin des transferts : quitter | ✅ | Options › Transferts, et `-rx` |
+| Créer un fichier SFV ou MD5 | ✅ | Clic droit dans un panneau local |
 | Traduction d'adresse IP | ⬜ | Adresse hexadécimale / numérique vers la forme pointée |
 | Redémarrer le service UPnP | ⬜ | Vient avec UPnP |
 | Options | ✅ | Fenêtre Options |
@@ -139,10 +139,10 @@ Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 |---|---|---|
 | Ajouter ou modifier une règle de la liste d'exclusion | ✅ | Modifiée dans la grille des options |
 | Signets | 🟡 | Nom, chemins distant et local ; jetons de date (`%yyyy%`, `%mm%`…) pas encore |
-| Créer des sommes de contrôle CRC | ⬜ | |
-| Transfert conditionnel | ⬜ | Voir *Transfert conditionnel* |
+| Créer des sommes de contrôle CRC | ✅ | Fichiers SFV et MD5 |
+| Transfert conditionnel | ✅ | Voir *Transfert conditionnel* |
 | Calculer l'espace FTP utilisé | ⬜ | |
-| Modifier un élément de la file | ⬜ | |
+| Modifier un élément de la file | ✅ | |
 | Exporter l'arborescence | ⬜ | |
 | Recherche rapide | ⬜ | |
 | Chercher des fichiers sur les sites | ⬜ | |
@@ -189,8 +189,8 @@ Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | `PRET` | ✅ | Utilisé quand le serveur l'annonce |
 | UTF-8 | ✅ | `OPTS UTF8 ON` quand le serveur l'annonce |
 | `CLNT` | ✅ | Nom du client par site |
-| Compression `MODE Z` | ⬜ | |
-| Vérification `XCRC` après transfert | ⬜ | |
+| Compression `MODE Z` | 🟡 | Réglage global (Transfert avancé), pas par site |
+| Vérification `XCRC` après transfert | 🟡 | Réglage global (Transfert avancé), pas par site |
 | `MLSD` | ✅ | |
 | `SSCN` / `CPSV` pour le FXP chiffré | ✅ | |
 | Comptes : identifiants différents pour envois et téléchargements | ✅ | La navigation garde le compte principal |
@@ -207,11 +207,11 @@ Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | SSL : chiffrer listings / transferts séparément | ✅ | |
 | SSL : FXP chiffré | ✅ | |
 | SFTP : clés privées | ✅ | Plusieurs clés, essayées à tour de rôle |
-| Transfert : conversion de casse des noms | ⬜ | |
-| Transfert : XDupe | ⬜ | |
+| Transfert : conversion de casse des noms | 🟡 | Réglage global (Transfert avancé), pas par site |
+| Transfert : XDupe | 🟡 | Réglage global (Transfert avancé), pas par site |
 | Transfert : méthode FXP (pas de `PASV` côté source, `PASV` côté cible) | ✅ | Par site ; inversion automatique quand `PORT` est refusé |
-| Transfert : forcer le mode actif | ⬜ | |
-| Transfert : taille du tampon TCP | ⬜ | |
+| Transfert : forcer le mode actif | ✅ | Mode de transfert de la fiche ; pour tous les sites dans Transfert avancé |
+| Transfert : taille du tampon TCP | 🟡 | Réglage global (Transfert avancé), pas par site |
 | Liste d'exclusion, priorités, règles « fichier existant » par site | ✅ | |
 | Notification d'événements : surveiller des dossiers | ⬜ | Demande le maintien de connexion |
 | Statistiques de ce serveur | ⬜ | Statistiques globales et de session disponibles |
@@ -266,46 +266,46 @@ Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | Sujet | État | Remarques |
 |---|---|---|
 | Limites de vitesse de réception / d'envoi | ✅ | |
-| Pas de limite pour les adresses locales | ⬜ | |
-| Conversion de casse des noms | ⬜ | |
-| Forcer le mode actif pour les transferts | ⬜ | |
+| Pas de limite pour les adresses locales | ✅ | Adresses privées, de bouclage et de lien local |
+| Conversion de casse des noms | ✅ | Envois et téléchargements séparément |
+| Forcer le mode actif pour les transferts | ✅ | |
 | Arrêter et reprendre quand aucune donnée n'arrive | 🟡 | Délai de réponse puis nouvel essai avec reprise |
-| Revenir en arrière à la reprise d'un téléchargement | ⬜ | |
-| Garder un espace disque libre minimum | ⬜ | |
+| Revenir en arrière à la reprise d'un téléchargement | ✅ | |
+| Garder un espace disque libre minimum | ✅ | |
 | Transferts simultanés maximum par onglet | ✅ | |
-| Taille du tampon TCP | ⬜ | |
-| Mode de transfert auto / binaire / ASCII | 🟡 | Voir la ligne du menu |
-| À la fin des transferts : rester connecté / déconnecter | ⬜ | |
-| Liste ASCII, pas de reprise pour les fichiers ASCII | ⬜ | |
+| Taille du tampon TCP | ✅ | |
+| Mode de transfert auto / binaire / ASCII | ✅ | Voir la ligne du menu |
+| À la fin des transferts : rester connecté / déconnecter | ✅ | |
+| Liste ASCII, pas de reprise pour les fichiers ASCII | ✅ | |
 | Liste d'exclusion : activer, fichiers vides, dossiers vides, dossiers | ✅ | |
 | Liste d'exclusion : couleur des éléments exclus | ⬜ | |
 | Liste d'exclusion : mode auto / manuel / les deux | ⬜ | Appliquée à tout élément aujourd'hui |
 | Règles « fichier existant » (reprendre, ignorer, renommer, écraser, demander) | ✅ | Plus écraser si la reprise échoue |
 | File : recharger la file inachevée au démarrage, enregistrement automatique | ✅ | Demander, charger ou abandonner (Options › Général) |
 | File : garder les éléments en échec | ✅ | |
-| File : nouvel essai cyclique (l'élément en échec passe en bas) | ⬜ | |
-| File : relancer tous les échecs à la fin de la file | ⬜ | |
+| File : nouvel essai cyclique (l'élément en échec passe en bas) | ✅ | |
+| File : relancer tous les échecs à la fin de la file | ✅ | Un nombre de tours |
 | File : vider en changeant de serveur à la main | ➖ | Pas de changement manuel de serveur entre onglets |
-| File : réinitialiser les échecs au démarrage automatique | ⬜ | |
-| File : vider en déconnectant un site en cours de transfert | ⬜ | |
-| File : source / destination dans le journal des transferts | ⬜ | |
-| File : nombre d'essais par sens (envoi, réception, FXP) | 🟡 | Une seule valeur pour tous |
+| File : réinitialiser les échecs au démarrage automatique | ✅ | |
+| File : vider en déconnectant un site en cours de transfert | ✅ | Ses éléments en attente sont retirés |
+| File : source / destination dans le journal des transferts | ✅ | |
+| File : nombre d'essais par sens (envoi, réception, FXP) | ✅ | Un réglage du site l'emporte toujours |
 | Liste de priorités | ✅ | |
-| Compression `MODE Z` (listing, envoi, réception, exceptions) | ⬜ | |
+| Compression `MODE Z` (listing, envoi, réception, exceptions) | 🟡 | Envois et téléchargements, avec exceptions ; les listes ne sont pas compressées |
 | Cache disque des téléchargements | ➖ | Les écritures sont tamponnées par le moteur |
 
 ### Divers
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Vérifier le SFV au téléchargement, journal CRC et dossier d'état, réajouter les fichiers défectueux | ⬜ | |
-| Utiliser `XCRC` si disponible | ⬜ | |
-| Entrer dans un dossier après l'avoir créé | ⬜ | |
-| Retirer les dossiers vides laissés par un transfert | ⬜ | |
-| Refuser un dossier du même nom que son parent | ⬜ | |
-| Un seul SFV par dossier, ignorer tous les SFV s'il y en a plusieurs | ⬜ | |
-| Garder la date du serveur sur les fichiers téléchargés | ⬜ | |
-| Retirer le fichier cible de 0 octet quand la source FXP refuse | ⬜ | |
+| Vérifier le SFV au téléchargement, journal CRC et dossier d'état, réajouter les fichiers défectueux | 🟡 | Vérification et remise en file ; résultats au journal, pas de dossier d'état |
+| Utiliser `XCRC` si disponible | ✅ | |
+| Entrer dans un dossier après l'avoir créé | ✅ | |
+| Retirer les dossiers vides laissés par un transfert | ✅ | |
+| Refuser un dossier du même nom que son parent | ✅ | |
+| Un seul SFV par dossier, ignorer tous les SFV s'il y en a plusieurs | ✅ | |
+| Garder la date du serveur sur les fichiers téléchargés | ✅ | |
+| Retirer le fichier cible de 0 octet quand la source FXP refuse | ✅ | |
 | Nouvel onglet : les deux côtés distants | ⬜ | |
 | Nouvel onglet pour la connexion rapide / les favoris | ✅ | « Ouvrir un nouvel onglet quand le panneau est occupé » |
 
@@ -364,7 +364,7 @@ Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | `RushApp.UI.Selection` (`Prepare`, `Count`, `Items`, `IsRemoteSide`, `IsFTPConnected`, `FTPName`) | ⬜ | |
 | `RushApp.FTP.Splitter` | ✅ | |
 | `RushApp.FTP.CWD`, `Delete`, `Login`, `Logout`, `RAW`, `RemoveQueue` | ✅ | Avec leurs drapeaux |
-| `RushApp.FTP.Transfer` | 🟡 | Drapeaux lus ; `RS_NOCIRCLE`, `CompleteFlag`, `RepeatCount`, `Depth`, `SubCount`, tri et filtres dossiers/fichiers pas encore appliqués |
+| `RushApp.FTP.Transfer` | 🟡 | Tous les paramètres sauf `RS_CHECKLOGIN` ; `Timeout` n'est pas utilisé, comme dans FTPRush |
 | `RushApp.FTP.EnableSite`, `DisableSite` | ✅ | |
 | Événement `RushApp.UI.OnSwitchLayout` | ⬜ | Demande les dispositions enregistrées |
 | Variables de statistiques (`TotalDownloadSize`… `DownloadBW`) | ✅ | |
@@ -372,7 +372,7 @@ Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | `MatchExpr`, `MatchString` | ⬜ | |
 | `ShellExecuteCommand` | ⬜ | Demande une règle de confirmation avant de lancer des programmes |
 | Exemple : `InputQuery` pour un signet | 🟡 | `InputQuery` accepté ; pas encore de boîte de saisie |
-| Préfixes `%F%` / `%D%` dans les filtres de transfert | ⬜ | |
+| Préfixes `%F%` / `%D%` dans les filtres de transfert | ✅ | |
 
 ## Avancé, FAQ et astuces
 
@@ -390,7 +390,7 @@ Résumé (284 sujets) : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | Astuce : `Ctrl` + connexion = `-motdepasse` | ✅ | Gestionnaire de sites ; `RS_INVERT` dans les scripts |
 | Astuce : `Maj` + signet = les deux côtés | ⬜ | |
 | Astuce : `Maj` + double-clic sur un dossier = les deux côtés | ⬜ | |
-| Astuce : `%F%` / `%D%` dans les listes d'exclusion et d'autorisation de `Transfer` | ⬜ | |
+| Astuce : `%F%` / `%D%` dans les listes d'exclusion et d'autorisation de `Transfer` | ✅ | |
 | DLL mIRC (`rushmirc.dll`, `Invoke`, `RushScript`…) | ✅ | 32 et 64 bits |
 
 ## Hors aide

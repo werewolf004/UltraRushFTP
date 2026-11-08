@@ -39,6 +39,16 @@ pub async fn connect_from(host: &str, port: u16, bind: Option<IpAddr>) -> io::Re
     connect_any_from(interleave(addrs), ATTEMPT_DELAY, bind).await
 }
 
+/// Send and receive buffers of a data connection (`None`: left to the system).
+pub fn set_buffers(tcp: &TcpStream, size: Option<usize>) -> io::Result<()> {
+    if let Some(n) = size {
+        let s = socket2::SockRef::from(tcp);
+        s.set_recv_buffer_size(n)?;
+        s.set_send_buffer_size(n)?;
+    }
+    Ok(())
+}
+
 /// Connects to one address, from the local address `bind` when given.
 pub async fn connect_addr(addr: SocketAddr, bind: Option<IpAddr>) -> io::Result<TcpStream> {
     let Some(local) = bind else { return TcpStream::connect(addr).await };

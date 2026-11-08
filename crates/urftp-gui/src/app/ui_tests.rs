@@ -699,3 +699,268 @@ fn connection_menu_acts_on_the_active_panel() {
     assert!(matches!(tab.sides[1], Side::Remote(_)), "right panel, the active one, connected");
     assert!(matches!(tab.sides[0], Side::Local(_)));
 }
+
+/// Runs an action of the interface, as a click would.
+fn act(ui: &mut Ui, action: super::Action) {
+    let ctx = ui.harness.ctx.clone();
+    ui.app().apply(vec![action], &ctx);
+}
+
+/// Queue of the first tab with three downloads and an FXP item.
+fn fill_queue(ui: &mut Ui) -> Vec<u64> {
+    let mut q = ui.app().tabs[0].queue.lock();
+    let mut ids: Vec<u64> = ["a", "b", "c"]
+        .iter()
+        .map(|n| {
+            q.push(Endpoint::remote("Demo", format!("/pub/{n}.bin")), Endpoint::local(format!(r"C:\dl\{n}.bin")), false, Some(10), None)
+        })
+        .collect();
+    ids.push(q.push(Endpoint::remote("Demo", "/rel/x"), Endpoint::remote("Mirror", "/in/x"), false, Some(5), None));
+    ids
+}
+
+#[test]
+fn queue_rows_are_selected_with_ctrl_and_shift_then_marked_failed() {
+    let mut ui = Ui::start(Lang::En, true);
+    let ids = fill_queue(&mut ui);
+    let tab = &mut ui.app().tabs[0];
+    tab.select_queue_row(ids[0], false, false);
+    tab.select_queue_row(ids[2], false, true);
+    assert_eq!(tab.queue_sel.iter().copied().collect::<Vec<_>>(), ids[..3]);
+    tab.select_queue_row(ids[1], true, false);
+    assert_eq!(tab.queue_sel.iter().copied().collect::<Vec<_>>(), [ids[0], ids[2]]);
+
+    let sel: Vec<u64> = ui.app().tabs[0].queue_sel.iter().copied().collect();
+    act(&mut ui, super::Action::QueueMarkFailed(sel));
+    let states: Vec<bool> = ui.app().tabs[0].queue.lock().items().iter().map(|i| matches!(i.state, ItemState::Failed(_))).collect();
+    assert_eq!(states, [true, false, true, false]);
+    act(&mut ui, super::Action::QueueClearFailed);
+    assert_eq!(ui.app().tabs[0].queue.lock().ids(), [ids[1], ids[3]]);
+    assert!(ui.app().tabs[0].queue_sel.is_empty(), "removed rows leave the selection");
+}
+
+#[test]
+fn queue_item_is_edited_and_fxp_inverted_in_the_dialog() {
+    let mut ui = Ui::start(Lang::Fr, false);
+    let ids = fill_queue(&mut ui);
+    act(&mut ui, super::Action::QueueEdit(ids[3]));
+    ui.run();
+    assert!(ui.has_label(&t!("queue.edit_title")));
+    ui.harness.get_by_label(&t!("queue.invert")).click();
+    ui.run();
+    ui.harness.get_by_label(&t!("common.validate")).click();
+    ui.run();
+    let it = ui.app().tabs[0].queue.lock().get(ids[3]).cloned().unwrap();
+    assert_eq!((it.src.site.as_deref(), it.src.path.as_str(), it.dst.site.as_deref()), (Some("Mirror"), "/in/x", Some("Demo")));
+    assert!(ui.app().tabs[0].queue_edit.is_none(), "the dialog closes");
+
+    // Both ends local: refused, the dialog stays.
+    act(&mut ui, super::Action::QueueEdit(ids[0]));
+    ui.app().tabs[0].queue_edit.as_mut().unwrap().src_site.clear();
+    ui.run();
+    ui.harness.get_by_label(&t!("common.validate")).click();
+    ui.run();
+    assert!(ui.has_label(&t!("queue.edit_local_to_local")));
+    assert_eq!(ui.app().tabs[0].queue.lock().get(ids[0]).unwrap().src.site.as_deref(), Some("Demo"));
+}
+
+#[test]
+fn queue_file_round_trip_and_information_window() {
+    let mut ui = Ui::start(Lang::En, true);
+    fill_queue(&mut ui);
+    let path = scratch().join("tab.urq");
+    ui.app().save_queue_file(&path);
+    ui.app().tabs[0].queue.lock().remove_where(|_| true);
+    ui.app().load_queue_file(&path);
+    assert_eq!(ui.app().tabs[0].queue.lock().items().len(), 4);
+    ui.app().load_queue_file(&scratch().join("missing.urq"));
+    assert_eq!(ui.app().tabs[0].queue.lock().items().len(), 4, "a missing file changes nothing");
+
+    ui.harness.get_by_label(&t!("queue.more")).click();
+    ui.run();
+    ui.harness.get_by_label(&t!("queue.info")).click();
+    ui.run();
+    assert!(ui.has_label(&t!("queue.info_title")));
+    assert!(ui.has_label(&t!("queue.info_items_value", files = 4, folders = 0)));
+}
+
+/// Last end-of-queue action asked from the system by the tests (never really run).
+static POWER_ASKED: parking_lot::Mutex<Option<urftp_core::settings::QueueEnd>> = parking_lot::const_mutex(None);
+
+fn fake_power(action: urftp_core::settings::QueueEnd) -> Result<(), String> {
+    *POWER_ASKED.lock() = Some(action);
+    Ok(())
+}
+
+#[test]
+fn end_of_queue_asks_with_a_countdown_then_runs_or_is_cancelled() {
+    use urftp_core::settings::QueueEnd;
+    let mut ui = Ui::start(Lang::Fr, true);
+    ui.app().power = fake_power;
+    ui.app().options.settings.transfer.on_queue_end = QueueEnd::Sleep;
+    ui.app().options.settings.transfer.queue_end_countdown_secs = 60;
+    *POWER_ASKED.lock() = None;
+
+    ui.app().tabs[0].just_finished = true;
+    ui.run();
+    assert!(ui.has_label(&t!("queue_end.title")));
+    ui.harness.get_by_label(&t!("common.cancel")).click();
+    ui.run();
+    assert!(!ui.has_label(&t!("queue_end.title")));
+    assert_eq!(*POWER_ASKED.lock(), None, "cancelled: nothing asked");
+
+    ui.app().tabs[0].just_finished = true;
+    ui.run();
+    ui.harness.get_by_label(&t!("queue_end.now")).click();
+    ui.run();
+    assert_eq!(*POWER_ASKED.lock(), Some(QueueEnd::Sleep));
+
+    // A queue still to do: nothing is asked.
+    *POWER_ASKED.lock() = None;
+    fill_queue(&mut ui);
+    ui.app().tabs[0].just_finished = true;
+    ui.run();
+    assert!(!ui.has_label(&t!("queue_end.title")));
+}
+
+#[test]
+fn end_of_queue_logs_out_and_logout_clears_the_waiting_items() {
+    use urftp_core::settings::QueueEnd;
+    let mut ui = Ui::start(Lang::En, true);
+    connect_left_panel(&mut ui, "First");
+    ui.app().options.settings.transfer.on_queue_end = QueueEnd::Disconnect;
+    ui.app().tabs[0].just_finished = true;
+    ui.run();
+    assert!(matches!(ui.app().tabs[0].sides[0], Side::Local(_)), "logged out at the end of the queue");
+
+    connect_left_panel(&mut ui, "Demo");
+    ui.app().options.settings.transfer.clear_queue_on_logout = true;
+    let ids = fill_queue(&mut ui);
+    ui.app().tabs[0].queue.lock().set_state(ids[0], ItemState::Failed("x".into()));
+    act(&mut ui, super::Action::Disconnect(0));
+    assert_eq!(ui.app().tabs[0].queue.lock().ids(), [ids[0]], "only the waiting items of the site go away");
+}
+
+#[test]
+fn script_transfer_spreads_tabs_and_carries_its_options() {
+    let mut ui = Ui::start(Lang::En, true);
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    for name in ["FTP1", "FTP2", "FTP3"] {
+        let site = urftp_core::site::Site { name: name.into(), host: "127.0.0.1".into(), port, ..Default::default() };
+        ui.app().sites.book.add_site(&[], site);
+    }
+    let ctx = ui.harness.ctx.clone();
+    // Two targets without RS_APPEND: one new tab each, run at the same time.
+    let parallel = "begin RushApp.FTP.Transfer(0, 'FTP1', '/pub', 'rel', 'FTP2;FTP3', '/in', '', RS_DIRDES or RS_DIRSRC, \
+                    '', 'Sample', '', '*.nfo', '', 0, 2, 0, 0, RS_SORTSIZE or RS_SORTDES, 3, 5); end.";
+    ui.app().run_script(parallel, &ctx).unwrap();
+    assert_eq!(ui.app().tabs.len(), 2);
+    let item = ui.app().tabs[1].queue.lock().items()[0].clone();
+    assert_eq!(item.dst.site.as_deref(), Some("FTP3"));
+    let o = item.options.expect("options of the script");
+    assert_eq!((o.depth, o.sub_count, o.retries, o.file_sort.descending), (Some(3), 5, Some(2), true));
+    assert!(!o.filter.allows("Sample", true) && !o.filter.allows("x.nfo", false));
+
+    // RS_APPEND and RS_NOCIRCLE: one tab, the second pair after the first.
+    let before = ui.app().tabs.len();
+    let ordered = "begin RushApp.FTP.Transfer(0, 'FTP1', '/pub', 'rel', 'FTP2;FTP3', '/in', '', \
+                   RS_DIRDES or RS_DIRSRC or RS_APPEND or RS_NOCIRCLE or RS_LOGOUT, '', '', '', '', '', 0, 0, 0, 0, 0, 0, 0); end.";
+    ui.app().run_script(ordered, &ctx).unwrap();
+    assert_eq!(ui.app().tabs.len(), before, "no new tab");
+    let t = ui.app().active;
+    let seqs: Vec<Option<u64>> = ui.app().tabs[t].queue.lock().items().iter().rev().take(2).map(|i| i.sequence).collect();
+    assert!(seqs[0].is_some() && seqs[1].is_some() && seqs[0] > seqs[1]);
+    assert!(ui.app().tabs[t].logout_when_done);
+
+    let bad =
+        "begin RushApp.FTP.Transfer(0, 'FTP1', '/pub', 'rel', 'FTP2', '/in', '', RS_EXPR, '(', '', '', '', '', 0, 0, 0, 0, 0, 0, 0); end.";
+    assert!(ui.app().run_script(bad, &ctx).is_err(), "an invalid expression is refused");
+}
+
+#[test]
+fn conditional_transfer_filters_the_selection_and_saves_its_scheme() {
+    let mut ui = Ui::start(Lang::En, true);
+    connect_left_panel(&mut ui, "Cond site");
+    // The right panel is local (alpha.txt 10 B, beta.bin 2 KiB, gamma.log, docs/).
+    act(&mut ui, super::Action::SelectAll(1));
+    act(&mut ui, super::Action::Conditional(1));
+    ui.run();
+    assert!(ui.has_label(&t!("cond.title")));
+    {
+        let form = &mut ui.app().tabs[0].condition.as_mut().unwrap().form;
+        form.file_exclude = "*.log".into();
+        form.size_range = true;
+        form.min_kib = 1;
+        form.name = "Big files".into();
+    }
+    ui.run();
+    ui.harness.get_by_label(&t!("cond.save")).click();
+    ui.run();
+    assert_eq!(ui.app().options.settings.condition_schemes.len(), 1);
+
+    // A date that cannot be read: the dialog stays with its error.
+    ui.app().tabs[0].condition.as_mut().unwrap().form.date_between = true;
+    ui.app().tabs[0].condition.as_mut().unwrap().form.date_from = "yesterday".into();
+    ui.run();
+    ui.harness.get_by_label(&t!("cond.add")).click();
+    ui.run();
+    assert!(ui.app().tabs[0].condition.as_ref().is_some_and(|d| d.error.is_some()));
+    ui.app().tabs[0].condition.as_mut().unwrap().form.date_between = false;
+    ui.run();
+    ui.harness.get_by_label(&t!("cond.add")).click();
+    ui.run();
+    assert!(ui.app().tabs[0].condition.is_none());
+    let queued: Vec<(String, bool)> = ui.app().tabs[0]
+        .queue
+        .lock()
+        .items()
+        .iter()
+        .map(|i| (Path::new(&i.src.path).file_name().unwrap().to_string_lossy().into_owned(), i.options.is_some()))
+        .collect();
+    assert_eq!(queued, [("docs".to_string(), true), ("beta.bin".to_string(), true)], "folders kept, small and excluded files dropped");
+}
+
+#[test]
+fn sfv_file_is_written_in_the_background_and_mode_is_edited() {
+    let mut ui = Ui::start(Lang::En, true);
+    // Right panel: the local demo folder; select alpha.txt and beta.bin.
+    for name in ["alpha.txt", "beta.bin"] {
+        let i = ui.app().tabs[0].sides[1].rows().iter().position(|r| r.name == name).unwrap();
+        ui.app().tabs[0].sides[1].selected_mut().insert(i);
+    }
+    act(&mut ui, super::Action::Checksums(1, false));
+    let sfv = scratch().join("home").join("home.sfv");
+    for _ in 0..100 {
+        ui.run();
+        if sfv.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let entries = urftp_core::checksum::parse_sfv(&std::fs::read_to_string(&sfv).unwrap());
+    assert_eq!(entries.get("alpha.txt"), Some(&crc32fast::hash(&[b'x'; 10])));
+    assert_eq!(entries.len(), 2);
+    std::fs::remove_file(&sfv).unwrap();
+
+    let ids = fill_queue(&mut ui);
+    act(&mut ui, super::Action::QueueEdit(ids[0]));
+    ui.app().tabs[0].queue_edit.as_mut().unwrap().mode = urftp_core::TransferMode::Ascii;
+    ui.run();
+    ui.harness.get_by_label(&t!("common.validate")).click();
+    ui.run();
+    assert_eq!(ui.app().tabs[0].queue.lock().get(ids[0]).unwrap().mode, urftp_core::TransferMode::Ascii);
+}
+
+#[test]
+fn a_new_folder_is_entered_when_asked() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.app().options.settings.transfer.enter_new_folder = true;
+    ui.key(Key::F7);
+    ui.key_with(Modifiers::COMMAND, Key::A);
+    ui.harness.event(egui::Event::Text("entered".into()));
+    ui.run();
+    ui.key(Key::Enter);
+    let made = scratch().join("home/entered");
+    assert_eq!(ui.left_path(), made, "the panel is now in the new folder");
+    std::fs::remove_dir(&made).unwrap();
+}

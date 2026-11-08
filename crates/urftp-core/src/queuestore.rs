@@ -77,6 +77,30 @@ impl SavedTab {
         names
     }
 
+    /// Unfinished items of a queue (same rules as the automatic save).
+    pub fn of_queue(title: impl Into<String>, queue: &Queue) -> Self {
+        Self { title: title.into(), items: queue.items().iter().filter_map(SavedItem::of).collect() }
+    }
+
+    /// Queue file written by hand ("Save queue"): the same format as `queue.json`, with
+    /// this single tab.
+    pub fn save_file(&self, path: &Path) -> io::Result<()> {
+        let all = SavedQueues { version: VERSION, tabs: vec![self.clone()] };
+        if let Some(d) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(d)?;
+        }
+        std::fs::write(path, serde_json::to_string_pretty(&all).map_err(io::Error::other)?)
+    }
+
+    /// Queue file read by hand ("Load queue"): the items of every tab it holds, in order
+    /// (a `queue.json` can be loaded too).
+    pub fn load_file(path: &Path) -> io::Result<Self> {
+        let text = std::fs::read_to_string(path)?;
+        let all: SavedQueues = serde_json::from_str(&text).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let title = all.tabs.first().map(|t| t.title.clone()).unwrap_or_default();
+        Ok(Self { title, items: all.tabs.into_iter().flat_map(|t| t.items).collect() })
+    }
+
     /// Items left to transfer (failed ones apart).
     pub fn waiting(&self) -> usize {
         self.items.iter().filter(|i| i.state == SavedState::Waiting).count()
@@ -199,6 +223,23 @@ mod tests {
         SavedQueues::snapshot([(String::new(), &empty)]).save(&path).unwrap();
         assert!(!path.exists());
         assert!(SavedQueues::load(&path).unwrap().is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn queue_file_saved_and_loaded_by_hand() {
+        let mut q = Queue::new();
+        q.push(Endpoint::remote("Site", "/a.bin"), Endpoint::local(r"C:\dl\a.bin"), false, Some(7), None);
+        let done = q.push(Endpoint::remote("Site", "/b.bin"), Endpoint::local(r"C:\dl\b.bin"), false, Some(7), None);
+        q.set_state(done, ItemState::Done);
+        let dir = std::env::temp_dir().join(format!("urftp-queuefile-{}", std::process::id()));
+        let path = dir.join("my queue.urq");
+        SavedTab::of_queue("Tab 1", &q).save_file(&path).unwrap();
+        let back = SavedTab::load_file(&path).unwrap();
+        assert_eq!((back.title.as_str(), back.items.len()), ("Tab 1", 1), "finished items are not saved");
+        assert_eq!(back.into_queue().items()[0].src.path, "/a.bin");
+        std::fs::write(&path, "not json").unwrap();
+        assert_eq!(SavedTab::load_file(&path).unwrap_err().kind(), io::ErrorKind::InvalidData);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

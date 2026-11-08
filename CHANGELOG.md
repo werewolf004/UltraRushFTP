@@ -9,10 +9,46 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Queue and transfers (block H).
+
+### Added
+
+- **Queue**: pause and resume (the interrupted transfers resume from their partial file),
+  row selection (`Ctrl`, `Shift`), *Edit…* (source, target, mode), *Invert FXP*, *Mark as
+  failed*, *Remove the failed items*, *Clear the queue*, *Queue information* (counts,
+  sizes, time left), queue files `.urq` loaded and saved by hand.
+- **Retries**: per direction, cycle retry, rounds of retry once the queue ends, retry of
+  the failed items when a queue starts automatically.
+- **End of the queue**: log out, quit, sleep, hibernate or shut down, with a countdown
+  that can be cancelled; log out a site removes its waiting items (option); source and
+  target of each item in the log (option).
+- **`RushApp.FTP.Transfer`**: every parameter — folder and file filters with `%F%` /
+  `%D%`, `RS_EXPR`, `RS_NOSKIP`, `CompleteFlag` and `RepeatCount` (folder listed again),
+  `RetryCount`, `FolderSort` / `FileSort`, `Depth`, `SubCount`, `RS_NOCIRCLE`,
+  `RS_APPEND` (one tab per pair otherwise), `RS_LOGOUT`, `RS_DELEMPTYTABS`.
+- **Conditional transfer** (right-click in a panel): name masks, dates, sizes, skip list
+  off, sub-folders, log out after; **synchronisation** (compare sizes and dates, delete
+  what the source lacks, existing files only, both sides); saved schemes.
+- **Advanced transfer** options: transfer mode and ASCII list (no resume for ASCII files),
+  case of the target names, active mode for every site, `XDUPE`, `MODE Z` with exceptions,
+  TCP buffer, roll back before resuming, disk space kept free, no speed limit on the local
+  network.
+- **CRC**: SFV check of the downloads (also when the SFV comes last), `XCRC` after uploads
+  and FXP, bad files removed and transferred again, one SFV per folder; *Create an SFV /
+  MD5 file* in the local panel.
+- **Folder rules**: empty target folders removed, server date kept on downloads, new folder
+  entered, sub-folder named like its parent refused, 0-byte target of a refused FXP
+  removed.
+
 ### Changed
 
 - The documentation screenshots are drawn off screen: no window opens and nothing takes
   the focus while they are made. They no longer show the Windows title bar.
+
+### Fixed
+
+- **Stop all** ends the queue: the waiting items were started as soon as the running ones
+  had stopped.
 
 ## [0.3.0] - 2026-11-07
 

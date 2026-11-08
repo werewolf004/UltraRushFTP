@@ -54,7 +54,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
@@ -83,26 +83,26 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
   IIS et OpenSSH, pas encore lancés (G6).
 
 ### H — File et transferts
-- ⬜ Pause, modification d'un élément (source, cible, mode, inversion FXP), marquer en
-  échec, retirer les échecs, informations sur la file.
+- ✅ Pause, modification d'un élément (source, cible, mode, inversion FXP), marquer en
+  échec, retirer les échecs, informations sur la file (H1).
 - ✅ File non terminée enregistrée automatiquement et proposée au démarrage.
-- ⬜ Charger / enregistrer un fichier de file à la main.
-- ⬜ Options d'essais : par sens, essai cyclique, relance des échecs en fin de file,
-  réinitialisation au démarrage.
-- ⬜ Fin de file : rester connecté / déconnecter, veille, veille prolongée, arrêt, quitter
-  (avec confirmation).
-- ⬜ `RushApp.FTP.Transfer` : `RS_NOCIRCLE`, `CompleteFlag`, `RepeatCount`, `Depth`,
-  `SubCount`, tri, filtres dossiers/fichiers, `%F%` / `%D%`.
-- ⬜ Transfert conditionnel et synchronisation (masques, dates, tailles, suppression des
-  absents).
-- ⬜ XDupe, conversion de casse des noms, mode ASCII et liste ASCII, mode actif forcé,
+- ✅ Charger / enregistrer un fichier de file à la main (H1).
+- ✅ Options d'essais : par sens, essai cyclique, relance des échecs en fin de file,
+  réinitialisation au démarrage (H2).
+- ✅ Fin de file : rester connecté / déconnecter, veille, veille prolongée, arrêt, quitter
+  (avec confirmation) (H2).
+- ✅ `RushApp.FTP.Transfer` : `RS_NOCIRCLE`, `CompleteFlag`, `RepeatCount`, `Depth`,
+  `SubCount`, tri, filtres dossiers/fichiers, `%F%` / `%D%` (H3).
+- ✅ Transfert conditionnel et synchronisation (masques, dates, tailles, suppression des
+  absents) (H4).
+- ✅ XDupe, conversion de casse des noms, mode ASCII et liste ASCII, mode actif forcé,
   tampon TCP, `MODE Z`, retour en arrière à la reprise, garde d'espace disque, pas de
-  limite de vitesse pour les adresses locales.
-- ⬜ CRC : vérification SFV au téléchargement, `XCRC`, réajout des fichiers défectueux,
-  création de SFV / MD5 ; règles SFV.
-- ⬜ Règles de dossiers : retirer les dossiers vides laissés par un transfert, garder la
+  limite de vitesse pour les adresses locales (H5).
+- ✅ CRC : vérification SFV au téléchargement, `XCRC`, réajout des fichiers défectueux,
+  création de SFV / MD5 ; règles SFV (H5).
+- ✅ Règles de dossiers : retirer les dossiers vides laissés par un transfert, garder la
   date du serveur, entrer dans un dossier créé, refuser un dossier du même nom que son
-  parent, retirer la cible de 0 octet quand la source FXP refuse.
+  parent, retirer la cible de 0 octet quand la source FXP refuse (H6).
 
 ### I — Navigation et opérations sur les fichiers
 - ⬜ Filtre rapide (`Ctrl+F`), marques, sélection par masque, copie de plusieurs noms,

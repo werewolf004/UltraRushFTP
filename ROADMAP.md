@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -75,24 +75,24 @@ planned work is grouped below into blocks, each ending with a release.
   OpenSSH, not run yet (G6).
 
 ### H — Queue and transfers
-- ⬜ Pause, edit an item (source, target, mode, invert FXP), mark as failed, clear failed,
-  queue information.
+- ✅ Pause, edit an item (source, target, mode, invert FXP), mark as failed, clear failed,
+  queue information (H1).
 - ✅ Unfinished queue saved automatically and offered at startup.
-- ⬜ Load / save a queue file by hand.
-- ⬜ Retry options: per direction, cycle retry, retry failed when the queue ends, reset on
-  start.
-- ⬜ End of queue: idle / disconnect, sleep, hibernate, shut down, exit (with
-  confirmation).
-- ⬜ `RushApp.FTP.Transfer`: `RS_NOCIRCLE`, `CompleteFlag`, `RepeatCount`, `Depth`,
-  `SubCount`, sorting, folder/file filters, `%F%` / `%D%`.
-- ⬜ Conditional transfer and synchronisation (masks, dates, sizes, delete missing).
-- ⬜ XDupe, file-name case conversion, ASCII mode and ASCII list, forced active mode, TCP
+- ✅ Load / save a queue file by hand (H1).
+- ✅ Retry options: per direction, cycle retry, retry failed when the queue ends, reset on
+  start (H2).
+- ✅ End of queue: idle / disconnect, sleep, hibernate, shut down, exit (with
+  confirmation) (H2).
+- ✅ `RushApp.FTP.Transfer`: `RS_NOCIRCLE`, `CompleteFlag`, `RepeatCount`, `Depth`,
+  `SubCount`, sorting, folder/file filters, `%F%` / `%D%` (H3).
+- ✅ Conditional transfer and synchronisation (masks, dates, sizes, delete missing) (H4).
+- ✅ XDupe, file-name case conversion, ASCII mode and ASCII list, forced active mode, TCP
   buffer, `MODE Z`, resume roll-back, free-disk-space guard, speed-limit bypass for local
-  addresses.
-- ⬜ CRC: SFV check on download, `XCRC`, re-add bad files, create SFV / MD5; SFV rules.
-- ⬜ Folder rules: remove empty folders left by a transfer, keep the server date on
+  addresses (H5).
+- ✅ CRC: SFV check on download, `XCRC`, re-add bad files, create SFV / MD5; SFV rules (H5).
+- ✅ Folder rules: remove empty folders left by a transfer, keep the server date on
   downloads, enter a folder after creating it, refuse a folder named like its parent,
-  remove the 0-byte target when an FXP source refuses.
+  remove the 0-byte target when an FXP source refuses (H6).
 
 ### I — Browsing and file operations
 - ⬜ Quick filter (`Ctrl+F`), marks, select by mask, copy several names, rename several

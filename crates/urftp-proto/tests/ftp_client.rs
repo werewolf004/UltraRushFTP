@@ -160,3 +160,38 @@ async fn download_to_long_local_path() {
     assert_eq!(std::fs::read(&local).unwrap(), vec![7u8; 10_000]);
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[tokio::test]
+async fn mode_z_ascii_and_xcrc() {
+    use urftp_proto::ftp::DataOptions;
+    let srv = MockServer::start(MockConfig { mode_z: true, xcrc: true, ..MockConfig::default() }).await;
+    // Larger than the buffers, half compressible, half random.
+    let mut data: Vec<u8> = (0..300_000u32).map(|i| (i % 7) as u8).collect();
+    data.extend((0..300_000u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8));
+    srv.fs.lock().unwrap().files.insert("/big.bin".into(), data.clone());
+    let mut c = connect(&srv).await;
+    let z = DataOptions { compress: true, ..DataOptions::default() };
+
+    let mut got = Vec::new();
+    let n = c.retr_with("/big.bin", 0, &mut got, |_| {}, z).await.unwrap();
+    assert_eq!((n as usize, got == data), (data.len(), true), "decompressed download");
+    let mut input = &data[..];
+    c.stor_with("/up.bin", 0, &mut input, |_| {}, z).await.unwrap();
+    assert!(srv.fs.lock().unwrap().files.get("/up.bin") == Some(&data), "compressed upload");
+    assert!(srv.received().iter().filter(|l| l.as_str() == "MODE Z").count() == 1, "MODE Z sent once");
+
+    // Back to stream mode and ASCII.
+    let mut text = Vec::new();
+    c.retr_with("/big.bin", 0, &mut text, |_| {}, DataOptions { ascii: true, compress: false }).await.unwrap();
+    assert!(srv.received().iter().any(|l| l == "MODE S") && srv.received().iter().any(|l| l == "TYPE A"));
+
+    assert_eq!(c.xcrc("/big.bin").await.unwrap(), Some(crc32fast::hash(&data)));
+    let plain = MockServer::start(MockConfig::default()).await;
+    plain.fs.lock().unwrap().files.insert("/a".into(), b"x".to_vec());
+    let mut c = connect(&plain).await;
+    assert_eq!(c.xcrc("/a").await.unwrap(), None, "no XCRC: None");
+    let mut got = Vec::new();
+    c.retr_with("/a", 0, &mut got, |_| {}, z).await.unwrap();
+    assert_eq!(got, b"x", "MODE Z not announced: plain transfer");
+    assert!(!plain.received().iter().any(|l| l.starts_with("MODE")));
+}

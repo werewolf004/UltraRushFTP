@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
+Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 
 ## Main window and menus
 
@@ -72,18 +72,18 @@ Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 
 | Topic | Status | Notes |
 |---|---|---|
-| Start / pause queue | 🟡 | Start and stop; no pause that keeps the connections |
+| Start / pause queue | ✅ | Pause interrupts the transfers, which resume from their partial file |
 | Add the selected to queue | ✅ | Transfer button, `Space`, drag and drop |
-| Conditional transfer | ⬜ | Include/exclude masks, dates, sizes, synchronisation |
-| Clear current queue files | 🟡 | "Remove finished" and remove one item; not "all waiting" |
+| Conditional transfer | ✅ | Masks, dates, sizes, synchronisation, saved schemes |
+| Clear current queue files | ✅ | ⋯ Queue → Clear the queue (except running) |
 | Move up / down / top / bottom | ✅ | Right-click |
-| Edit queue | ⬜ | Change source, target, mode; invert FXP |
+| Edit queue | ✅ | Source, target, mode; invert FXP |
 | Reset all failed | ✅ | "Retry failed" |
 | Reset selected failed | ✅ | Right-click → Retry |
-| Clear all failed | ⬜ | |
-| Mark selected / all as failed | ⬜ | |
-| Queue information | ⬜ | Counts, sizes, times |
-| Restore queue, load / save queue file | 🟡 | The unfinished queue is restored at startup; no queue file to load or save by hand |
+| Clear all failed | ✅ | |
+| Mark selected / all as failed | ✅ | Right-click on the selection, or ⋯ Queue |
+| Queue information | ✅ | Counts, sizes, time left |
+| Restore queue, load / save queue file | ✅ | Unfinished queue at startup; `.urq` files by hand |
 | Schedule queue to task | ⬜ | |
 | Limit upload / download speed toggles | 🟡 | Limits in the options; no one-click toggle |
 
@@ -103,11 +103,11 @@ Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | Hotkey manager | ⬜ | Shortcuts are fixed (list: `F1`) |
 | Manual download from site, increment URL list | ⬜ | |
 | Monitor clipboard, auto transfer | ⬜ | |
-| Transfer mode auto / binary / ASCII | 🟡 | `TYPE A` supported by the protocol layer; no setting or ASCII list |
-| On transfer completed: disconnect / idle | ⬜ | |
-| On transfer completed: shut down / standby / hibernate | ⬜ | |
-| On transfer completed: exit | 🟡 | Command line `-rx` only |
-| Create SFV or MD5 file | ⬜ | |
+| Transfer mode auto / binary / ASCII | ✅ | Options › Advanced transfer, and per item (Edit) |
+| On transfer completed: disconnect / idle | ✅ | Options › Transfers |
+| On transfer completed: shut down / standby / hibernate | ✅ | With a countdown that can be cancelled |
+| On transfer completed: exit | ✅ | Options › Transfers, and `-rx` |
+| Create SFV or MD5 file | ✅ | Right-click in a local panel |
 | IP address translate | ⬜ | Hexadecimal / numeric address to dotted form |
 | Restart UPnP service | ⬜ | Comes with UPnP |
 | Option | ✅ | Options window |
@@ -139,10 +139,10 @@ Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 |---|---|---|
 | Add or edit skip list item | ✅ | Edited in the grid of the options |
 | Bookmark dialog | 🟡 | Name, remote and local paths; date tokens (`%yyyy%`, `%mm%`...) not yet |
-| Create CRC checksums | ⬜ | |
-| Condition transfer | ⬜ | See *Conditional transfer* |
+| Create CRC checksums | ✅ | SFV and MD5 files |
+| Condition transfer | ✅ | See *Conditional transfer* |
 | Calculate FTP space used | ⬜ | |
-| Edit queue | ⬜ | |
+| Edit queue | ✅ | |
 | Export directory tree list | ⬜ | |
 | Fast search | ⬜ | |
 | Find files at sites | ⬜ | |
@@ -189,8 +189,8 @@ Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | `PRET` | ✅ | Used when announced |
 | UTF-8 | ✅ | `OPTS UTF8 ON` when announced |
 | `CLNT` | ✅ | Client name per site |
-| Compression `MODE Z` | ⬜ | |
-| `XCRC` check after transfer | ⬜ | |
+| Compression `MODE Z` | 🟡 | Global setting (Advanced transfer), not per site |
+| `XCRC` check after transfer | 🟡 | Global setting (Advanced transfer), not per site |
 | `MLSD` | ✅ | |
 | `SSCN` / `CPSV` for encrypted FXP | ✅ | |
 | Account: different logins for uploads and downloads | ✅ | Browsing keeps the main login |
@@ -207,11 +207,11 @@ Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | SSL: encrypt listings / transfers separately | ✅ | |
 | SSL: encrypted FXP | ✅ | |
 | SFTP: private keys | ✅ | Several keys, tried in turn |
-| Transfer: file-name case conversion | ⬜ | |
-| Transfer: XDupe | ⬜ | |
+| Transfer: file-name case conversion | 🟡 | Global setting (Advanced transfer), not per site |
+| Transfer: XDupe | 🟡 | Global setting (Advanced transfer), not per site |
 | Transfer: FXP method (no `PASV` as source, `PASV` as target) | ✅ | Per site; automatic reversal when `PORT` is refused |
-| Transfer: force active mode | ⬜ | |
-| Transfer: TCP buffer size | ⬜ | |
+| Transfer: force active mode | ✅ | Transfer mode of the site record; for every site in Advanced transfer |
+| Transfer: TCP buffer size | 🟡 | Global setting (Advanced transfer), not per site |
 | Skip list, priority, file-exists rules per site | ✅ | |
 | Event notification: monitor folders for new items | ⬜ | Needs keep alive |
 | Statistics of this server | ⬜ | Global and session statistics exist |
@@ -266,46 +266,46 @@ Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | Topic | Status | Notes |
 |---|---|---|
 | Download / upload speed limits | ✅ | |
-| Bypass speed limit for local addresses | ⬜ | |
-| File-name case conversion | ⬜ | |
-| Force active mode for transfers | ⬜ | |
+| Bypass speed limit for local addresses | ✅ | Private, loopback and link-local addresses |
+| File-name case conversion | ✅ | Uploads and downloads separately |
+| Force active mode for transfers | ✅ | |
 | Stop and resume when no data is received | 🟡 | Reply timeout then retry with resume |
-| Roll back when resuming a download | ⬜ | |
-| Keep free disk space | ⬜ | |
+| Roll back when resuming a download | ✅ | |
+| Keep free disk space | ✅ | |
 | Maximum simultaneous transfers per tab | ✅ | |
-| TCP buffer size | ⬜ | |
-| Transfer mode auto / binary / ASCII | 🟡 | See the menu row |
-| On transfer completed: idle / disconnect | ⬜ | |
-| ASCII list, no resume for ASCII files | ⬜ | |
+| TCP buffer size | ✅ | |
+| Transfer mode auto / binary / ASCII | ✅ | See the menu row |
+| On transfer completed: idle / disconnect | ✅ | |
+| ASCII list, no resume for ASCII files | ✅ | |
 | Skip list: enable, zero-byte files, empty folders, folders | ✅ | |
 | Skip list: colour of skipped items | ⬜ | |
 | Skip list: mode auto / manual / both | ⬜ | Applied to every item today |
 | File-exists rules (resume, skip, rename, overwrite, ask) | ✅ | Plus overwrite when resume fails |
 | Queue: reload unfinished queue at startup, auto save | ✅ | Ask, load or discard (Options › General) |
 | Queue: keep failed items | ✅ | |
-| Queue: cycle retry (failed item goes to the bottom) | ⬜ | |
-| Queue: retry all failed after the queue ends | ⬜ | |
+| Queue: cycle retry (failed item goes to the bottom) | ✅ | |
+| Queue: retry all failed after the queue ends | ✅ | A number of rounds |
 | Queue: clear when switching server manually | ➖ | No manual server switching between tabs |
-| Queue: reset failed when started automatically | ⬜ | |
-| Queue: clear when logging out a transferring site | ⬜ | |
-| Queue: source / destination in the transfer log | ⬜ | |
-| Queue: retries per direction (upload, download, FXP) | 🟡 | One value for all |
+| Queue: reset failed when started automatically | ✅ | |
+| Queue: clear when logging out a transferring site | ✅ | Its waiting items are removed |
+| Queue: source / destination in the transfer log | ✅ | |
+| Queue: retries per direction (upload, download, FXP) | ✅ | A site setting still wins |
 | Priority list | ✅ | |
-| Compression `MODE Z` (listing, upload, download, exceptions) | ⬜ | |
+| Compression `MODE Z` (listing, upload, download, exceptions) | 🟡 | Uploads and downloads, with exceptions; listings are not compressed |
 | Disk cache for downloads | ➖ | Buffered writes are handled by the runtime |
 
 ### Misc.
 
 | Topic | Status | Notes |
 |---|---|---|
-| Check SFV when downloading, CRC log and status folder, re-add bad files | ⬜ | |
-| Use `XCRC` if available | ⬜ | |
-| Enter a folder after creating it | ⬜ | |
-| Remove empty folders left by a transfer | ⬜ | |
-| Refuse a folder with the same name as its parent | ⬜ | |
-| One SFV per folder, skip all SFV if several | ⬜ | |
-| Keep the server date on downloaded files | ⬜ | |
-| Remove the 0-byte target file when an FXP source refuses | ⬜ | |
+| Check SFV when downloading, CRC log and status folder, re-add bad files | 🟡 | Check and re-add; results in the log, no status folder |
+| Use `XCRC` if available | ✅ | |
+| Enter a folder after creating it | ✅ | |
+| Remove empty folders left by a transfer | ✅ | |
+| Refuse a folder with the same name as its parent | ✅ | |
+| One SFV per folder, skip all SFV if several | ✅ | |
+| Keep the server date on downloaded files | ✅ | |
+| Remove the 0-byte target file when an FXP source refuses | ✅ | |
 | New tab: both sides remote | ⬜ | |
 | New tab for quick connect / favourites | ✅ | "Open a new tab when the panel is busy" |
 
@@ -364,7 +364,7 @@ Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | `RushApp.UI.Selection` (`Prepare`, `Count`, `Items`, `IsRemoteSide`, `IsFTPConnected`, `FTPName`) | ⬜ | |
 | `RushApp.FTP.Splitter` | ✅ | |
 | `RushApp.FTP.CWD`, `Delete`, `Login`, `Logout`, `RAW`, `RemoveQueue` | ✅ | With their flags |
-| `RushApp.FTP.Transfer` | 🟡 | Flags parsed; `RS_NOCIRCLE`, `CompleteFlag`, `RepeatCount`, `Depth`, `SubCount`, sort and folder/file filters not applied yet |
+| `RushApp.FTP.Transfer` | 🟡 | Every parameter but `RS_CHECKLOGIN`; `Timeout` is unused, as in FTPRush |
 | `RushApp.FTP.EnableSite`, `DisableSite` | ✅ | |
 | Event `RushApp.UI.OnSwitchLayout` | ⬜ | Needs saved layouts |
 | Statistics variables (`TotalDownloadSize`... `DownloadBW`) | ✅ | |
@@ -372,7 +372,7 @@ Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | `MatchExpr`, `MatchString` | ⬜ | |
 | `ShellExecuteCommand` | ⬜ | Needs a confirmation rule before running programs |
 | Example: `InputQuery` for a bookmark | 🟡 | `InputQuery` accepted; no input dialog yet |
-| `%F%` / `%D%` prefixes in transfer filters | ⬜ | |
+| `%F%` / `%D%` prefixes in transfer filters | ✅ | |
 
 ## Advanced, FAQ and tips
 
@@ -390,7 +390,7 @@ Summary (284 topics): ✅ 111 · 🟡 32 · ⬜ 124 · ➖ 17.
 | Tip: `Ctrl` + connect = `-password` | ✅ | Site manager; `RS_INVERT` in scripts |
 | Tip: `Shift` + bookmark = both sides | ⬜ | |
 | Tip: `Shift` + double-click folder = both sides | ⬜ | |
-| Tip: `%F%` / `%D%` in skip and allow lists of `Transfer` | ⬜ | |
+| Tip: `%F%` / `%D%` in skip and allow lists of `Transfer` | ✅ | |
 | mIRC DLL (`rushmirc.dll`, `Invoke`, `RushScript`...) | ✅ | 32 and 64-bit |
 
 ## Not part of the help

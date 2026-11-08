@@ -5,6 +5,7 @@
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use urftp_core::itemopts::{ItemOptions, SortKey, SortOrder, TransferFilter};
 use urftp_core::pattern::Pattern;
 use urftp_i18n::t;
 use urftp_script::{Host, HostError, ScriptError, Value, has_flag};
@@ -511,13 +512,9 @@ impl AppHost<'_> {
         let flags = n(a, 7);
         let (up, down, is_file) = (has_flag(flags, "RS_UP"), has_flag(flags, "RS_DOWN"), has_flag(flags, "RS_FILE"));
         let (dir_src, dir_des) = (has_flag(flags, "RS_DIRSRC"), has_flag(flags, "RS_DIRDES"));
-        for (i, label) in [(8, "FolderAllow"), (9, "FolderSkip"), (10, "FileAllow"), (11, "FileSkip"), (12, "CompleteFlag")] {
-            if !s(a, i).is_empty() {
-                self.log(LogKind::Status, t!("host.transfer_unsupported", what = label));
-            }
-        }
-        if n(a, 13) > 0 {
-            self.log(LogKind::Status, t!("host.transfer_unsupported", what = "RepeatCount"));
+        let options = Self::transfer_options(a, flags)?;
+        if has_flag(flags, "RS_CHECKLOGIN") {
+            self.log(LogKind::Status, t!("host.transfer_unsupported", what = "RS_CHECKLOGIN"));
         }
 
         let srcs = self.names(&src_list);
@@ -548,10 +545,23 @@ impl AppHost<'_> {
             return Err(HostError::InvalidArgument { function: "Transfer".into(), reason: t!("host.transfer_no_pair") });
         }
 
-        let tab = if handle > 0 && (handle as usize) <= self.app.tabs.len() { handle as usize - 1 } else { self.app.active };
+        // RS_APPEND (or a window given): every pair in one tab, one after the other;
+        // otherwise several pairs run at the same time, each in a new tab.
+        let one_tab = has_flag(flags, "RS_APPEND") || handle > 0 || pairs.len() == 1;
+        let first_tab = if handle > 0 && (handle as usize) <= self.app.tabs.len() { handle as usize - 1 } else { self.app.active };
         let prio = self.app.options.settings.priority_list();
         let mut added = 0;
+        let mut tabs = Vec::new();
         for (src_site, dst_site, sfolder, sitem) in pairs {
+            let tab = if one_tab || tabs.is_empty() {
+                first_tab
+            } else {
+                self.app.new_tab();
+                self.app.tabs.len() - 1
+            };
+            if !tabs.contains(&tab) {
+                tabs.push(tab);
+            }
             let sdir = Self::folder(src_site.as_ref(), &sfolder, dir_src, src_site.is_none())?;
             let ddir = Self::folder(dst_site.as_ref(), &des_folder, dir_des, dst_site.is_none())?;
             let join = |site: &Option<Site>, dir: &str, name: &str| -> String {
@@ -567,16 +577,62 @@ impl AppHost<'_> {
             let src = Endpoint { site: src_site.as_ref().map(|x| x.name.clone()), path: join(&src_site, &sdir, &sitem) };
             let dst = Endpoint { site: dst_site.as_ref().map(|x| x.name.clone()), path: join(&dst_site, &ddir, &dname) };
             let rank = prio.rank(&sitem);
-            self.app.tabs[tab].queue.lock().push(src, dst, !is_file, None, rank);
+            let mut q = self.app.tabs[tab].queue.lock();
+            // RS_NOCIRCLE: each pair waits for the previous one to be all over.
+            let sequence = has_flag(flags, "RS_NOCIRCLE").then(|| q.next_sequence());
+            let id = q.push(src, dst, !is_file, None, rank);
+            q.set_options(id, options.clone(), sequence);
+            drop(q);
             added += 1;
         }
         self.log(LogKind::Status, t!("host.transfer_queued", n = added));
         let opts = self.app.engine_options();
-        let extra = self.app.queue_site_profiles(tab);
         let rt = self.app.rt.clone();
-        self.app.tabs[tab].start_queue(&rt, self.ctx, opts, &extra);
+        for tab in tabs {
+            let t = &mut self.app.tabs[tab];
+            t.logout_when_done |= has_flag(flags, "RS_LOGOUT");
+            t.close_when_done |= has_flag(flags, "RS_DELEMPTYTABS");
+            let extra = self.app.queue_site_profiles(tab);
+            self.app.tabs[tab].start_queue(&rt, self.ctx, opts.clone(), &extra);
+        }
         self.popup(flags);
         Ok(())
+    }
+
+    /// Options of `Transfer` from its parameters 8 to 19: filters, `CompleteFlag`,
+    /// `RepeatCount`, `RetryCount`, `Timeout` (not used, as in FTPRush), `FolderSort`,
+    /// `FileSort`, `Depth`, `SubCount`; with `RS_NOSKIP` and `RS_EXPR`.
+    fn transfer_options(a: &[Value], flags: i64) -> Result<Option<Arc<ItemOptions>>, HostError> {
+        fn invalid(e: impl std::fmt::Display) -> HostError {
+            HostError::InvalidArgument { function: "Transfer".into(), reason: e.to_string() }
+        }
+        let filter = TransferFilter::parse(&s(a, 8), &s(a, 9), &s(a, 10), &s(a, 11), has_flag(flags, "RS_EXPR")).map_err(invalid)?;
+        let complete = s(a, 12);
+        let complete_flag = if complete.is_empty() { None } else { Some(Pattern::regex(complete).map_err(invalid)?) };
+        let sort = |v: i64| SortOrder {
+            key: if has_flag(v, "RS_SORTDATE") {
+                SortKey::Date
+            } else if has_flag(v, "RS_SORTSIZE") {
+                SortKey::Size
+            } else {
+                SortKey::Name
+            },
+            descending: has_flag(v, "RS_SORTDES"),
+        };
+        let positive = |i: usize| u32::try_from(n(a, i)).ok().filter(|&v| v > 0);
+        let options = ItemOptions {
+            filter,
+            depth: positive(18),
+            sub_count: positive(19).unwrap_or(0),
+            folder_sort: sort(n(a, 16)),
+            file_sort: sort(n(a, 17)),
+            no_skiplist: has_flag(flags, "RS_NOSKIP"),
+            retries: positive(14),
+            repeat: positive(13).unwrap_or(0),
+            complete_flag,
+            ..ItemOptions::default()
+        };
+        Ok((!options.is_default()).then(|| Arc::new(options)))
     }
 
     fn remove_queue(&mut self, a: &[Value]) -> Result<(), HostError> {

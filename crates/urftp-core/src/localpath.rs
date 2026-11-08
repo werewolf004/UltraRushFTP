@@ -6,6 +6,21 @@
 
 use std::path::{Component, Path, PathBuf, Prefix};
 
+/// Free space on the volume holding `path` (the nearest existing folder above it is asked);
+/// `None` when it cannot be known (or outside Windows).
+pub fn free_space(path: &Path) -> Option<u64> {
+    let dir = path.ancestors().find(|a| a.is_dir())?;
+    #[cfg(windows)]
+    {
+        urftp_sys::win::free_space(dir).ok()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = dir;
+        None
+    }
+}
+
 /// Converts an absolute path into a Windows "verbatim" path, without length limit.
 ///
 /// `.` and `..` components are resolved (the verbatim format does not interpret them) and

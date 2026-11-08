@@ -6,7 +6,7 @@ use urftp_i18n::{Lang, t};
 use eframe::egui::{self, RichText};
 use urftp_core::exists::{ExistsAction, ExistsRules};
 use urftp_core::settings::{
-    GlobalProxy, KeepAliveSettings, LanguageSetting, MaskSetting, QueueAtStart, Settings, SkipRuleSetting, SkipSettings,
+    GlobalProxy, KeepAliveSettings, LanguageSetting, MaskSetting, QueueAtStart, QueueEnd, Settings, SkipRuleSetting, SkipSettings,
 };
 use urftp_core::site::ProxyType;
 use urftp_core::skiplist::{RuleAction, RuleTarget};
@@ -29,10 +29,11 @@ pub(crate) enum Page {
     KeepAlive,
     Connection,
     NewSite,
+    Advanced,
 }
 
 impl Page {
-    pub(crate) const ALL: [Page; 11] = [
+    pub(crate) const ALL: [Page; 12] = [
         Page::General,
         Page::Transfers,
         Page::Speed,
@@ -44,6 +45,7 @@ impl Page {
         Page::KeepAlive,
         Page::Connection,
         Page::NewSite,
+        Page::Advanced,
     ];
 
     pub(crate) fn label(self) -> String {
@@ -59,6 +61,7 @@ impl Page {
             Page::KeepAlive => t!("options.page_keepalive"),
             Page::Connection => t!("options.page_connection"),
             Page::NewSite => t!("options.page_new_site"),
+            Page::Advanced => t!("options.page_advanced"),
         }
     }
 }
@@ -213,6 +216,10 @@ impl OptionsWindow {
                 });
                 ui.add_space(6.0);
                 ui.label(RichText::new(t!("options.timeouts_note")).weak());
+                ui.add_space(8.0);
+                retries_ui(ui, &mut s.transfer);
+                ui.add_space(8.0);
+                queue_end_ui(ui, &mut s.transfer);
             }
             Page::Speed => {
                 let t = &mut s.transfer;
@@ -242,6 +249,7 @@ impl OptionsWindow {
                 ui.add_space(4.0);
                 ui.push_id("opt-new-site", |ui| crate::sites::new_site_ui(ui, &mut s.new_site));
             }
+            Page::Advanced => advanced_ui(ui, &mut s.transfer),
             Page::Ident => {
                 let id = &mut s.ident;
                 ui.checkbox(&mut id.enabled, t!("options.ident_enable"));
@@ -584,6 +592,144 @@ fn named_proxies_ui(ui: &mut egui::Ui, list: &mut Vec<urftp_core::settings::Name
             name: format!("Proxy {k}"),
             proxy: urftp_core::site::SiteProxy { port: 1080, data_channel: true, ..Default::default() },
         });
+    }
+}
+
+/// Retries per direction and the queue rules about failed items.
+fn retries_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings) {
+    ui.label(RichText::new(t!("options.retry_section")).strong());
+    {
+        egui::Grid::new("opt-retries").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+            for (label, value) in [
+                (t!("options.retries_download"), &mut t.retries_download),
+                (t!("options.retries_upload"), &mut t.retries_upload),
+                (t!("options.retries_fxp"), &mut t.retries_fxp),
+            ] {
+                let mut own = value.is_some();
+                let c = ui.checkbox(&mut own, &label);
+                theme::name(&c, &label);
+                ui.horizontal(|ui| {
+                    let mut n = value.unwrap_or(t.retries);
+                    let r = ui.add_enabled(own, egui::DragValue::new(&mut n).range(0..=50));
+                    theme::name(&r, &label);
+                    *value = own.then_some(n);
+                });
+                ui.end_row();
+            }
+            theme::grid_row(ui, t!("options.retry_rounds"), egui::DragValue::new(&mut t.retry_failed_rounds).range(0..=20));
+        });
+        ui.checkbox(&mut t.cycle_retry, t!("options.cycle_retry"));
+        ui.checkbox(&mut t.reset_failed_on_auto_start, t!("options.reset_failed_auto"));
+        ui.checkbox(&mut t.clear_queue_on_logout, t!("options.clear_queue_logout"));
+        ui.checkbox(&mut t.log_paths, t!("options.log_paths"));
+    }
+}
+
+/// Translated name of a transfer mode.
+pub(crate) fn mode_label(m: urftp_core::TransferMode) -> String {
+    match m {
+        urftp_core::TransferMode::Auto => t!("mode.auto"),
+        urftp_core::TransferMode::Binary => t!("mode.binary"),
+        urftp_core::TransferMode::Ascii => t!("mode.ascii"),
+    }
+}
+
+fn case_label(c: urftp_core::NameCase) -> String {
+    match c {
+        urftp_core::NameCase::Keep => t!("case.keep"),
+        urftp_core::NameCase::Lower => t!("case.lower"),
+        urftp_core::NameCase::Upper => t!("case.upper"),
+    }
+}
+
+/// "Advanced transfer" page: modes, names, data connections, disk and speed, CRC.
+fn advanced_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings) {
+    use urftp_core::{NameCase, TransferMode};
+    ui.label(RichText::new(t!("options.adv_mode_section")).strong());
+    egui::Grid::new("opt-adv-mode").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        let l = ui.label(t!("options.adv_mode"));
+        let combo = egui::ComboBox::from_id_salt("opt-adv-mode-combo").selected_text(mode_label(t.mode)).width(180.0).show_ui(ui, |ui| {
+            for m in [TransferMode::Auto, TransferMode::Binary, TransferMode::Ascii] {
+                ui.selectable_value(&mut t.mode, m, mode_label(m));
+            }
+        });
+        combo.response.labelled_by(l.id);
+        ui.end_row();
+        theme::grid_row(ui, t!("options.adv_ascii_masks"), theme::single_line(&mut t.ascii_masks).desired_width(360.0));
+        for (label, value, salt) in
+            [(t!("options.adv_upload_case"), &mut t.upload_case, "up"), (t!("options.adv_download_case"), &mut t.download_case, "down")]
+        {
+            let l = ui.label(&label);
+            let combo =
+                egui::ComboBox::from_id_salt(("opt-adv-case", salt)).selected_text(case_label(*value)).width(180.0).show_ui(ui, |ui| {
+                    for c in [NameCase::Keep, NameCase::Lower, NameCase::Upper] {
+                        ui.selectable_value(value, c, case_label(c));
+                    }
+                });
+            combo.response.labelled_by(l.id);
+            ui.end_row();
+        }
+    });
+    ui.checkbox(&mut t.no_resume_ascii, t!("options.adv_no_resume_ascii"));
+    ui.add_space(8.0);
+
+    ui.label(RichText::new(t!("options.adv_data_section")).strong());
+    ui.checkbox(&mut t.force_active, t!("options.adv_force_active"));
+    ui.checkbox(&mut t.xdupe, t!("options.adv_xdupe"));
+    ui.checkbox(&mut t.mode_z, t!("options.adv_mode_z"));
+    egui::Grid::new("opt-adv-data").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        let l = ui.label(t!("options.adv_mode_z_except"));
+        ui.add_enabled(t.mode_z, theme::single_line(&mut t.mode_z_exceptions).desired_width(360.0)).labelled_by(l.id);
+        ui.end_row();
+        theme::grid_row(ui, t!("options.adv_tcp_buffer"), egui::DragValue::new(&mut t.tcp_buffer_kib).range(0..=65_536).speed(8));
+    });
+    ui.add_space(8.0);
+
+    ui.label(RichText::new(t!("options.adv_disk_section")).strong());
+    egui::Grid::new("opt-adv-disk").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        theme::grid_row(ui, t!("options.adv_rollback"), egui::DragValue::new(&mut t.resume_rollback_kib).range(0..=1_048_576).speed(8));
+        theme::grid_row(ui, t!("options.adv_keep_free"), egui::DragValue::new(&mut t.keep_free_mib).range(0..=10_000_000).speed(16));
+    });
+    ui.checkbox(&mut t.unlimited_local, t!("options.adv_unlimited_local"));
+    ui.add_space(8.0);
+
+    ui.label(RichText::new(t!("options.adv_crc_section")).strong());
+    ui.checkbox(&mut t.check_sfv, t!("options.adv_check_sfv"));
+    ui.checkbox(&mut t.use_xcrc, t!("options.adv_xcrc"));
+    ui.checkbox(&mut t.readd_bad_crc, t!("options.adv_readd_bad"));
+    ui.checkbox(&mut t.one_sfv_per_folder, t!("options.adv_one_sfv"));
+    ui.add_space(8.0);
+
+    ui.label(RichText::new(t!("options.adv_folders_section")).strong());
+    ui.checkbox(&mut t.remove_empty_dirs, t!("options.adv_remove_empty"));
+    ui.checkbox(&mut t.keep_server_date, t!("options.adv_keep_date"));
+    ui.checkbox(&mut t.enter_new_folder, t!("options.adv_enter_new"));
+    ui.checkbox(&mut t.refuse_same_name_dir, t!("options.adv_same_name"));
+    ui.checkbox(&mut t.fxp_remove_zero_target, t!("options.adv_fxp_zero"));
+}
+
+/// What to do once the queues are finished.
+fn queue_end_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings) {
+    ui.label(RichText::new(t!("options.queue_end_section")).strong());
+    {
+        egui::Grid::new("opt-queue-end").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+            let l = ui.label(t!("options.queue_end"));
+            let combo = egui::ComboBox::from_id_salt("opt-queue-end-combo")
+                .selected_text(crate::app::queue_end_label(t.on_queue_end))
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    for a in QueueEnd::ALL {
+                        ui.selectable_value(&mut t.on_queue_end, a, crate::app::queue_end_label(a));
+                    }
+                });
+            combo.response.labelled_by(l.id);
+            ui.end_row();
+            let enabled = t.on_queue_end.needs_countdown();
+            let l = ui.label(t!("options.queue_end_countdown"));
+            ui.add_enabled(enabled, egui::DragValue::new(&mut t.queue_end_countdown_secs).range(5..=600)).labelled_by(l.id);
+            ui.end_row();
+        });
+        ui.label(RichText::new(t!("options.queue_end_note")).weak());
     }
 }
 

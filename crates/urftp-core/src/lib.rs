@@ -12,8 +12,10 @@
 //! [`localpath`] (paths longer than `MAX_PATH`). Tabs (FTPRush "containers") and
 //! statistics live in the interface crate.
 
+pub mod checksum;
 pub mod exists;
 pub mod import;
+pub mod itemopts;
 pub mod localpath;
 pub mod pattern;
 pub mod priority;
@@ -36,6 +38,36 @@ pub enum TransferKind {
     Upload,
     Download,
     Fxp,
+}
+
+/// Representation of a file transfer: by its name (ASCII list), binary, or ASCII.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferMode {
+    #[default]
+    Auto,
+    Binary,
+    Ascii,
+}
+
+/// Case of the target names ("File-name case conversion").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NameCase {
+    #[default]
+    Keep,
+    Lower,
+    Upper,
+}
+
+impl NameCase {
+    pub fn apply(self, name: &str) -> String {
+        match self {
+            NameCase::Keep => name.to_string(),
+            NameCase::Lower => name.to_lowercase(),
+            NameCase::Upper => name.to_uppercase(),
+        }
+    }
 }
 
 /// Supported protocols.

@@ -13,6 +13,18 @@ pub fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+/// Free space for this user on the volume of `dir` (an existing folder), in bytes.
+pub fn free_space(dir: &std::path::Path) -> std::io::Result<u64> {
+    let path = wide(&dir.to_string_lossy());
+    let mut free: u64 = 0;
+    // SAFETY: `path` is NUL-terminated UTF-16; `free` is a valid out pointer; the other
+    // totals are not asked for (null pointers are allowed).
+    let ok = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(path.as_ptr(), &mut free, std::ptr::null_mut(), std::ptr::null_mut())
+    };
+    if ok == 0 { Err(std::io::Error::last_os_error()) } else { Ok(free) }
+}
+
 /// Errors of [`SharedMem`].
 #[derive(Debug, thiserror::Error)]
 pub enum SharedMemError {

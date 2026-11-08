@@ -107,6 +107,115 @@ pub struct TransferSettings {
     pub upload_limit_kib: u64,
     pub connect_timeout_secs: u32,
     pub io_timeout_secs: u32,
+    /// Retries per direction (`None`: [`TransferSettings::retries`]).
+    pub retries_download: Option<u32>,
+    pub retries_upload: Option<u32>,
+    pub retries_fxp: Option<u32>,
+    /// Cycle retry: an item to retry goes to the bottom of the queue, the others run first.
+    pub cycle_retry: bool,
+    /// When the queue ends with failed items, they are retried this many times (0 = never).
+    pub retry_failed_rounds: u32,
+    /// Failed items wait again when a queue is started automatically (`-r`, scripts).
+    pub reset_failed_on_auto_start: bool,
+    /// Source and target of each item in the log.
+    pub log_paths: bool,
+    /// Logging out a site removes its waiting items from the queue of the tab.
+    pub clear_queue_on_logout: bool,
+    /// What to do once the queue of a tab is finished.
+    pub on_queue_end: QueueEnd,
+    /// Seconds to cancel the end-of-queue action (sleep, shut down...).
+    pub queue_end_countdown_secs: u32,
+    /// Transfer mode of the files (Auto: by the ASCII list).
+    pub mode: crate::TransferMode,
+    /// Files sent in ASCII in Auto mode (`;`-separated masks).
+    pub ascii_masks: String,
+    /// ASCII files are never resumed (their size changes with the line ends).
+    pub no_resume_ascii: bool,
+    /// Data connections in active mode (`PORT`) for every site.
+    pub force_active: bool,
+    /// Buffer of the data connections in KiB (0: the system's).
+    pub tcp_buffer_kib: u32,
+    /// KiB cut from the end of a partial file before resuming a download.
+    pub resume_rollback_kib: u32,
+    /// MiB kept free on the local disk: a download that would go below fails.
+    pub keep_free_mib: u64,
+    /// Sites on the local network (private addresses) ignore the speed limits.
+    pub unlimited_local: bool,
+    /// Case of the uploaded / downloaded names.
+    pub upload_case: crate::NameCase,
+    pub download_case: crate::NameCase,
+    /// `SITE XDUPE 3`: dupes listed by the server are skipped.
+    pub xdupe: bool,
+    /// `MODE Z` (compressed data) when the server has it.
+    pub mode_z: bool,
+    /// Files never compressed (`;`-separated masks).
+    pub mode_z_exceptions: String,
+    /// Downloaded files are checked against the SFV file of their folder.
+    pub check_sfv: bool,
+    /// Uploads and FXP are checked with `XCRC` when the server has it.
+    pub use_xcrc: bool,
+    /// A file with a bad CRC is removed and transferred again.
+    pub readd_bad_crc: bool,
+    /// A folder with several SFV files: none of them is taken.
+    pub one_sfv_per_folder: bool,
+    /// Target folders left empty by a transfer (skipped contents) are removed.
+    pub remove_empty_dirs: bool,
+    /// Downloaded files keep the date they have on the server.
+    pub keep_server_date: bool,
+    /// The panel enters a folder it has just created.
+    pub enter_new_folder: bool,
+    /// A sub-folder named like its parent (`rel/rel`, a common mistake) is not transferred.
+    pub refuse_same_name_dir: bool,
+    /// When the source of an FXP refuses, the 0-byte file left on the target is removed.
+    pub fxp_remove_zero_target: bool,
+}
+
+/// Masks of the ASCII list by default.
+pub const DEFAULT_ASCII_MASKS: &str = "*.txt;*.nfo;*.diz;*.sfv;*.md5;*.htm;*.html;*.ini;*.log;*.m3u;*.cue;*.xml;*.csv";
+/// Files not worth compressing with `MODE Z`, by default.
+pub const DEFAULT_MODE_Z_EXCEPTIONS: &str = "*.rar;*.r??;*.zip;*.7z;*.gz;*.bz2;*.xz;*.mp3;*.mp4;*.mkv;*.avi;*.jpg;*.png;*.flac";
+
+/// `;`-separated wildcard masks.
+pub fn mask_list(masks: &str) -> Vec<crate::pattern::Pattern> {
+    masks.split(';').map(str::trim).filter(|m| !m.is_empty()).map(crate::pattern::Pattern::wildcard).collect()
+}
+
+/// Action when the queue of a tab is finished ("On transfer completed").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueueEnd {
+    #[default]
+    Nothing,
+    /// Logs out the sites of the tab.
+    Disconnect,
+    /// Quits UltraRushFTP.
+    Exit,
+    /// Puts the computer to sleep.
+    Sleep,
+    Hibernate,
+    ShutDown,
+}
+
+impl QueueEnd {
+    pub const ALL: [QueueEnd; 6] =
+        [QueueEnd::Nothing, QueueEnd::Disconnect, QueueEnd::Exit, QueueEnd::Sleep, QueueEnd::Hibernate, QueueEnd::ShutDown];
+
+    /// Asks for a confirmation with a countdown (everything but logging out).
+    pub fn needs_countdown(self) -> bool {
+        !matches!(self, QueueEnd::Nothing | QueueEnd::Disconnect)
+    }
+}
+
+impl TransferSettings {
+    /// Retries of a transfer direction.
+    pub fn retries_for(&self, kind: crate::TransferKind) -> u32 {
+        match kind {
+            crate::TransferKind::Download => self.retries_download,
+            crate::TransferKind::Upload => self.retries_upload,
+            crate::TransferKind::Fxp => self.retries_fxp,
+        }
+        .unwrap_or(self.retries)
+    }
 }
 
 impl Default for TransferSettings {
@@ -120,6 +229,38 @@ impl Default for TransferSettings {
             upload_limit_kib: 0,
             connect_timeout_secs: 30,
             io_timeout_secs: 120,
+            retries_download: None,
+            retries_upload: None,
+            retries_fxp: None,
+            cycle_retry: false,
+            retry_failed_rounds: 0,
+            reset_failed_on_auto_start: false,
+            log_paths: false,
+            clear_queue_on_logout: false,
+            on_queue_end: QueueEnd::Nothing,
+            queue_end_countdown_secs: 30,
+            mode: crate::TransferMode::Auto,
+            ascii_masks: DEFAULT_ASCII_MASKS.into(),
+            no_resume_ascii: true,
+            force_active: false,
+            tcp_buffer_kib: 0,
+            resume_rollback_kib: 0,
+            keep_free_mib: 0,
+            unlimited_local: false,
+            upload_case: crate::NameCase::Keep,
+            download_case: crate::NameCase::Keep,
+            xdupe: false,
+            mode_z: false,
+            mode_z_exceptions: DEFAULT_MODE_Z_EXCEPTIONS.into(),
+            check_sfv: false,
+            use_xcrc: false,
+            readd_bad_crc: true,
+            one_sfv_per_folder: false,
+            remove_empty_dirs: false,
+            keep_server_date: false,
+            enter_new_folder: false,
+            refuse_same_name_dir: false,
+            fxp_remove_zero_target: true,
         }
     }
 }
@@ -347,6 +488,118 @@ pub struct Settings {
     /// The mIRC link window takes the FTPRush class (`TfmRush`), for the original DLL of
     /// FTPRush; FTPRush v2 then cannot start while UltraRushFTP runs.
     pub ftprush_dll_window: bool,
+    /// Schemes saved in the conditional transfer dialog.
+    pub condition_schemes: Vec<ConditionScheme>,
+}
+
+/// Settings of the conditional transfer dialog, kept as a named scheme.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConditionScheme {
+    pub name: String,
+    pub folder_include: String,
+    pub folder_exclude: String,
+    pub file_include: String,
+    pub file_exclude: String,
+    /// The masks are regular expressions.
+    pub regex: bool,
+    pub date_between: bool,
+    /// `YYYY-MM-DD`.
+    pub date_from: String,
+    pub date_to: String,
+    pub not_older: bool,
+    pub not_older_days: u32,
+    pub dates_on_folders: bool,
+    pub size_range: bool,
+    pub min_kib: u64,
+    pub max_kib: u64,
+    pub no_skiplist: bool,
+    pub sub_dirs: bool,
+    pub disconnect_after: bool,
+    pub sync: bool,
+    pub delete_missing: bool,
+    pub compare_date: bool,
+    pub compare_size: bool,
+    pub existing_only: bool,
+    pub both_sides: bool,
+}
+
+impl Default for ConditionScheme {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            folder_include: String::new(),
+            folder_exclude: String::new(),
+            file_include: String::new(),
+            file_exclude: String::new(),
+            regex: false,
+            date_between: false,
+            date_from: String::new(),
+            date_to: String::new(),
+            not_older: false,
+            not_older_days: 7,
+            dates_on_folders: false,
+            size_range: false,
+            min_kib: 0,
+            max_kib: 0,
+            no_skiplist: false,
+            sub_dirs: true,
+            disconnect_after: false,
+            sync: false,
+            delete_missing: false,
+            compare_date: true,
+            compare_size: true,
+            existing_only: false,
+            both_sides: false,
+        }
+    }
+}
+
+/// A condition that cannot be used.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ConditionError {
+    #[error("invalid regular expression: {0}")]
+    Regex(String),
+    #[error("invalid date (YYYY-MM-DD expected): {0}")]
+    Date(String),
+}
+
+impl ConditionScheme {
+    /// Options of the queued items; `now` (seconds since 1970) places "not older than".
+    pub fn to_options(&self, now: i64) -> Result<crate::itemopts::ItemOptions, ConditionError> {
+        use crate::itemopts::{Conditions, ItemOptions, SyncOptions, TransferFilter, parse_date};
+        let filter = TransferFilter::parse(&self.folder_include, &self.folder_exclude, &self.file_include, &self.file_exclude, self.regex)
+            .map_err(|e| ConditionError::Regex(e.to_string()))?;
+        let date = |text: &str| -> Result<Option<i64>, ConditionError> {
+            if text.trim().is_empty() { Ok(None) } else { parse_date(text).map(Some).ok_or_else(|| ConditionError::Date(text.to_string())) }
+        };
+        let (mut newer_than, mut older_than) = (None, None);
+        if self.date_between {
+            newer_than = date(&self.date_from)?;
+            // The end date includes its whole day.
+            older_than = date(&self.date_to)?.map(|d| d + 86_399);
+        }
+        if self.not_older {
+            let limit = now - i64::from(self.not_older_days) * 86_400;
+            newer_than = Some(newer_than.map_or(limit, |d| d.max(limit)));
+        }
+        let (min_size, max_size) =
+            if self.size_range { (Some(self.min_kib * 1024), (self.max_kib > 0).then_some(self.max_kib * 1024)) } else { (None, None) };
+        Ok(ItemOptions {
+            filter,
+            depth: (!self.sub_dirs).then_some(0),
+            no_skiplist: self.no_skiplist,
+            conditions: Conditions { newer_than, older_than, dates_on_folders: self.dates_on_folders, min_size, max_size },
+            sync: self.sync.then_some(SyncOptions {
+                delete_missing: self.delete_missing,
+                compare_date: self.compare_date,
+                compare_size: self.compare_size,
+                existing_only: self.existing_only,
+                both_sides: self.both_sides,
+            }),
+            ..ItemOptions::default()
+        })
+    }
 }
 
 impl Default for Settings {
@@ -372,6 +625,7 @@ impl Default for Settings {
             new_site: Site::default(),
             queue_at_start: QueueAtStart::Ask,
             ftprush_dll_window: false,
+            condition_schemes: Vec::new(),
         }
     }
 }
@@ -438,6 +692,36 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn condition_scheme_to_options() {
+        let day = 86_400;
+        let now = crate::itemopts::epoch_seconds(2026, 11, 8, 12, 0, 0);
+        let scheme = ConditionScheme {
+            file_exclude: "*.nfo".into(),
+            date_between: true,
+            date_from: "2026-11-01".into(),
+            date_to: "2026-11-07".into(),
+            not_older: true,
+            not_older_days: 3,
+            size_range: true,
+            min_kib: 1,
+            sub_dirs: false,
+            sync: true,
+            ..ConditionScheme::default()
+        };
+        let o = scheme.to_options(now).unwrap();
+        assert_eq!(o.conditions.newer_than, Some(now - 3 * day), "the later of the two limits");
+        assert_eq!(o.conditions.older_than, Some(crate::itemopts::epoch_seconds(2026, 11, 7, 23, 59, 59)));
+        assert_eq!((o.conditions.min_size, o.conditions.max_size, o.depth), (Some(1024), None, Some(0)));
+        assert!(o.sync.is_some_and(|s| s.compare_size && s.compare_date));
+        assert!(!o.filter.allows("a.nfo", false));
+        let bad = ConditionScheme { date_between: true, date_from: "07/11/2026".into(), ..ConditionScheme::default() };
+        assert!(matches!(bad.to_options(now), Err(ConditionError::Date(_))));
+        let bad = ConditionScheme { regex: true, file_include: "(".into(), ..ConditionScheme::default() };
+        assert!(matches!(bad.to_options(now), Err(ConditionError::Regex(_))));
+        assert!(ConditionScheme::default().to_options(now).unwrap().is_default(), "nothing asked: no options");
+    }
     use crate::TransferKind;
     use crate::skiplist::Candidate;
 

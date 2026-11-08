@@ -108,6 +108,8 @@ fn skip_text(r: &urftp_core::skiplist::SkipReason) -> String {
         SkipReason::Rule(mask) => t!("skip.reason_rule", mask = mask),
         SkipReason::ZeroByte => t!("skip.reason_zero"),
         SkipReason::AlreadyPresent => t!("skip.reason_present"),
+        SkipReason::Dupe => t!("skip.reason_dupe"),
+        SkipReason::SeveralSfv => t!("skip.reason_several_sfv"),
     }
 }
 
@@ -225,7 +227,16 @@ async fn run_queue(ctx: &Ctx, sites: Vec<SiteProfile>, src: Endpoint, dst: Endpo
             }
             EngineEvent::Failed { id, error } => eprintln!("{}", t!("cli.failed", path = name(id), error = error)),
             EngineEvent::Stopped { id } => eprintln!("{}", t!("cli.stopped", path = name(id))),
-            EngineEvent::Progress { .. } => {}
+            EngineEvent::RetryRound { round, items } => eprintln!("{}", t!("cli.retry_round", round = round, n = items)),
+            EngineEvent::CrcChecked { path, ok, .. } => {
+                if ok {
+                    println!("{}", t!("cli.crc_ok", path = path));
+                } else {
+                    eprintln!("{}", t!("cli.crc_bad", path = path));
+                }
+            }
+            EngineEvent::SyncDeleted { path, .. } => println!("{}", t!("cli.sync_deleted", path = path)),
+            EngineEvent::Progress { .. } | EngineEvent::Paused { .. } => {}
         }
     }
     let _ = runner.await;

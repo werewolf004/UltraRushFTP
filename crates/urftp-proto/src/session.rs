@@ -9,7 +9,7 @@ use urftp_core::priority::PriorityList;
 use urftp_core::queue::SiteLimits;
 use urftp_core::skiplist::SkipList;
 
-use crate::ftp::{FtpClient, FtpConfig, FtpError, LogLine, LogSink, RemoteEntry, Reply, path};
+use crate::ftp::{DataOptions, FtpClient, FtpConfig, FtpError, LogLine, LogSink, RemoteEntry, Reply, path};
 use crate::ident::IdentRegistrar;
 use crate::keepalive::SessionPolicy;
 use crate::sftp::{SftpAuth, SftpClient, SftpConfig, SftpError};
@@ -199,6 +199,9 @@ pub enum SessionError {
     /// Every renamed variant of the target already exists.
     #[error("no free name left for {0}")]
     NoFreeName(String),
+    /// The CRC of the transferred file is not the expected one.
+    #[error("bad CRC: {0}")]
+    BadCrc(String),
 }
 
 impl SessionError {
@@ -213,6 +216,7 @@ impl SessionError {
                 | SessionError::UnknownSite(_)
                 | SessionError::FxpNeedsFtp
                 | SessionError::NoFreeName(_)
+                | SessionError::BadCrc(_)
         )
     }
 
@@ -473,8 +477,16 @@ impl RemoteSession {
     where
         W: tokio::io::AsyncWrite + Unpin + ?Sized,
     {
+        self.retr_with(p, offset, out, progress, DataOptions::default()).await
+    }
+
+    /// Download in ASCII and/or compressed (FTP only; SFTP ignores the options).
+    pub async fn retr_with<W>(&mut self, p: &str, offset: u64, out: &mut W, progress: impl FnMut(u64), opts: DataOptions) -> Result<u64>
+    where
+        W: tokio::io::AsyncWrite + Unpin + ?Sized,
+    {
         Ok(match self {
-            RemoteSession::Ftp(c) => c.retr(p, offset, out, progress).await?,
+            RemoteSession::Ftp(c) => c.retr_with(p, offset, out, progress, opts).await?,
             RemoteSession::Sftp(c) => c.retr(p, offset, out, progress).await?,
         })
     }
@@ -483,9 +495,34 @@ impl RemoteSession {
     where
         R: tokio::io::AsyncRead + Unpin + ?Sized,
     {
+        self.stor_with(p, offset, input, progress, DataOptions::default()).await
+    }
+
+    /// Upload in ASCII and/or compressed (FTP only; SFTP ignores the options).
+    pub async fn stor_with<R>(&mut self, p: &str, offset: u64, input: &mut R, progress: impl FnMut(u64), opts: DataOptions) -> Result<u64>
+    where
+        R: tokio::io::AsyncRead + Unpin + ?Sized,
+    {
         Ok(match self {
-            RemoteSession::Ftp(c) => c.stor(p, offset, input, progress).await?,
+            RemoteSession::Ftp(c) => c.stor_with(p, offset, input, progress, opts).await?,
             RemoteSession::Sftp(c) => c.stor(p, offset, input, progress).await?,
+        })
+    }
+
+    /// Modification date of a remote file (`MDTM`, or the SFTP attributes); `None` when
+    /// the server does not tell it.
+    pub async fn modified(&mut self, p: &str) -> Result<Option<crate::ftp::FtpTime>> {
+        Ok(match self {
+            RemoteSession::Ftp(c) => c.mdtm(p).await.ok(),
+            RemoteSession::Sftp(c) => c.stat(p).await.ok().and_then(|e| e.modified),
+        })
+    }
+
+    /// CRC32 of a remote file computed by the server (`XCRC`, FTP only).
+    pub async fn xcrc(&mut self, p: &str) -> Result<Option<u32>> {
+        Ok(match self {
+            RemoteSession::Ftp(c) => c.xcrc(p).await?,
+            RemoteSession::Sftp(_) => None,
         })
     }
 

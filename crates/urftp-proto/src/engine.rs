@@ -7,27 +7,33 @@
 //!   contents take its place in the queue.
 //! - **Rules**: skip list, "existing file" (resume / skip / rename / overwrite / ask),
 //!   fallback without resume when `REST` is refused, retries.
-//! - **Stopping** an item: its task is aborted and its connections closed.
+//! - **Stopping** an item: its task is aborted and its connections closed. *Stop all*
+//!   ends the run; **pause** puts the running items back to waiting (they resume from
+//!   where they were) and keeps the idle connections until *resume*.
 //! - **Speed** limited for uploads and downloads.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
 use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+use tokio::sync::Notify;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::{AbortHandle, JoinSet};
 
-use urftp_core::TransferKind;
 use urftp_core::exists::{ExistsDecision, ExistsRules};
+use urftp_core::itemopts::FolderEntry;
+use urftp_core::pattern::Pattern;
 use urftp_core::priority::PriorityList;
 use urftp_core::queue::{Endpoint, ItemId, ItemState, Load, Queue, QueueItem, SiteLimits};
 use urftp_core::skiplist::{Candidate, SkipList, SkipReason};
+use urftp_core::{NameCase, TransferKind, TransferMode};
 
-use crate::ftp::{EntryKind, FxpOptions, LogSink, fxp, path as rpath};
+use crate::ftp::{DataOptions, EntryKind, FtpError, FtpTime, FxpOptions, LogSink, fxp, path as rpath};
 use crate::session::{Account, RemoteSession, SessionError, SiteProfile, SiteRules};
 use crate::throttle::{RateLimiter, Throttled};
 
@@ -36,7 +42,15 @@ use crate::throttle::{RateLimiter, Throttled};
 pub struct EngineOptions {
     /// Retries after a failure ("retry count" in v2).
     pub retries: u32,
+    /// Retries per direction, instead of `retries` when set.
+    pub retries_download: Option<u32>,
+    pub retries_upload: Option<u32>,
+    pub retries_fxp: Option<u32>,
     pub retry_delay: Duration,
+    /// Cycle retry: an item to retry goes to the bottom of the queue, without delay.
+    pub cycle_retry: bool,
+    /// Rounds of retry of the failed items once the queue is finished.
+    pub retry_failed_rounds: u32,
     /// Simultaneous transfers across all sites (`None`: only the site limits).
     pub max_total: Option<u32>,
     pub skiplist: SkipList,
@@ -49,6 +63,53 @@ pub struct EngineOptions {
     pub upload_limit: Arc<RateLimiter>,
     /// Protocol log of the transfer connections (`None`: not logged).
     pub log: Option<TransferLog>,
+    /// Modes, names, disk and speed rules of the transfers.
+    pub rules: TransferRules,
+}
+
+/// Rules applied to every file transfer.
+#[derive(Debug, Clone, Default)]
+pub struct TransferRules {
+    /// Mode of the items in `Auto` (`Auto`: by `ascii_masks`).
+    pub mode: TransferMode,
+    pub ascii_masks: Vec<Pattern>,
+    /// ASCII files start again from zero instead of resuming.
+    pub no_resume_ascii: bool,
+    /// Bytes cut from a partial file before resuming a download.
+    pub resume_rollback: u64,
+    /// Bytes kept free on the local disk.
+    pub keep_free: u64,
+    /// No speed limit for the sites of the local network.
+    pub unlimited_local: bool,
+    pub upload_case: NameCase,
+    pub download_case: NameCase,
+    /// `MODE Z` on, with the masks never compressed (`None`: off).
+    pub mode_z: Option<Vec<Pattern>>,
+    /// Downloads checked against the SFV file of their folder.
+    pub check_sfv: bool,
+    /// Uploads and FXP checked with `XCRC`.
+    pub use_xcrc: bool,
+    /// A file with a bad CRC is removed and transferred again.
+    pub readd_bad_crc: bool,
+    /// Several SFV files in a folder: none is taken.
+    pub one_sfv_per_folder: bool,
+    /// Target folders left empty are removed at the end of the run.
+    pub remove_empty_dirs: bool,
+    /// Downloaded files keep the date of the server.
+    pub keep_server_date: bool,
+    /// A sub-folder named like its parent is not transferred.
+    pub refuse_same_name_dir: bool,
+    /// The 0-byte target left by a refused FXP source is removed.
+    pub fxp_remove_zero_target: bool,
+}
+
+/// The local disk would go below the space to keep free.
+#[derive(Debug, thiserror::Error)]
+#[error("not enough disk space: {needed} bytes needed, {free} free (keep {keep} free)")]
+pub struct DiskFull {
+    pub needed: u64,
+    pub free: u64,
+    pub keep: u64,
 }
 
 /// Protocol log shared by every connection of the engine.
@@ -65,7 +126,12 @@ impl Default for EngineOptions {
     fn default() -> Self {
         Self {
             retries: 3,
+            retries_download: None,
+            retries_upload: None,
+            retries_fxp: None,
             retry_delay: Duration::from_secs(3),
+            cycle_retry: false,
+            retry_failed_rounds: 0,
             max_total: None,
             skiplist: SkipList::default(),
             priorities: PriorityList::default(),
@@ -74,6 +140,7 @@ impl Default for EngineOptions {
             download_limit: RateLimiter::new(0),
             upload_limit: RateLimiter::new(0),
             log: None,
+            rules: TransferRules::default(),
         }
     }
 }
@@ -117,6 +184,26 @@ pub enum EngineEvent {
     },
     Stopped {
         id: ItemId,
+    },
+    /// Interrupted by a pause: waiting again.
+    Paused {
+        id: ItemId,
+    },
+    /// CRC of a transferred file checked (SFV or `XCRC`); `path` is the file checked.
+    CrcChecked {
+        id: ItemId,
+        path: String,
+        ok: bool,
+    },
+    /// Synchronisation: `path` of the target, missing at the source, was removed.
+    SyncDeleted {
+        id: ItemId,
+        path: String,
+    },
+    /// The queue ended with failed items: `items` of them wait again (round `round`).
+    RetryRound {
+        round: u32,
+        items: usize,
     },
 }
 
@@ -179,6 +266,14 @@ pub struct Engine {
     events: Option<UnboundedSender<EngineEvent>>,
     load: Mutex<Load>,
     running: Mutex<HashMap<ItemId, AbortHandle>>,
+    /// Paused: nothing starts, the interrupted items wait again.
+    paused: AtomicBool,
+    /// *Stop all*: nothing starts any more and the run ends.
+    halted: AtomicBool,
+    /// Wakes a paused run (resume or stop).
+    wake: Notify,
+    /// Dupes announced by `XDUPE`: (site, folder) → names in lower case.
+    dupes: Mutex<HashMap<(String, String), HashSet<String>>>,
 }
 
 impl Engine {
@@ -193,7 +288,18 @@ impl Engine {
             .into_iter()
             .map(|p| (p.name.clone(), Arc::new(SitePool { profile: p, idle: Mutex::default(), log: log.clone() })))
             .collect();
-        Arc::new(Self { queue, sites, opts, events, load: Mutex::default(), running: Mutex::default() })
+        Arc::new(Self {
+            queue,
+            sites,
+            opts,
+            events,
+            load: Mutex::default(),
+            running: Mutex::default(),
+            paused: AtomicBool::new(false),
+            halted: AtomicBool::new(false),
+            wake: Notify::new(),
+            dupes: Mutex::default(),
+        })
     }
 
     pub fn queue(&self) -> Arc<Mutex<Queue>> {
@@ -210,10 +316,36 @@ impl Engine {
         self.running.lock().get(&id).map(AbortHandle::abort).is_some()
     }
 
+    /// Stops every running item and ends the run: the waiting items stay waiting.
     pub fn stop_all(&self) {
+        self.halted.store(true, Ordering::SeqCst);
         for h in self.running.lock().values() {
             h.abort();
         }
+        self.wake.notify_one();
+    }
+
+    /// Pauses the queue: the running transfers are interrupted and wait again (they resume
+    /// from their partial file), nothing starts until [`Engine::resume`].
+    pub fn pause(&self) {
+        self.paused.store(true, Ordering::SeqCst);
+        for h in self.running.lock().values() {
+            h.abort();
+        }
+    }
+
+    pub fn resume(&self) {
+        self.paused.store(false, Ordering::SeqCst);
+        self.wake.notify_one();
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::SeqCst)
+    }
+
+    /// May new items start?
+    fn starting(&self) -> bool {
+        !self.paused.load(Ordering::SeqCst) && !self.halted.load(Ordering::SeqCst)
     }
 
     fn emit(&self, e: EngineEvent) {
@@ -254,15 +386,27 @@ impl Engine {
         self.target_rules(item).and_then(|r| r.exists).unwrap_or(self.opts.exists)
     }
 
-    /// Retries and delay between them.
+    /// Retries and delay between them: the site setting, else the setting of the
+    /// direction, else the global one.
     fn retries(&self, item: &QueueItem) -> (u32, Duration) {
         let r = self.target_rules(item);
-        (r.and_then(|r| r.retries).unwrap_or(self.opts.retries), r.and_then(|r| r.retry_delay).unwrap_or(self.opts.retry_delay))
+        let by_kind = match item.kind() {
+            TransferKind::Download => self.opts.retries_download,
+            TransferKind::Upload => self.opts.retries_upload,
+            TransferKind::Fxp => self.opts.retries_fxp,
+        };
+        let script = item.options.as_ref().and_then(|o| o.retries);
+        let retries = script.or_else(|| r.and_then(|r| r.retries)).or(by_kind).unwrap_or(self.opts.retries);
+        (retries, r.and_then(|r| r.retry_delay).unwrap_or(self.opts.retry_delay))
     }
 
     /// Decision for an existing target; without resume on the target site, a partial file
     /// is transferred again from zero.
     fn decide(&self, item: &QueueItem, size: Option<u64>, target: Option<u64>) -> ExistsDecision {
+        // Synchronisation chose this file because it differs: it replaces the target.
+        if item.options.as_ref().is_some_and(|o| o.sync.is_some()) {
+            return ExistsDecision::Transfer { offset: 0 };
+        }
         match self.exists_rules(item).decide(size, target) {
             ExistsDecision::Transfer { offset } if offset > 0 && !self.target_rules(item).is_none_or(|r| r.resume) => {
                 ExistsDecision::Transfer { offset: 0 }
@@ -274,9 +418,10 @@ impl Engine {
     /// Processes the queue until nothing is left to start.
     pub async fn run(self: &Arc<Self>) {
         let mut tasks: JoinSet<()> = JoinSet::new();
+        let mut round = 0;
         let mut by_task: HashMap<tokio::task::Id, ItemId> = HashMap::new();
         loop {
-            loop {
+            while self.starting() {
                 // Pick and mark the item under one lock: nobody can remove it in between.
                 let item = {
                     let mut q = self.queue.lock();
@@ -298,6 +443,27 @@ impl Engine {
                 by_task.insert(handle.id(), id);
                 self.running.lock().insert(id, handle);
             }
+            if tasks.is_empty() {
+                // Paused with nothing running: wait for resume (or stop all).
+                if self.paused.load(Ordering::SeqCst) && !self.halted.load(Ordering::SeqCst) {
+                    self.wake.notified().await;
+                    continue;
+                }
+                // Finished: the failed items get another round when asked.
+                if round < self.opts.retry_failed_rounds && !self.halted.load(Ordering::SeqCst) {
+                    let items = self.queue.lock().retry_failed_only();
+                    if items > 0 {
+                        round += 1;
+                        self.emit(EngineEvent::RetryRound { round, items });
+                        tokio::time::sleep(self.opts.retry_delay).await;
+                        continue;
+                    }
+                }
+                if self.opts.rules.remove_empty_dirs && !self.halted.load(Ordering::SeqCst) {
+                    self.remove_empty_targets().await;
+                }
+                break;
+            }
             let Some(joined) = tasks.join_next_with_id().await else { break };
             let (task_id, cancelled) = match joined {
                 Ok((tid, ())) => (tid, false),
@@ -308,12 +474,49 @@ impl Engine {
             let mut q = self.queue.lock();
             if let Some(item) = q.get(id).cloned() {
                 self.load.lock().finish(&item);
-                if cancelled {
+                if cancelled && self.paused.load(Ordering::SeqCst) && !self.halted.load(Ordering::SeqCst) {
+                    // Paused: it starts again on resume, from its partial file.
+                    q.set_state(id, ItemState::Waiting);
+                    self.emit(EngineEvent::Paused { id });
+                } else if cancelled {
                     q.set_state(id, ItemState::Stopped);
                     self.emit(EngineEvent::Stopped { id });
                 } else if item.state == ItemState::Running {
                     // The task panicked: do not leave the item stuck.
                     q.set_state(id, ItemState::Failed("internal error".into()));
+                }
+            }
+        }
+    }
+
+    /// Removes the target folders of the expanded items that stayed empty (deepest first).
+    async fn remove_empty_targets(&self) {
+        let mut dirs: Vec<Endpoint> = {
+            let q = self.queue.lock();
+            q.items()
+                .iter()
+                .filter(|i| i.is_dir && i.state == ItemState::Done)
+                .map(|i| Endpoint { site: i.dst.site.clone(), path: self.cased(i, &i.dst.path) })
+                .collect()
+        };
+        dirs.sort_by_key(|d| std::cmp::Reverse(d.path.len()));
+        dirs.dedup();
+        for d in dirs {
+            match &d.site {
+                None => {
+                    let empty = std::fs::read_dir(&d.path).is_ok_and(|mut rd| rd.next().is_none());
+                    if empty {
+                        let _ = tokio::fs::remove_dir(&d.path).await;
+                    }
+                }
+                Some(site) => {
+                    let Ok(pool) = self.pool(site) else { continue };
+                    let Ok(mut s) = pool.acquire(Account::Upload).await else { continue };
+                    let r = s.list(&d.path).await;
+                    if r.as_ref().is_ok_and(Vec::is_empty) {
+                        let _ = s.rmdir(&d.path).await;
+                    }
+                    pool.release(Account::Upload, s, &r);
                 }
             }
         }
@@ -334,7 +537,12 @@ impl Engine {
                 let (retries, delay) = self.retries(&item);
                 if attempt <= retries {
                     self.emit(EngineEvent::Retrying { id, attempt, error });
-                    tokio::time::sleep(delay).await;
+                    if self.opts.cycle_retry {
+                        // The other items run first; this one waits at the bottom.
+                        self.queue.lock().move_to_bottom(id);
+                    } else {
+                        tokio::time::sleep(delay).await;
+                    }
                     if let Some(i) = self.queue.lock().get_mut(id) {
                         i.attempts = attempt;
                     }
@@ -351,7 +559,126 @@ impl Engine {
         }
     }
 
+    /// ASCII or binary, compressed or not, for this file.
+    fn data_options(&self, item: &QueueItem, name: &str) -> DataOptions {
+        let rules = &self.opts.rules;
+        let ascii = match item.mode {
+            TransferMode::Ascii => true,
+            TransferMode::Binary => false,
+            TransferMode::Auto => match rules.mode {
+                TransferMode::Ascii => true,
+                TransferMode::Binary => false,
+                TransferMode::Auto => rules.ascii_masks.iter().any(|m| m.matches(name)),
+            },
+        };
+        let compress = rules.mode_z.as_ref().is_some_and(|except| !except.iter().any(|m| m.matches(name)));
+        DataOptions { ascii, compress }
+    }
+
+    /// Target path with the case of the options on its last name.
+    fn cased(&self, item: &QueueItem, path: &str) -> String {
+        let case = if item.kind() == TransferKind::Download { self.opts.rules.download_case } else { self.opts.rules.upload_case };
+        if case == NameCase::Keep {
+            return path.to_string();
+        }
+        match &item.dst.site {
+            None => {
+                let p = Path::new(path);
+                let name = p.file_name().map(|n| case.apply(&n.to_string_lossy())).unwrap_or_default();
+                p.with_file_name(name).to_string_lossy().into_owned()
+            }
+            Some(_) => {
+                let (dir, name) = rpath::split(path);
+                rpath::join(dir.unwrap_or("/"), &case.apply(name))
+            }
+        }
+    }
+
+    /// Speed limiters of a transfer: none for a site of the local network when asked.
+    fn limiters(&self, site: Option<&str>, limit: &Arc<RateLimiter>) -> Vec<Arc<RateLimiter>> {
+        let local =
+            self.opts.rules.unlimited_local && site.and_then(|s| self.sites.get(s)).is_some_and(|p| is_local_network(&p.profile.host));
+        if local { Vec::new() } else { vec![limit.clone()] }
+    }
+
+    fn crc_result(&self, item: &QueueItem, path: &str, ok: bool) {
+        self.emit(EngineEvent::CrcChecked { id: item.id, path: path.to_string(), ok });
+    }
+
+    /// SFV check of a download: the file against the SFV of its folder, or, for an SFV
+    /// file, the files of the folder already downloaded. A bad file is removed and queued
+    /// again when asked (the item itself fails, so that its retries download it again).
+    async fn check_download(&self, item: &QueueItem, local: &Path) -> Res<()> {
+        use urftp_core::checksum::{expected_crc, file_crc32, is_sfv, parse_sfv};
+        let name = local.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let readd = self.opts.rules.readd_bad_crc;
+        if is_sfv(&name) {
+            let text = tokio::fs::read(local).await?;
+            let dir = local.parent().map(Path::to_path_buf).unwrap_or_default();
+            for (listed, crc) in parse_sfv(&String::from_utf8_lossy(&text)) {
+                let file = dir.join(&listed);
+                // Windows names: the case of the SFV may differ from the file's.
+                let Some(file) = find_case_insensitive(&dir, &listed).or_else(|| file.exists().then_some(file)) else { continue };
+                let path = file.clone();
+                let actual = tokio::task::spawn_blocking(move || file_crc32(&path)).await.map_err(std::io::Error::other)??;
+                let ok = actual == crc;
+                let shown = file.to_string_lossy().into_owned();
+                let owner = self.queue.lock().items().iter().find(|i| i.dst.path == shown).map(|i| i.id);
+                if let Some(id) = owner {
+                    self.emit(EngineEvent::CrcChecked { id, path: shown.clone(), ok });
+                    if !ok && readd {
+                        let _ = tokio::fs::remove_file(&file).await;
+                        let mut q = self.queue.lock();
+                        if let Some(i) = q.get_mut(id).filter(|i| i.state != ItemState::Running) {
+                            i.state = ItemState::Waiting;
+                            i.attempts = 0;
+                        }
+                    }
+                }
+            }
+            return Ok(());
+        }
+        let Some(crc) = expected_crc(local) else { return Ok(()) };
+        let path = local.to_path_buf();
+        let actual = tokio::task::spawn_blocking(move || file_crc32(&path)).await.map_err(std::io::Error::other)??;
+        let shown = local.to_string_lossy().into_owned();
+        self.crc_result(item, &shown, actual == crc);
+        if actual != crc && readd {
+            let _ = tokio::fs::remove_file(local).await;
+            return Err(SessionError::BadCrc(shown));
+        }
+        Ok(())
+    }
+
+    /// Is this name a dupe announced by the target folder?
+    fn is_dupe(&self, site: &str, path: &str) -> bool {
+        let (dir, name) = rpath::split(path);
+        let key = (site.to_string(), dir.unwrap_or("/").to_string());
+        self.dupes.lock().get(&key).is_some_and(|names| names.contains(&name.to_lowercase()))
+    }
+
+    /// Records the dupes listed in an upload refusal (`553- X-DUPE: name`); `true` when the
+    /// refusal is one.
+    fn record_dupes(&self, site: &str, path: &str, e: &SessionError) -> bool {
+        let SessionError::Ftp(FtpError::Unexpected { reply, .. }) = e else { return false };
+        let names: Vec<String> = reply
+            .lines
+            .iter()
+            .filter_map(|l| l.split_once("X-DUPE:").map(|(_, n)| n.trim().to_lowercase()))
+            .filter(|n| !n.is_empty())
+            .collect();
+        if names.is_empty() {
+            return false;
+        }
+        let dir = rpath::split(path).0.unwrap_or("/").to_string();
+        self.dupes.lock().entry((site.to_string(), dir)).or_default().extend(names);
+        true
+    }
+
     fn skip_reason(&self, item: &QueueItem, name: &str, is_dir: bool, size: Option<u64>) -> Option<SkipReason> {
+        if item.options.as_ref().is_some_and(|o| o.no_skiplist) {
+            return None;
+        }
         self.skiplist(item).check(&Candidate { name, full_path: &item.src.path, is_dir, size, kind: item.kind() })
     }
 
@@ -386,8 +713,9 @@ impl Engine {
         if let Some(r) = self.skip_reason(item, rpath::split(src).1, false, size) {
             return Ok(Outcome::Skipped(r));
         }
-        let mut local = PathBuf::from(&item.dst.path);
+        let mut local = PathBuf::from(self.cased(item, &item.dst.path));
         let target = tokio::fs::metadata(&local).await.ok().map(|m| m.len());
+        let data = self.data_options(item, rpath::split(src).1);
         let overwrite_if_resume_fails = self.exists_rules(item).overwrite_if_resume_fails;
         let mut offset = match self.decide(item, size, target) {
             ExistsDecision::Transfer { offset } => offset,
@@ -398,19 +726,42 @@ impl Engine {
                 0
             }
         };
+        if data.ascii && self.opts.rules.no_resume_ascii {
+            offset = 0;
+        }
+        // Roll back: the end of a partial file may be damaged.
+        offset = offset.saturating_sub(self.opts.rules.resume_rollback);
         if let Some(parent) = local.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
+        if self.opts.rules.keep_free > 0
+            && let Some(free) = urftp_core::localpath::free_space(&local)
+        {
+            let needed = size.map_or(0, |n| n.saturating_sub(target.unwrap_or(0).min(offset)));
+            if free < needed.saturating_add(self.opts.rules.keep_free) {
+                let e = DiskFull { needed, free, keep: self.opts.rules.keep_free };
+                return Err(SessionError::Local(std::io::Error::other(e)));
+            }
+        }
         loop {
             let mut file = open_local_for_write(&local, offset).await?;
-            let mut w = Throttled::new(&mut file, vec![self.opts.download_limit.clone()]);
+            let mut w = Throttled::new(&mut file, self.limiters(item.src.site.as_deref(), &self.opts.download_limit));
             let id = item.id;
-            let r = s.retr(src, offset, &mut w, |n| self.progress(id, offset + n, size)).await;
+            let r = s.retr_with(src, offset, &mut w, |n| self.progress(id, offset + n, size), data).await;
             match r {
                 Err(e) if offset > 0 && e.is_resume_refused() && overwrite_if_resume_fails => offset = 0,
                 Err(e) => return Err(e),
                 Ok(n) => {
                     file.flush().await?;
+                    drop(file);
+                    if self.opts.rules.keep_server_date
+                        && let Some(t) = s.modified(src).await?
+                    {
+                        set_local_date(&local, t.epoch(FtpTime::now_epoch()));
+                    }
+                    if self.opts.rules.check_sfv {
+                        self.check_download(item, &local).await?;
+                    }
                     return Ok(Outcome::Done(offset + n));
                 }
             }
@@ -432,10 +783,17 @@ impl Engine {
         if let Some(r) = self.skip_reason(item, &name, false, Some(size)) {
             return Ok(Outcome::Skipped(r));
         }
-        let mut dst = item.dst.path.clone();
+        let mut dst = self.cased(item, &item.dst.path);
+        let site = item.dst.site.clone().unwrap_or_default();
+        if self.is_dupe(&site, &dst) {
+            return Ok(Outcome::Skipped(SkipReason::Dupe));
+        }
         let target = s.size_if_exists(&dst).await?;
         let overwrite_if_resume_fails = self.exists_rules(item).overwrite_if_resume_fails;
+        let data = self.data_options(item, &name);
         let mut offset = match self.decide(item, Some(size), target) {
+            // ASCII: the sizes differ with the line ends, resuming would damage the file.
+            ExistsDecision::Transfer { .. } if data.ascii && self.opts.rules.no_resume_ascii => 0,
             ExistsDecision::Transfer { offset } => offset,
             ExistsDecision::Skip => return Ok(Outcome::Skipped(SkipReason::AlreadyPresent)),
             ExistsDecision::Ask => return Ok(Outcome::Ask),
@@ -452,12 +810,29 @@ impl Engine {
             if offset > 0 {
                 file.seek(std::io::SeekFrom::Start(offset)).await?;
             }
-            let mut r = Throttled::new(file, vec![self.opts.upload_limit.clone()]);
+            let mut r = Throttled::new(file, self.limiters(item.dst.site.as_deref(), &self.opts.upload_limit));
             let id = item.id;
-            match s.stor(&dst, offset, &mut r, |n| self.progress(id, offset + n, Some(size))).await {
+            match s.stor_with(&dst, offset, &mut r, |n| self.progress(id, offset + n, Some(size)), data).await {
                 Err(e) if offset > 0 && e.is_resume_refused() && overwrite_if_resume_fails => offset = 0,
+                Err(e) if self.record_dupes(&site, &dst, &e) => return Ok(Outcome::Skipped(SkipReason::Dupe)),
                 Err(e) => return Err(e),
-                Ok(n) => return Ok(Outcome::Done(offset + n)),
+                Ok(n) => {
+                    if self.opts.rules.use_xcrc
+                        && let Some(remote) = s.xcrc(&dst).await?
+                    {
+                        let path = local.to_path_buf();
+                        let mine = tokio::task::spawn_blocking(move || urftp_core::checksum::file_crc32(&path))
+                            .await
+                            .map_err(std::io::Error::other)??;
+                        self.crc_result(item, &dst, mine == remote);
+                        if mine != remote {
+                            // The bad copy goes away: the retry sends the file again from zero.
+                            let _ = s.delete_file(&dst).await;
+                            return Err(SessionError::BadCrc(dst));
+                        }
+                    }
+                    return Ok(Outcome::Done(offset + n));
+                }
             }
         }
     }
@@ -487,7 +862,11 @@ impl Engine {
         if let Some(r) = self.skip_reason(item, rpath::split(&item.src.path).1, false, size) {
             return Ok(Outcome::Skipped(r));
         }
-        let mut dst = item.dst.path.clone();
+        let mut dst = self.cased(item, &item.dst.path);
+        let site = item.dst.site.clone().unwrap_or_default();
+        if self.is_dupe(&site, &dst) {
+            return Ok(Outcome::Skipped(SkipReason::Dupe));
+        }
         let target = b.size_if_exists(&dst).await?;
         let offset = match self.decide(item, size, target) {
             ExistsDecision::Transfer { offset } => offset,
@@ -511,7 +890,26 @@ impl Engine {
         if source_active || target_passive {
             opts.mode = crate::ftp::FxpMode::DestinationPassive;
         }
-        fxp(src, &item.src.path, dstc, &dst, &opts).await?;
+        if let Err(e) = fxp(src, &item.src.path, dstc, &dst, &opts).await {
+            let e = SessionError::from(e);
+            if self.record_dupes(&site, &dst, &e) {
+                return Ok(Outcome::Skipped(SkipReason::Dupe));
+            }
+            // The target opened its file before the source refused: an empty file is left.
+            if self.opts.rules.fxp_remove_zero_target && offset == 0 && b.size_if_exists(&dst).await.ok().flatten() == Some(0) {
+                let _ = b.delete_file(&dst).await;
+            }
+            return Err(e);
+        }
+        if self.opts.rules.use_xcrc
+            && let (Some(x), Some(y)) = (a.xcrc(&item.src.path).await?, b.xcrc(&dst).await?)
+        {
+            self.crc_result(item, &dst, x == y);
+            if x != y {
+                let _ = b.delete_file(&dst).await;
+                return Err(SessionError::BadCrc(dst));
+            }
+        }
         self.progress(item.id, size.unwrap_or(0), size);
         Ok(Outcome::Done(size.unwrap_or(0)))
     }
@@ -520,68 +918,208 @@ impl Engine {
 
     async fn expand(&self, item: &QueueItem) -> Res<usize> {
         let kind = item.kind();
+        let options = item.options.as_deref().cloned().unwrap_or_default();
+        if options.refresh {
+            // A refresh lists the folder again a little later, to catch new entries.
+            tokio::time::sleep(self.opts.retry_delay).await;
+        }
         let src_name = match kind {
             TransferKind::Upload => Path::new(&item.src.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             _ => rpath::split(&item.src.path).1.to_string(),
         };
-        if let Some(r) = self.skip_reason(item, &src_name, true, None) {
+        if !options.refresh
+            && let Some(r) = self.skip_reason(item, &src_name, true, None)
+        {
             self.queue.lock().set_state(item.id, ItemState::Skipped(r));
             return Ok(0);
         }
 
-        // Contents of the source: (name, folder?, size).
-        let entries: Vec<(String, bool, Option<u64>)> = match &item.src.site {
+        // Target folder, with the case of the options.
+        let dst_dir = Endpoint { site: item.dst.site.clone(), path: self.cased(item, &item.dst.path) };
+        // Contents of the source.
+        let entries = self.list_endpoint(&item.src, Account::Download).await?;
+        let complete = options.is_complete(&entries);
+        // Synchronisation: what the target already has (nothing when it does not exist yet).
+        let target: Option<Vec<FolderEntry>> = match options.sync {
+            Some(_) => Some(self.list_endpoint(&dst_dir, Account::Upload).await.unwrap_or_default()),
+            None => None,
+        };
+        let target_entry = |name: &str| target.as_ref().and_then(|t| t.iter().find(|e| e.name == name));
+
+        let mut children = Vec::new();
+        for e in options.arrange(entries.clone()) {
+            if e.is_dir && self.opts.rules.refuse_same_name_dir && e.name.eq_ignore_ascii_case(&src_name) {
+                continue;
+            }
+            let child_src = join_endpoint(&item.src, &e.name);
+            let probe = Candidate { name: &e.name, full_path: &child_src.path, is_dir: e.is_dir, size: e.size, kind };
+            if !options.no_skiplist && self.skiplist(item).check(&probe).is_some() {
+                continue;
+            }
+            if let Some(sync) = options.sync
+                && !sync.transfers(&e, target_entry(&e.name))
+            {
+                continue;
+            }
+            let child_dst = join_endpoint(&dst_dir, &e.name);
+            // Already queued (a refresh, or the same folder queued twice): not again.
+            if self.queue.lock().contains_pending(&child_src, &child_dst) {
+                continue;
+            }
+            let prio = if e.is_dir { None } else { self.priorities(item).rank(&e.name) };
+            children.push((child_src, child_dst, e.is_dir, e.size, prio));
+        }
+        // Synchronisation: what only the target has is removed, or copied back.
+        let mut back = Vec::new();
+        if let (Some(sync), Some(target)) = (options.sync, &target) {
+            let missing: Vec<&FolderEntry> =
+                target.iter().filter(|t| options.filter.allows(&t.name, t.is_dir) && !source_has(&item.src, &t.name, &entries)).collect();
+            for t in missing {
+                if sync.delete_missing {
+                    let path = join_endpoint(&dst_dir, &t.name);
+                    self.delete_endpoint(&path, t.is_dir).await?;
+                    self.emit(EngineEvent::SyncDeleted { id: item.id, path: path.path });
+                } else if sync.both_sides {
+                    back.push((join_endpoint(&dst_dir, &t.name), join_endpoint(&item.src, &t.name), t.is_dir, t.size, None));
+                }
+            }
+        }
+        // Several SFV files in the folder: none is taken (they would disagree).
+        if self.opts.rules.one_sfv_per_folder
+            && children.iter().filter(|c| !c.2 && urftp_core::checksum::is_sfv(&endpoint_name(&c.0))).count() > 1
+        {
+            children.retain(|c| c.2 || !urftp_core::checksum::is_sfv(&endpoint_name(&c.0)));
+        }
+        let refresh = (options.repeat > 0 && !complete).then(|| options.for_refresh());
+        if children.is_empty() && refresh.is_none() && self.skiplist(item).skip_empty_dirs && !options.refresh {
+            return Ok(0);
+        }
+
+        // Target folder (its sub-folders are entered, not created again, when they exist).
+        if !options.refresh {
+            match &item.dst.site {
+                None => tokio::fs::create_dir_all(&dst_dir.path).await?,
+                Some(site) => {
+                    let pool = self.pool(site)?;
+                    let mut s = pool.acquire(Account::Upload).await?;
+                    let r = s.ensure_dir(&dst_dir.path).await;
+                    pool.release(Account::Upload, s, &r);
+                    r?;
+                }
+            }
+        }
+        let n = children.len();
+        let contents = item.options.as_ref().map(|_| Arc::new(options.for_contents()));
+        let mut q = self.queue.lock();
+        let mut ids = q.insert_children_with(item.id, children, contents.clone());
+        if !back.is_empty() {
+            let after = ids.last().copied().unwrap_or(item.id);
+            ids.extend(q.insert_children_with(after, back, contents));
+        }
+        // The refresh of the folder goes after its contents.
+        if let Some(refresh) = refresh {
+            let after = ids.last().copied().unwrap_or(item.id);
+            let refresh_item = (item.src.clone(), dst_dir.clone(), true, None, None);
+            q.insert_children_with(after, vec![refresh_item], Some(Arc::new(refresh)));
+        }
+        Ok(n)
+    }
+}
+
+impl Engine {
+    /// Entries of a folder, local or remote; dates in seconds since 1970.
+    async fn list_endpoint(&self, at: &Endpoint, account: Account) -> Res<Vec<FolderEntry>> {
+        Ok(match &at.site {
             None => {
-                let mut rd = tokio::fs::read_dir(&item.src.path).await?;
+                let mut rd = tokio::fs::read_dir(&at.path).await?;
                 let mut v = Vec::new();
                 while let Some(e) = rd.next_entry().await? {
                     let meta = e.metadata().await?;
-                    v.push((e.file_name().to_string_lossy().into_owned(), meta.is_dir(), Some(meta.len())));
+                    let modified = meta
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .and_then(|d| i64::try_from(d.as_secs()).ok());
+                    let is_dir = meta.is_dir();
+                    v.push(FolderEntry { name: e.file_name().to_string_lossy().into_owned(), is_dir, size: Some(meta.len()), modified });
                 }
                 v
             }
             Some(site) => {
                 let pool = self.pool(site)?;
-                let mut s = pool.acquire(Account::Download).await?;
-                let r = s.list(&item.src.path).await;
-                pool.release(Account::Download, s, &r);
+                let mut s = pool.acquire(account).await?;
+                let r = s.list(&at.path).await;
+                pool.release(account, s, &r);
+                let now = FtpTime::now_epoch();
                 r?.into_iter()
                     .map(|e| {
-                        let dir = e.kind == EntryKind::Dir;
-                        (e.name, dir, (!dir).then_some(e.size))
+                        let is_dir = e.kind == EntryKind::Dir;
+                        let modified = e.modified.map(|t| t.epoch(now));
+                        FolderEntry { size: (!is_dir).then_some(e.size), modified, name: e.name, is_dir }
                     })
                     .collect()
             }
-        };
+        })
+    }
 
-        let mut children = Vec::new();
-        for (name, is_dir, size) in entries {
-            let child_src = join_endpoint(&item.src, &name);
-            let probe = Candidate { name: &name, full_path: &child_src.path, is_dir, size, kind };
-            if self.skiplist(item).check(&probe).is_some() {
-                continue;
-            }
-            let prio = if is_dir { None } else { self.priorities(item).rank(&name) };
-            children.push((child_src, join_endpoint(&item.dst, &name), is_dir, size, prio));
-        }
-        if children.is_empty() && self.skiplist(item).skip_empty_dirs {
-            return Ok(0);
-        }
-
-        // Target folder.
-        match &item.dst.site {
-            None => tokio::fs::create_dir_all(&item.dst.path).await?,
+    /// Removes a file or a folder (with its contents) of the target (synchronisation).
+    async fn delete_endpoint(&self, at: &Endpoint, is_dir: bool) -> Res<()> {
+        match &at.site {
+            None if is_dir => tokio::fs::remove_dir_all(&at.path).await?,
+            None => tokio::fs::remove_file(&at.path).await?,
             Some(site) => {
                 let pool = self.pool(site)?;
                 let mut s = pool.acquire(Account::Upload).await?;
-                let r = s.ensure_dir(&item.dst.path).await;
+                let r = if is_dir { s.remove_tree(&at.path).await.map(|_| ()) } else { s.delete_file(&at.path).await };
                 pool.release(Account::Upload, s, &r);
                 r?;
             }
         }
-        let n = children.len();
-        self.queue.lock().insert_children(item.id, children);
-        Ok(n)
+        Ok(())
+    }
+}
+
+/// Does the source listing have this name? (Names of a local source are compared without
+/// case, as Windows does.)
+fn source_has(src: &Endpoint, name: &str, entries: &[FolderEntry]) -> bool {
+    if src.is_local() { entries.iter().any(|e| e.name.eq_ignore_ascii_case(name)) } else { entries.iter().any(|e| e.name == name) }
+}
+
+/// Sets the modification date of a local file (seconds since 1970); errors are ignored.
+fn set_local_date(path: &Path, epoch: i64) {
+    let Ok(secs) = u64::try_from(epoch) else { return };
+    let when = std::time::UNIX_EPOCH + Duration::from_secs(secs);
+    if let Ok(f) = std::fs::OpenOptions::new().write(true).open(path) {
+        let _ = f.set_modified(when);
+    }
+}
+
+/// Last name of an endpoint.
+fn endpoint_name(e: &Endpoint) -> String {
+    match e.site {
+        None => Path::new(&e.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+        Some(_) => rpath::split(&e.path).1.to_string(),
+    }
+}
+
+/// The file of `dir` named `name` whatever its case.
+fn find_case_insensitive(dir: &Path, name: &str) -> Option<PathBuf> {
+    std::fs::read_dir(dir).ok()?.flatten().find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(name)).map(|e| e.path())
+}
+
+/// Is this host on the local network (loopback, private or link-local address, `localhost`)?
+fn is_local_network(host: &str) -> bool {
+    use std::net::IpAddr;
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    match host.trim_matches(['[', ']']).parse::<IpAddr>() {
+        Ok(IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+        Ok(IpAddr::V6(ip)) => {
+            let first = ip.segments()[0];
+            ip.is_loopback() || (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80
+        }
+        Err(_) => false,
     }
 }
 

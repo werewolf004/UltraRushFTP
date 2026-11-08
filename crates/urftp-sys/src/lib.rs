@@ -5,6 +5,7 @@
 //! - [`dpapi`]: Windows DPAPI (`CryptProtectData` / `CryptUnprotectData`) for stored passwords;
 //! - [`win`]: UTF-16 strings and named shared memory;
 //! - [`server`]: the hidden window the mIRC DLL talks to (application side);
+//! - [`power`]: sleep, hibernate and shut down at the end of a queue;
 //! - `mirc` (feature `mirc-dll`): the `rushmirc.dll` exports called by mIRC.
 //!
 //! Rules for this crate: every `unsafe` block carries a `// SAFETY:` comment
@@ -96,6 +97,8 @@ pub fn decode_ansi(bytes: &[u8]) -> String {
 pub mod dpapi;
 #[cfg(all(windows, feature = "mirc-dll"))]
 pub mod mirc;
+#[cfg(windows)]
+pub mod power;
 #[cfg(windows)]
 pub mod server;
 #[cfg(windows)]

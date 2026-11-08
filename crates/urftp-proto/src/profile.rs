@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use urftp_core::settings::{GlobalProxy, KeepAliveSettings, Settings};
+use urftp_core::settings::{GlobalProxy, KeepAliveSettings, Settings, mask_list};
 use urftp_core::site::{CertPolicy, ListCommand, ListParser, ProxyChoice, ProxyType, Site, SiteProtocol, SiteProxy, TransferMode};
 
-use crate::engine::EngineOptions;
+use crate::engine::{EngineOptions, TransferRules};
 use crate::ftp::{FtpConfig, ListFormat, Security, TlsOptions, TlsVerify};
 use crate::keepalive::{KeepAlive, Reconnect, SessionPolicy, split_list};
 use crate::proxy::{ProxyConfig, ProxyKind, parse_exceptions};
@@ -138,7 +138,10 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
     let ftp = |security| {
         ProfileProtocol::Ftp(FtpConfig {
             security,
-            active_mode: site.transfer_mode == TransferMode::Active,
+            // "Force active mode for transfers" of the options applies to every site.
+            active_mode: site.transfer_mode == TransferMode::Active || settings.transfer.force_active,
+            xdupe: settings.transfer.xdupe,
+            tcp_buffer: (settings.transfer.tcp_buffer_kib > 0).then(|| settings.transfer.tcp_buffer_kib as usize * 1024),
             active_external_ip: net.external(),
             active_port_range: net.port_range(),
             bind_ip: net.bind(),
@@ -227,17 +230,47 @@ fn account(a: Option<&urftp_core::site::Account>) -> Option<Credentials> {
     a.filter(|a| !a.user.trim().is_empty()).map(|a| Credentials { user: a.user.trim().to_string(), password: a.password.clone() })
 }
 
+/// Transfer rules from the options.
+pub fn transfer_rules(s: &Settings) -> TransferRules {
+    let t = &s.transfer;
+    TransferRules {
+        mode: t.mode,
+        ascii_masks: mask_list(&t.ascii_masks),
+        no_resume_ascii: t.no_resume_ascii,
+        resume_rollback: u64::from(t.resume_rollback_kib) * 1024,
+        keep_free: t.keep_free_mib * 1024 * 1024,
+        unlimited_local: t.unlimited_local,
+        upload_case: t.upload_case,
+        download_case: t.download_case,
+        mode_z: t.mode_z.then(|| mask_list(&t.mode_z_exceptions)),
+        check_sfv: t.check_sfv,
+        use_xcrc: t.use_xcrc,
+        readd_bad_crc: t.readd_bad_crc,
+        one_sfv_per_folder: t.one_sfv_per_folder,
+        remove_empty_dirs: t.remove_empty_dirs,
+        keep_server_date: t.keep_server_date,
+        refuse_same_name_dir: t.refuse_same_name_dir,
+        fxp_remove_zero_target: t.fxp_remove_zero_target,
+    }
+}
+
 /// Queue engine settings from the options.
 pub fn engine_options(s: &Settings, download: &Arc<RateLimiter>, upload: &Arc<RateLimiter>) -> EngineOptions {
     EngineOptions {
         retries: s.transfer.retries,
+        retries_download: s.transfer.retries_download,
+        retries_upload: s.transfer.retries_upload,
+        retries_fxp: s.transfer.retries_fxp,
         retry_delay: Duration::from_secs(u64::from(s.transfer.retry_delay_secs)),
+        cycle_retry: s.transfer.cycle_retry,
+        retry_failed_rounds: s.transfer.retry_failed_rounds,
         max_total: (s.transfer.max_total > 0).then_some(s.transfer.max_total),
         skiplist: s.skiplist.to_skiplist(),
         priorities: s.priority_list(),
         exists: s.exists,
         download_limit: download.clone(),
         upload_limit: upload.clone(),
+        rules: transfer_rules(s),
         ..EngineOptions::default()
     }
 }

@@ -76,6 +76,13 @@ pub struct MockConfig {
     pub stat_list: bool,
     /// `LIST` lines start with two spaces (badly formatted listings).
     pub padded_list: bool,
+    /// Announces and handles `MODE Z` (zlib data channel).
+    pub mode_z: bool,
+    /// Announces and handles `XCRC`.
+    pub xcrc: bool,
+    /// `SITE XDUPE` accepted; then an upload over an existing file is refused with the
+    /// dupes of its folder (`553- X-DUPE:` lines).
+    pub xdupe: bool,
 }
 
 impl Default for MockConfig {
@@ -104,6 +111,9 @@ impl Default for MockConfig {
             latin1: false,
             stat_list: false,
             padded_list: false,
+            mode_z: false,
+            xcrc: false,
+            xdupe: false,
         }
     }
 }
@@ -345,6 +355,10 @@ struct State {
     sscn: bool,
     /// `CPSV`: TLS client role for the next channel only.
     cpsv_once: bool,
+    /// `MODE Z` on.
+    mode_z: bool,
+    /// `SITE XDUPE` asked.
+    xdupe: bool,
 }
 
 /// `LIST` lines of a folder (the names starting with `.` only when `all`).
@@ -455,6 +469,8 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
         prot_p: false,
         sscn: false,
         cpsv_once: false,
+        mode_z: false,
+        xdupe: false,
     };
     let fs = sh.fs.clone();
 
@@ -559,10 +575,35 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 if sh.cfg.pret {
                     s.push_str(" PRET\r\n");
                 }
+                if sh.cfg.mode_z {
+                    s.push_str(" MODE Z\r\n");
+                }
+                if sh.cfg.xcrc {
+                    s.push_str(" XCRC\r\n");
+                }
                 s.push_str("211 End");
                 reply(&mut c, &s).await?;
             }
             "OPTS" | "NOOP" | "TYPE" | "PRET" | "CLNT" => reply(&mut c, "200 OK").await?,
+            "MODE" if sh.cfg.mode_z && arg.eq_ignore_ascii_case("Z") => {
+                st.mode_z = true;
+                reply(&mut c, "200 MODE Z ok").await?;
+            }
+            "MODE" if arg.eq_ignore_ascii_case("S") => {
+                st.mode_z = false;
+                reply(&mut c, "200 MODE S ok").await?;
+            }
+            "SITE" if sh.cfg.xdupe && arg.eq_ignore_ascii_case("XDUPE 3") => {
+                st.xdupe = true;
+                reply(&mut c, "200 Activated extended dupe mode 3").await?;
+            }
+            "XCRC" if sh.cfg.xcrc => {
+                let crc = fs.lock().unwrap().files.get(&target).map(|b| crc32fast::hash(b));
+                match crc {
+                    Some(crc) => reply(&mut c, &format!("250 {crc:08X}")).await?,
+                    None => reply(&mut c, "550 No such file").await?,
+                }
+            }
             "SYST" => reply(&mut c, "215 UNIX Type: L8").await?,
             "PWD" => reply(&mut c, &format!("257 \"{}\" is current directory", st.cwd)).await?,
             "CWD" | "CDUP" => {
@@ -690,7 +731,15 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                         if let Some(delay) = sh.cfg.transfer_delay {
                             tokio::time::sleep(delay).await;
                         }
-                        d.write_all(&content[rest.min(content.len())..]).await?;
+                        let part = &content[rest.min(content.len())..];
+                        if st.mode_z {
+                            use std::io::Write;
+                            let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+                            z.write_all(part)?;
+                            d.write_all(&z.finish()?).await?;
+                        } else {
+                            d.write_all(part).await?;
+                        }
                         finish_send(&mut d).await?;
                         reply(&mut c, "226 Transfer complete").await?;
                     }
@@ -703,7 +752,21 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                     continue;
                 }
                 let rest = std::mem::take(&mut st.rest) as usize;
+                if st.xdupe && fs.lock().unwrap().files.contains_key(&target) {
+                    st.pending = None;
+                    let dir = parent(&target).to_string();
+                    let dupes: Vec<String> = {
+                        let g = fs.lock().unwrap();
+                        g.files.keys().filter(|f| parent(f) == dir).map(|f| f.rsplit('/').next().unwrap_or_default().to_string()).collect()
+                    };
+                    let mut text: String = dupes.iter().map(|n| format!("553- X-DUPE: {n}\r\n")).collect();
+                    text.push_str("553 File exists");
+                    reply(&mut c, &text).await?;
+                    continue;
+                }
                 reply(&mut c, "150 Opening data connection").await?;
+                // Like real servers, the file exists from the start of the upload.
+                fs.lock().unwrap().files.entry(target.clone()).or_default();
                 let mut d = match open_data(&mut st, &sh).await {
                     Ok(d) => d,
                     Err(e) => {
@@ -722,6 +785,15 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                         reply(&mut c, "426 Connection closed; transfer aborted").await?;
                         continue;
                     }
+                }
+                if st.mode_z {
+                    use std::io::Read;
+                    let mut plain = Vec::new();
+                    if flate2::read::ZlibDecoder::new(&buf[..]).read_to_end(&mut plain).is_err() {
+                        reply(&mut c, "451 Invalid compressed data").await?;
+                        continue;
+                    }
+                    buf = plain;
                 }
                 {
                     let mut g = fs.lock().unwrap();

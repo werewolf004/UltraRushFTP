@@ -9,11 +9,11 @@ Goal: every feature of FTPRush v2, modernised, with **tabbed** site containers a
 
 | Crate | Role | `unsafe` |
 |---|---|---|
-| `urftp-core` | Data model: sites and bookmarks, site book storage, options, queue, skip list, priorities, "existing file" rules, imports, DPAPI-protected secrets | forbidden |
+| `urftp-core` | Data model: sites and bookmarks, site book storage, options, queue and queue files, item options of scripts and conditional transfers (`itemopts`), skip list, priorities, "existing file" rules, SFV / MD5 checksums, imports, DPAPI-protected secrets | forbidden |
 | `urftp-proto` | FTP client, explicit/implicit FTPS, SFTP, FXP, proxies, Ident server, queue engine, speed limiting, site → connection profile conversion | forbidden |
 | `urftp-script` | Interpreter of the FTPRush Pascal Script subset (`RushApp.*`, `RS_*` flags) | forbidden |
 | `urftp-i18n` | English and French catalogs (`locales/*.json`), `t!` macro, Windows language detection | forbidden |
-| `urftp-sys` | **The only crate allowed to contain `unsafe`**: mIRC link window (`TfmUltraRush`, or `TfmRush` in compatibility mode) and shared memory (application side of the mIRC protocol), DPAPI, `rushmirc.dll` exports (`mirc-dll` feature) | allowed, audited |
+| `urftp-sys` | **The only crate allowed to contain `unsafe`**: mIRC link window (`TfmUltraRush`, or `TfmRush` in compatibility mode) and shared memory (application side of the mIRC protocol), DPAPI, sleep / hibernate / shut down (`power`), free disk space, `rushmirc.dll` exports (`mirc-dll` feature) | allowed, audited |
 | `rushmirc` | mIRC DLL (`cdylib`): re-exports `urftp_sys::mirc`, no code of its own | forbidden |
 | `urftp-cli` | `urftp` command-line tool | forbidden |
 | `urftp-gui` | `UltraRushFTP.exe` interface (egui / eframe, egui_dock) | forbidden |
@@ -52,7 +52,11 @@ Declared once in `[workspace.lints]` (root `Cargo.toml`) and inherited by every 
   its folder.
 - Transfers are run by the queue engine (`urftp-proto::engine`) on a separate multi-thread
   tokio runtime. Each tab has its own `Queue`; the engine keeps a connection pool per site
-  and publishes `EngineEvent`s (started, progress, done, skipped, failed…).
+  and publishes `EngineEvent`s (started, progress, done, skipped, failed…). It pauses
+  (running items wait again) and stops for good (*Stop all*); folders are expanded with the
+  options of their item (filters, depth, sorting, refreshes, synchronisation against the
+  target listing), and file transfers follow `TransferRules` (ASCII, `MODE Z`, names, disk
+  space, local network, `XDUPE`, SFV / `XCRC` checks).
 - Every connection (panel, engine, availability test) goes through
   `RemoteSession::open`, which tries the other addresses of the site in turn, and opens
   its TCP socket with `urftp-proto::net` (IPv6/IPv4 "happy eyeballs", RFC 8305).
