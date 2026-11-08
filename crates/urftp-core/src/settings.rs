@@ -491,6 +491,39 @@ pub struct Settings {
     /// Schemes saved in the conditional transfer dialog.
     pub condition_schemes: Vec<ConditionScheme>,
     pub browse: BrowseSettings,
+    pub interface: InterfaceSettings,
+}
+
+/// Logs, status bar and other display settings of the main window.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InterfaceSettings {
+    /// The FTP and transfer logs name the site instead of "Left" / "Right".
+    pub log_site_names: bool,
+    /// Time of each line in the logs.
+    pub log_times: bool,
+    /// Lines kept by each log of a tab.
+    pub log_lines: u32,
+    /// The logs are also written to files, one per day and per log.
+    pub log_to_disk: bool,
+    /// Folder of the log files (empty: `logs` in the data folder).
+    pub log_dir: String,
+    /// Text of the progress bar of the status bar: `%p` percent, `%b` bytes, `%s` speed,
+    /// `%e` time left, `%c` items.
+    pub status_format: String,
+}
+
+impl Default for InterfaceSettings {
+    fn default() -> Self {
+        Self {
+            log_site_names: true,
+            log_times: true,
+            log_lines: 5000,
+            log_to_disk: false,
+            log_dir: String::new(),
+            status_format: "%p · %b · %s · %e".into(),
+        }
+    }
 }
 
 /// Browsing of the panels ("Cache" and "File associations" of FTPRush v2).
@@ -664,6 +697,7 @@ impl Default for Settings {
             ftprush_dll_window: false,
             condition_schemes: Vec::new(),
             browse: BrowseSettings::default(),
+            interface: InterfaceSettings::default(),
         }
     }
 }

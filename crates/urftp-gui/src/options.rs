@@ -31,10 +31,11 @@ pub(crate) enum Page {
     NewSite,
     Advanced,
     Browse,
+    Interface,
 }
 
 impl Page {
-    pub(crate) const ALL: [Page; 13] = [
+    pub(crate) const ALL: [Page; 14] = [
         Page::General,
         Page::Transfers,
         Page::Speed,
@@ -48,6 +49,7 @@ impl Page {
         Page::NewSite,
         Page::Advanced,
         Page::Browse,
+        Page::Interface,
     ];
 
     pub(crate) fn label(self) -> String {
@@ -65,6 +67,7 @@ impl Page {
             Page::NewSite => t!("options.page_new_site"),
             Page::Advanced => t!("options.page_advanced"),
             Page::Browse => t!("options.page_browse"),
+            Page::Interface => t!("options.page_interface"),
         }
     }
 }
@@ -254,6 +257,7 @@ impl OptionsWindow {
             }
             Page::Advanced => advanced_ui(ui, &mut s.transfer),
             Page::Browse => browse_ui(ui, &mut s.browse),
+            Page::Interface => interface_ui(ui, &mut s.interface),
             Page::Ident => {
                 let id = &mut s.ident;
                 ui.checkbox(&mut id.enabled, t!("options.ident_enable"));
@@ -647,6 +651,34 @@ fn case_label(c: urftp_core::NameCase) -> String {
 }
 
 /// "Advanced transfer" page: modes, names, data connections, disk and speed, CRC.
+/// "Interface" page: logs and status bar.
+pub(crate) fn interface_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettings) {
+    ui.label(RichText::new(t!("options.ui_logs_section")).strong());
+    ui.checkbox(&mut s.log_site_names, t!("options.ui_log_site_names"));
+    ui.checkbox(&mut s.log_times, t!("options.ui_log_times"));
+    egui::Grid::new("opt-ui-logs").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        theme::grid_row(ui, t!("options.ui_log_lines"), egui::DragValue::new(&mut s.log_lines).range(100..=1_000_000).speed(50));
+    });
+    ui.checkbox(&mut s.log_to_disk, t!("options.ui_log_to_disk"));
+    ui.horizontal(|ui| {
+        let l = ui.label(t!("options.ui_log_dir"));
+        ui.add_enabled(s.log_to_disk, theme::single_line(&mut s.log_dir).hint_text(t!("options.ui_log_dir_hint")).desired_width(320.0))
+            .labelled_by(l.id);
+        if ui.add_enabled(s.log_to_disk, egui::Button::new(t!("common.browse"))).clicked()
+            && let Some(d) = rfd::FileDialog::new().pick_folder()
+        {
+            s.log_dir = d.to_string_lossy().into_owned();
+        }
+    });
+    ui.label(RichText::new(t!("options.ui_log_files_note")).weak());
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("options.ui_status_section")).strong());
+    egui::Grid::new("opt-ui-status").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        theme::grid_row(ui, t!("options.ui_status_format"), theme::single_line(&mut s.status_format).desired_width(260.0));
+    });
+    ui.label(RichText::new(t!("options.ui_status_hint")).weak());
+}
+
 /// "Browsing" page: directory cache and the programs of the remote files.
 fn browse_ui(ui: &mut egui::Ui, b: &mut urftp_core::settings::BrowseSettings) {
     ui.label(RichText::new(t!("options.browse_cache_section")).strong());

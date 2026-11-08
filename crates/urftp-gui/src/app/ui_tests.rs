@@ -1157,3 +1157,37 @@ fn space_used_and_directory_tree_of_a_local_folder() {
     let text = ui.app().tabs[0].tools.last_tree_text();
     assert!(text.ends_with("-a/\n--in.bin\n-top.bin\n"), "{text}");
 }
+
+// ---------------------------------------------------------------- block J
+
+#[test]
+fn logs_are_split_and_written_to_daily_files() {
+    let mut ui = Ui::start(Lang::En, true);
+    let dir = scratch().join("logs-test");
+    let _ = std::fs::remove_dir_all(&dir);
+    let settings = urftp_core::settings::InterfaceSettings {
+        log_to_disk: true,
+        log_dir: dir.to_string_lossy().into_owned(),
+        log_lines: 100,
+        ..Default::default()
+    };
+    super::logs::configure(&settings);
+    let tab = &mut ui.app().tabs[0];
+    tab.push_ftp(0, super::LogKind::Command, "PWD");
+    tab.push_transfer(0, super::LogKind::Status, "queue done");
+    tab.push_log(0, super::LogKind::Error, "disk full");
+    for i in 0..150 {
+        tab.push_ftp(1, super::LogKind::Reply, format!("line {i}"));
+    }
+    let channels: Vec<_> = tab.log.iter().map(|e| e.channel).collect();
+    assert!(channels.iter().filter(|c| **c == super::LogChannel::Ftp).count() <= 100, "each log keeps its own number of lines");
+    assert_eq!(channels.iter().filter(|c| **c == super::LogChannel::Transfer).count(), 1, "the other logs are not trimmed");
+    super::logs::flush().unwrap();
+    let files = names(&dir);
+    assert_eq!(files.len(), 3, "{files:?}");
+    let ftp = files.iter().find(|f| f.ends_with("-ftp.log")).unwrap();
+    let text = std::fs::read_to_string(dir.join(ftp)).unwrap();
+    assert!(text.contains("PWD") && text.contains("line 149"), "{text}");
+    super::logs::configure(&urftp_core::settings::InterfaceSettings::default());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

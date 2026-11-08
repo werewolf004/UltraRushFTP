@@ -34,11 +34,13 @@ use urftp_proto::ident::{IdentConfig, IdentServer};
 use urftp_proto::throttle::RateLimiter;
 
 mod fileops;
+mod logs;
 mod rushapp;
 #[cfg(test)]
 mod shots;
 
 use fileops::{ListState, Op, Parts};
+use logs::LogChannel;
 #[cfg(test)]
 mod ui_tests;
 
@@ -50,6 +52,8 @@ enum Pane {
     Right,
     Queue,
     Log,
+    TransferLog,
+    SystemLog,
     Script,
 }
 
@@ -486,6 +490,11 @@ struct LogEntry {
     side: usize,
     kind: LogKind,
     text: String,
+    channel: LogChannel,
+    /// Site of the panel when the line was written (empty: local).
+    site: String,
+    /// Local time, `HH:MM:SS`.
+    time: String,
 }
 
 struct TrustPrompt {
@@ -582,7 +591,8 @@ impl QueueEdit {
 fn default_dock() -> DockState<Pane> {
     let mut dock = DockState::new(vec![Pane::Left]);
     let surface = dock.main_surface_mut();
-    let [top, _] = surface.split_below(NodeIndex::root(), 0.66, vec![Pane::Queue, Pane::Log, Pane::Script]);
+    let [top, _] =
+        surface.split_below(NodeIndex::root(), 0.66, vec![Pane::Queue, Pane::Log, Pane::TransferLog, Pane::SystemLog, Pane::Script]);
     surface.split_right(top, 0.5, vec![Pane::Right]);
     dock
 }
@@ -651,11 +661,9 @@ impl Container {
         remote.unwrap_or_else(|| t!("tabs.default_title", n = pos))
     }
 
+    /// Line of the system log (see [`Container::push_ftp`], [`Container::push_transfer`]).
     fn push_log(&mut self, side: usize, kind: LogKind, text: impl Into<String>) {
-        self.log.push(LogEntry { side, kind, text: text.into() });
-        if self.log.len() > 5000 {
-            self.log.drain(..1000);
-        }
+        self.push_entry(side, LogChannel::System, kind, text);
     }
 
     /// Collects the events of the browsing connections and of the engine. Returns the bytes
@@ -758,7 +766,7 @@ impl Container {
                 }
                 EngineEvent::Started { id } if log_paths => {
                     let paths = self.item_paths(id);
-                    self.push_log(0, LogKind::Status, t!("log.item_started", paths = paths));
+                    self.push_transfer(0, LogKind::Status, t!("log.item_started", paths = paths));
                 }
                 EngineEvent::Done { id, bytes } => {
                     if self.queue.lock().get(id).map(QueueItem::kind) == Some(TransferKind::Fxp) {
@@ -777,12 +785,12 @@ impl Container {
                     }
                     if log_paths {
                         let paths = self.item_paths(id);
-                        self.push_log(0, LogKind::Status, t!("log.item_done", paths = paths));
+                        self.push_transfer(0, LogKind::Status, t!("log.item_done", paths = paths));
                     }
                 }
                 EngineEvent::Paused { id } if log_paths => {
                     let paths = self.item_paths(id);
-                    self.push_log(0, LogKind::Status, t!("log.item_paused", paths = paths));
+                    self.push_transfer(0, LogKind::Status, t!("log.item_paused", paths = paths));
                 }
                 EngineEvent::CrcChecked { path, ok, .. } => {
                     let (kind, text) = if ok {
@@ -790,15 +798,15 @@ impl Container {
                     } else {
                         (LogKind::Error, t!("log.crc_bad", path = path))
                     };
-                    self.push_log(0, kind, text);
+                    self.push_transfer(0, kind, text);
                 }
-                EngineEvent::SyncDeleted { path, .. } => self.push_log(0, LogKind::Status, t!("log.sync_deleted", path = path)),
+                EngineEvent::SyncDeleted { path, .. } => self.push_transfer(0, LogKind::Status, t!("log.sync_deleted", path = path)),
                 EngineEvent::RetryRound { round, items } => {
-                    self.push_log(0, LogKind::Status, t!("log.retry_round", round = round, n = items))
+                    self.push_transfer(0, LogKind::Status, t!("log.retry_round", round = round, n = items))
                 }
-                EngineEvent::Failed { id, error } => self.push_log(0, LogKind::Error, t!("log.item_failed", id = id, error = error)),
+                EngineEvent::Failed { id, error } => self.push_transfer(0, LogKind::Error, t!("log.item_failed", id = id, error = error)),
                 EngineEvent::Retrying { id, attempt, error } => {
-                    self.push_log(0, LogKind::Status, t!("log.item_retry", id = id, attempt = attempt, error = error))
+                    self.push_transfer(0, LogKind::Status, t!("log.item_retry", id = id, attempt = attempt, error = error))
                 }
                 _ => {}
             }
@@ -806,7 +814,7 @@ impl Container {
         if self.engine_events.is_some() && !self.engine_running.load(Ordering::SeqCst) {
             self.engine_events = None;
             self.engine = None;
-            self.push_log(0, LogKind::Status, t!("log.queue_finished"));
+            self.push_transfer(0, LogKind::Status, t!("log.queue_finished"));
             self.just_finished = true;
             self.refresh_both();
         }
@@ -830,7 +838,7 @@ impl Container {
                     LogLine::Reply(r) => (if r.code >= 400 { LogKind::Error } else { LogKind::Reply }, r.lines.join("\n")),
                     LogLine::Status(s) => (LogKind::Status, s),
                 };
-                self.push_log(side, kind, text);
+                self.push_ftp(side, kind, text);
             }
             BrowserEvent::Error(msg) => {
                 if let Side::Remote(r) = &mut self.sides[side]
@@ -838,13 +846,13 @@ impl Container {
                 {
                     r.state = RemoteState::Failed(msg.clone());
                 }
-                self.push_log(side, LogKind::Error, msg);
+                self.push_ftp(side, LogKind::Error, msg);
             }
             BrowserEvent::Trust { kind, fingerprint, reason } => {
                 if let Side::Remote(r) = &mut self.sides[side] {
                     r.state = RemoteState::Failed(t!("log.untrusted_server"));
                 }
-                self.push_log(side, LogKind::Error, t!("log.fingerprint", reason = reason, fingerprint = fingerprint));
+                self.push_ftp(side, LogKind::Error, t!("log.fingerprint", reason = reason, fingerprint = fingerprint));
                 self.trust = Some(TrustPrompt { side, kind, fingerprint, reason });
             }
             BrowserEvent::Disconnected => {
@@ -853,23 +861,23 @@ impl Container {
                     r.parts().load(Vec::new(), "");
                 }
             }
-            BrowserEvent::NotConnected => self.push_log(side, LogKind::Error, t!("browser.not_connected")),
-            BrowserEvent::RawImpossible(command) => self.push_log(side, LogKind::Error, t!("browser.raw_impossible", command = command)),
+            BrowserEvent::NotConnected => self.push_ftp(side, LogKind::Error, t!("browser.not_connected")),
+            BrowserEvent::RawImpossible(command) => self.push_ftp(side, LogKind::Error, t!("browser.raw_impossible", command = command)),
             BrowserEvent::Reconnecting { attempt, of, reason } => {
                 if let Side::Remote(r) = &mut self.sides[side] {
                     r.state = RemoteState::Connecting;
                 }
-                self.push_log(side, LogKind::Status, t!("log.reconnecting", attempt = attempt, of = of, reason = reason));
+                self.push_ftp(side, LogKind::Status, t!("log.reconnecting", attempt = attempt, of = of, reason = reason));
             }
-            BrowserEvent::Reconnected => self.push_log(side, LogKind::Status, t!("log.reconnected")),
+            BrowserEvent::Reconnected => self.push_ftp(side, LogKind::Status, t!("log.reconnected")),
             BrowserEvent::ReconnectFailed(error) => {
                 if let Side::Remote(r) = &mut self.sides[side] {
                     r.state = RemoteState::Failed(t!("log.reconnect_failed", error = &error));
                 }
-                self.push_log(side, LogKind::Error, t!("log.reconnect_failed", error = error));
+                self.push_ftp(side, LogKind::Error, t!("log.reconnect_failed", error = error));
             }
             BrowserEvent::KeepAliveStopped { logged_out } => {
-                self.push_log(side, LogKind::Status, if logged_out { t!("log.keepalive_logout") } else { t!("log.keepalive_stopped") })
+                self.push_ftp(side, LogKind::Status, if logged_out { t!("log.keepalive_logout") } else { t!("log.keepalive_stopped") })
             }
             BrowserEvent::RawReply { command, lines, ok } => {
                 let site = self.sides[side].profile().map(|p| p.name.clone()).unwrap_or_default();
@@ -943,7 +951,7 @@ impl Container {
             return 0;
         }
         if self.sides[from].profile().is_none() && self.sides[to].profile().is_none() {
-            self.push_log(from, LogKind::Error, t!("log.local_to_local"));
+            self.push_transfer(from, LogKind::Error, t!("log.local_to_local"));
             return 0;
         }
         let mut q = self.queue.lock();
@@ -967,7 +975,7 @@ impl Container {
             added += 1;
         }
         drop(q);
-        self.push_log(from, LogKind::Status, t!("log.items_queued", n = added));
+        self.push_transfer(from, LogKind::Status, t!("log.items_queued", n = added));
         added
     }
 
@@ -995,7 +1003,7 @@ impl Container {
             ctx.request_repaint();
         });
         self.engine_events = Some(rx);
-        self.push_log(0, LogKind::Status, t!("log.queue_started"));
+        self.push_transfer(0, LogKind::Status, t!("log.queue_started"));
     }
 
     // ------------------------------------------------------------------ file operations
@@ -1244,6 +1252,8 @@ pub struct UltraRushApp {
     ipc_enabled: bool,
     /// `Ctrl+V` was down on the previous frame.
     paste_down: bool,
+    /// Last time the log files were written.
+    logs_flushed: std::time::Instant,
 }
 
 /// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
@@ -1359,6 +1369,7 @@ impl UltraRushApp {
         // Before anything is displayed or listed (dates and sizes follow the language).
         options::apply_language(options.settings.language);
         set_download_dir(&options.settings.download_dir);
+        logs::configure(&options.settings.interface);
         let dl = options.settings.transfer.download_limit_kib * 1024;
         let ul = options.settings.transfer.upload_limit_kib * 1024;
         let mut app = Self {
@@ -1401,6 +1412,7 @@ impl UltraRushApp {
             power: run_power_action,
             ipc_enabled: true,
             paste_down: false,
+            logs_flushed: std::time::Instant::now(),
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -1417,7 +1429,7 @@ impl UltraRushApp {
             Ok(Some(q)) => q,
             Ok(None) => return,
             Err(e) => {
-                self.tabs[self.active].push_log(0, LogKind::Error, t!("queue.unreadable", error = e));
+                self.tabs[self.active].push_transfer(0, LogKind::Error, t!("queue.unreadable", error = e));
                 return;
             }
         };
@@ -1447,7 +1459,7 @@ impl UltraRushApp {
             *self.tabs[target].queue.lock() = tab.into_queue();
         }
         self.active = 0;
-        self.tabs[0].push_log(0, LogKind::Status, t!("queue.restored", n = n));
+        self.tabs[0].push_transfer(0, LogKind::Status, t!("queue.restored", n = n));
         self.save_queue();
     }
 
@@ -1469,7 +1481,7 @@ impl UltraRushApp {
         }
         match now.save(&SavedQueues::default_path()) {
             Ok(()) => self.queue_written = Some(now),
-            Err(e) => self.tabs[self.active].push_log(0, LogKind::Error, t!("queue.save_failed", error = e)),
+            Err(e) => self.tabs[self.active].push_transfer(0, LogKind::Error, t!("queue.save_failed", error = e)),
         }
     }
 
@@ -1559,6 +1571,7 @@ impl UltraRushApp {
     fn apply_settings(&mut self, ctx: &egui::Context) {
         let s = &self.options.settings;
         set_download_dir(&s.download_dir);
+        logs::configure(&s.interface);
         let before = urftp_i18n::language();
         options::apply_language(s.language);
         if urftp_i18n::language() != before {
@@ -1680,7 +1693,7 @@ impl UltraRushApp {
             handle.send(BrowserCmd::Cwd(dir));
         }
         let t = &mut self.tabs[tab];
-        t.push_log(side, LogKind::Status, t!("log.connecting", site = profile.name));
+        t.push_ftp(side, LogKind::Status, t!("log.connecting", site = profile.name));
         let shown = std::mem::replace(&mut t.sides[side], Side::Local(LocalView::new(PathBuf::new())));
         // The local folder stays behind the connection (switch button of the panel).
         t.parked[side] = match shown {
@@ -1800,12 +1813,12 @@ impl UltraRushApp {
     /// Runs an end-of-queue action that needed a countdown.
     fn perform_queue_end(&mut self, action: QueueEnd, ctx: &egui::Context) {
         let a = self.active;
-        self.tabs[a].push_log(0, LogKind::Status, t!("log.queue_end_run", action = queue_end_label(action)));
+        self.tabs[a].push_transfer(0, LogKind::Status, t!("log.queue_end_run", action = queue_end_label(action)));
         if action == QueueEnd::Exit {
             self.stats.save();
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         } else if let Err(e) = (self.power)(action) {
-            self.tabs[a].push_log(0, LogKind::Error, t!("log.queue_end_failed", action = queue_end_label(action), error = e));
+            self.tabs[a].push_transfer(0, LogKind::Error, t!("log.queue_end_failed", action = queue_end_label(action), error = e));
         }
     }
 
@@ -1839,7 +1852,7 @@ impl UltraRushApp {
             Some(false) => {
                 self.queue_end = None;
                 let a = self.active;
-                self.tabs[a].push_log(0, LogKind::Status, t!("log.queue_end_cancelled", action = queue_end_label(action)));
+                self.tabs[a].push_transfer(0, LogKind::Status, t!("log.queue_end_cancelled", action = queue_end_label(action)));
             }
             None => {}
         }
@@ -1853,7 +1866,7 @@ impl UltraRushApp {
             Ok(()) => (LogKind::Status, t!("log.queue_saved", n = tab.items.len(), path = path.display())),
             Err(e) => (LogKind::Error, t!("log.queue_save_failed", path = path.display(), error = e)),
         };
-        self.tabs[a].push_log(0, msg.0, msg.1);
+        self.tabs[a].push_transfer(0, msg.0, msg.1);
     }
 
     /// Adds the items of a queue file to the queue of the active tab ("Load queue").
@@ -1871,7 +1884,7 @@ impl UltraRushApp {
             }
             Err(e) => (LogKind::Error, t!("log.queue_load_failed", path = path.display(), error = e)),
         };
-        self.tabs[a].push_log(0, msg.0, msg.1);
+        self.tabs[a].push_transfer(0, msg.0, msg.1);
     }
 
     /// "Edit queue" dialog: source and target of an item, FXP inverted by a button.
@@ -2438,6 +2451,18 @@ impl UltraRushApp {
             ui.label(t!("status.active_queues", n = running));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).weak());
+                // Progress of the queue of the tab shown.
+                let tab = &self.tabs[self.active];
+                let st = tab.queue.lock().stats();
+                if tab.engine.is_some() && st.total_bytes > 0 {
+                    let (down, up) = self.stats.bandwidth();
+                    let rate = ((down + up) * 1024.0) as u64;
+                    let text = logs::status_text(&self.options.settings.interface.status_format, &st, rate);
+                    let fraction = st.done_bytes as f32 / st.total_bytes as f32;
+                    ui.separator();
+                    let bar = ui.add(egui::ProgressBar::new(fraction.clamp(0.0, 1.0)).text(text.clone()).desired_width(320.0));
+                    theme::name(&bar, text);
+                }
             });
         });
     }
@@ -2483,7 +2508,7 @@ impl UltraRushApp {
                                     && (i.src.site.as_deref() == Some(&site) || i.dst.site.as_deref() == Some(&site))
                             });
                             if n > 0 {
-                                tab.push_log(side, LogKind::Status, t!("log.queue_cleared_logout", n = n, site = site));
+                                tab.push_transfer(side, LogKind::Status, t!("log.queue_cleared_logout", n = n, site = site));
                             }
                             tab.prune_queue_selection();
                         }
@@ -2508,14 +2533,14 @@ impl UltraRushApp {
                 Action::StartQueue => match &tab.engine {
                     Some(e) if e.is_paused() => {
                         e.resume();
-                        tab.push_log(0, LogKind::Status, t!("log.queue_resumed"));
+                        tab.push_transfer(0, LogKind::Status, t!("log.queue_resumed"));
                     }
                     _ => tab.start_queue(&rt, ctx, opts.clone(), &extra),
                 },
                 Action::QueuePause => {
                     if let Some(e) = &tab.engine {
                         e.pause();
-                        tab.push_log(0, LogKind::Status, t!("log.queue_paused"));
+                        tab.push_transfer(0, LogKind::Status, t!("log.queue_paused"));
                     }
                 }
                 Action::QueueSelect(id, toggle, range) => tab.select_queue_row(id, toggle, range),
@@ -2524,7 +2549,7 @@ impl UltraRushApp {
                     let mut q = tab.queue.lock();
                     let n = ids.iter().filter(|&&id| q.invert_fxp(id)).count();
                     drop(q);
-                    tab.push_log(0, LogKind::Status, t!("log.queue_inverted", n = n));
+                    tab.push_transfer(0, LogKind::Status, t!("log.queue_inverted", n = n));
                 }
                 Action::QueueMarkFailed(ids) => {
                     tab.queue.lock().mark_failed(&ids, &t!("queue.marked_failed"));
@@ -2974,6 +2999,13 @@ impl eframe::App for UltraRushApp {
         for t in &mut self.tabs {
             t.poll_edits(&self.options.settings.browse, &self.rt, ctx);
         }
+        if self.logs_flushed.elapsed() >= Duration::from_secs(1) || ctx.input(|i| i.viewport().close_requested()) {
+            self.logs_flushed = std::time::Instant::now();
+            if let Err(e) = logs::flush() {
+                let a = self.active;
+                self.tabs[a].push_log(0, LogKind::Error, t!("log.log_file_failed", error = e));
+            }
+        }
         self.stats.record(&traffic);
         self.check_queue_end(ctx);
         self.forward_raw_replies();
@@ -3041,6 +3073,8 @@ impl eframe::App for UltraRushApp {
             let switch = [tab.switch_label(0), tab.switch_label(1)];
             let parked_remote = [0, 1].map(|s| matches!(tab.parked[s], Some(Side::Remote(_))));
             let paused = tab.paused();
+            let ui_opts = &self.options.settings.interface;
+            let log_view = (ui_opts.log_site_names, ui_opts.log_times);
             let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, tools, .. } = tab;
             let mut viewer = PaneViewer {
                 sides,
@@ -3060,6 +3094,7 @@ impl eframe::App for UltraRushApp {
                 paused,
                 list_rect: &mut tools.list_rect,
                 bookmarks: &bookmarks,
+                log_view,
             };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
@@ -3121,6 +3156,8 @@ struct PaneViewer<'a> {
     list_rect: &'a mut [Option<egui::Rect>; 2],
     /// Bookmarks of the site of each panel.
     bookmarks: &'a [Vec<String>; 2],
+    /// The logs show (site names, times).
+    log_view: (bool, bool),
 }
 
 /// A site of the site manager, for the connection menus.
@@ -3179,6 +3216,8 @@ impl TabViewer for PaneViewer<'_> {
             Pane::Right => format!("{}{}", mark(1), self.sides[1].title()).into(),
             Pane::Queue => t!("pane.queue").into(),
             Pane::Log => t!("pane.log").into(),
+            Pane::TransferLog => t!("pane.transfer_log").into(),
+            Pane::SystemLog => t!("pane.system_log").into(),
             Pane::Script => t!("pane.script").into(),
         }
     }
@@ -3192,7 +3231,9 @@ impl TabViewer for PaneViewer<'_> {
             Pane::Left => self.file_pane(ui, 0),
             Pane::Right => self.file_pane(ui, 1),
             Pane::Queue => self.queue_pane(ui),
-            Pane::Log => self.log_pane(ui),
+            Pane::Log => self.log_pane(ui, LogChannel::Ftp),
+            Pane::TransferLog => self.log_pane(ui, LogChannel::Transfer),
+            Pane::SystemLog => self.log_pane(ui, LogChannel::System),
             Pane::Script => self.script_pane(ui),
         }
     }
@@ -3729,18 +3770,18 @@ impl PaneViewer<'_> {
         });
     }
 
-    fn log_pane(&mut self, ui: &mut egui::Ui) {
+    fn log_pane(&mut self, ui: &mut egui::Ui, channel: LogChannel) {
         let p = theme::colors(ui);
-        egui::ScrollArea::vertical().auto_shrink(false).stick_to_bottom(true).show(ui, |ui| {
-            for e in self.log {
+        let (names, times) = self.log_view;
+        egui::ScrollArea::vertical().id_salt(("log", channel as u8)).auto_shrink(false).stick_to_bottom(true).show(ui, |ui| {
+            for e in self.log.iter().filter(|e| e.channel == channel) {
                 let color = match e.kind {
                     LogKind::Command => p.command,
                     LogKind::Reply => p.success,
                     LogKind::Status => p.status,
                     LogKind::Error => p.error,
                 };
-                let side = if e.side == 0 { t!("pane.left") } else { t!("pane.right") };
-                ui.label(RichText::new(format!("[{side}] {}", e.text)).monospace().color(color));
+                ui.label(RichText::new(logs::line_text(e, names, times)).monospace().color(color));
             }
         });
     }

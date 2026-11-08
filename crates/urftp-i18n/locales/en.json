@@ -106,7 +106,7 @@
 
   "pane.local": "💻 Local",
   "pane.queue": "☰ Queue",
-  "pane.log": "📜 Log",
+  "pane.log": "📜 FTP",
   "pane.script": "⌨ Script",
   "pane.left": "L",
   "pane.right": "R",
@@ -879,5 +879,20 @@
   "shortcuts.k_shift_dblclick": "Shift+double-click",
   "shortcuts.shift_dblclick": "Open the folder in both panels",
   "shortcuts.k_shift_bookmark": "Shift+bookmark",
-  "shortcuts.shift_bookmark": "Bookmark in both panels (remote and local folder)"
+  "shortcuts.shift_bookmark": "Bookmark in both panels (remote and local folder)",
+  "pane.transfer_log": "⇅ Transfers",
+  "pane.system_log": "ℹ System",
+  "log.log_file_failed": "Cannot write the log files: {error}",
+  "options.page_interface": "🖥 Interface",
+  "options.ui_logs_section": "Logs",
+  "options.ui_log_site_names": "Name the site instead of Left / Right",
+  "options.ui_log_times": "Time of each line",
+  "options.ui_log_lines": "Lines kept by each log",
+  "options.ui_log_to_disk": "Also write the logs to files",
+  "options.ui_log_dir": "Folder",
+  "options.ui_log_dir_hint": "logs in the data folder",
+  "options.ui_log_files_note": "One file per day and per log: 2026-11-08-ftp.log, -transfer.log, -system.log.",
+  "options.ui_status_section": "Status bar",
+  "options.ui_status_format": "Text of the progress bar",
+  "options.ui_status_hint": "%p percent, %b bytes done / total, %s speed, %e time left, %c items finished / total"
 }

@@ -1309,6 +1309,7 @@ impl UltraRushApp {
         let mut start = false;
         let mut queue: Vec<(Found, bool)> = Vec::new();
         let tab = &mut self.tabs[self.active];
+        let mut errors = Vec::new();
         let Some(w) = &mut tab.tools.find else { return };
         if let Some((rx, _)) = &w.running {
             let mut finished = false;
@@ -1316,7 +1317,7 @@ impl UltraRushApp {
                 match m {
                     FindMsg::Site(s) => w.status = t!("ops.find_site", site = s),
                     FindMsg::Found(f) => w.results.push(f),
-                    FindMsg::Error(e) => tab.log.push(LogEntry { side: 0, kind: LogKind::Error, text: e }),
+                    FindMsg::Error(e) => errors.push(e),
                     FindMsg::Done => finished = true,
                 }
             }
@@ -1453,6 +1454,9 @@ impl UltraRushApp {
                 stop.store(true, Ordering::SeqCst);
             }
             tab.tools.find = None;
+        }
+        for e in errors {
+            tab.push_log(0, LogKind::Error, e);
         }
         if !queue.is_empty() {
             // Into the local folder of the tab (the other panel when one is local).

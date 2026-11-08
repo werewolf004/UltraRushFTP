@@ -76,6 +76,18 @@ pub fn ctrl_v_down() -> bool {
     down(i32::from(VK_CONTROL)) && down(0x56)
 }
 
+/// Local date and time of the computer: (year, month, day, hour, minute, second).
+pub fn local_time() -> (u16, u16, u16, u16, u16, u16) {
+    use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+    // SAFETY: `GetLocalTime` only fills the structure it is given.
+    let t = unsafe {
+        let mut t = std::mem::zeroed();
+        GetLocalTime(&mut t);
+        t
+    };
+    (t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond)
+}
+
 /// Errors of [`SharedMem`].
 #[derive(Debug, thiserror::Error)]
 pub enum SharedMemError {

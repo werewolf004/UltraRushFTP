@@ -106,7 +106,7 @@
 
   "pane.local": "💻 Local",
   "pane.queue": "☰ File d'attente",
-  "pane.log": "📜 Journal",
+  "pane.log": "📜 FTP",
   "pane.script": "⌨ Script",
   "pane.left": "G",
   "pane.right": "D",
@@ -879,5 +879,20 @@
   "shortcuts.k_shift_dblclick": "Maj+double-clic",
   "shortcuts.shift_dblclick": "Ouvrir le dossier dans les deux panneaux",
   "shortcuts.k_shift_bookmark": "Maj+signet",
-  "shortcuts.shift_bookmark": "Signet dans les deux panneaux (dossier distant et local)"
+  "shortcuts.shift_bookmark": "Signet dans les deux panneaux (dossier distant et local)",
+  "pane.transfer_log": "⇅ Transferts",
+  "pane.system_log": "ℹ Système",
+  "log.log_file_failed": "Impossible d'écrire les fichiers journaux : {error}",
+  "options.page_interface": "🖥 Interface",
+  "options.ui_logs_section": "Journaux",
+  "options.ui_log_site_names": "Nommer le site au lieu de Gauche / Droite",
+  "options.ui_log_times": "Heure de chaque ligne",
+  "options.ui_log_lines": "Lignes gardées par journal",
+  "options.ui_log_to_disk": "Écrire aussi les journaux dans des fichiers",
+  "options.ui_log_dir": "Dossier",
+  "options.ui_log_dir_hint": "logs dans le dossier de données",
+  "options.ui_log_files_note": "Un fichier par jour et par journal : 2026-11-08-ftp.log, -transfer.log, -system.log.",
+  "options.ui_status_section": "Barre d'état",
+  "options.ui_status_format": "Texte de la barre de progression",
+  "options.ui_status_hint": "%p pourcentage, %b octets faits / total, %s vitesse, %e temps restant, %c éléments finis / total"
 }
