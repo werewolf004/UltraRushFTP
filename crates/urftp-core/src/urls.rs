@@ -162,12 +162,12 @@ mod tests {
 
     #[test]
     fn urls() {
-        let u = parse_url("ftp://bob:p%40ss@host.example:2121/pub/a%20b.zip").unwrap_or_else(|| unreachable!());
+        let u = parse_url("ftp://bob:p%40ss@host.example:2121/pub/a%20b.zip").unwrap();
         assert_eq!((u.user.as_str(), u.password.as_str(), u.host.as_str(), u.port), ("bob", "p@ss", "host.example", 2121));
         assert_eq!(u.path, "/pub/a b.zip");
         assert_eq!(u.name(), "a b.zip");
         assert!(!u.is_folder());
-        let s = parse_url("sftp://[::1]/home/").unwrap_or_else(|| unreachable!());
+        let s = parse_url("sftp://[::1]/home/").unwrap();
         assert_eq!((s.host.as_str(), s.port, s.is_folder(), s.name()), ("::1", 22, true, "home"));
         assert_eq!(parse_url("ftpsi://h").map(|u| (u.port, u.path)), Some((990, "/".into())));
         assert_eq!(parse_url("http://h/x"), None);
