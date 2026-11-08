@@ -33,10 +33,11 @@ pub(crate) enum Page {
     Browse,
     Interface,
     Shortcuts,
+    Notifications,
 }
 
 impl Page {
-    pub(crate) const ALL: [Page; 15] = [
+    pub(crate) const ALL: [Page; 16] = [
         Page::General,
         Page::Transfers,
         Page::Speed,
@@ -52,6 +53,7 @@ impl Page {
         Page::Browse,
         Page::Interface,
         Page::Shortcuts,
+        Page::Notifications,
     ];
 
     pub(crate) fn label(self) -> String {
@@ -71,6 +73,7 @@ impl Page {
             Page::Browse => t!("options.page_browse"),
             Page::Interface => t!("options.page_interface"),
             Page::Shortcuts => t!("options.page_shortcuts"),
+            Page::Notifications => t!("options.page_notifications"),
         }
     }
 }
@@ -261,6 +264,7 @@ impl OptionsWindow {
             Page::Advanced => advanced_ui(ui, &mut s.transfer),
             Page::Browse => browse_ui(ui, &mut s.browse),
             Page::Shortcuts => shortcuts_ui(ui, &mut s.interface),
+            Page::Notifications => notifications_ui(ui, &mut s.notify),
             Page::Interface => {
                 interface_ui(ui, &mut s.interface);
                 ui.add_space(8.0);
@@ -711,6 +715,89 @@ pub(crate) fn interface_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::Inte
     ui.checkbox(&mut s.confirm_exit, t!("options.ui_confirm_exit"));
     ui.checkbox(&mut s.confirm_close_tab, t!("options.ui_confirm_close_tab"));
     ui.checkbox(&mut s.confirm_queue_remove, t!("options.ui_confirm_queue"));
+}
+
+/// "Notifications" page: tray icon, events, monitored folders.
+fn notifications_ui(ui: &mut egui::Ui, n: &mut urftp_core::settings::NotifySettings) {
+    use urftp_core::settings::{EventSetting, FolderMonitor, NotifyEvent};
+    ui.label(RichText::new(t!("options.nt_tray_section")).strong());
+    ui.checkbox(&mut n.tray_always, t!("options.nt_tray_always"));
+    ui.checkbox(&mut n.minimize_to_tray, t!("options.nt_minimize"));
+    ui.checkbox(&mut n.flash_on_queue_end, t!("options.nt_flash"));
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("options.nt_events_section")).strong());
+    for e in NotifyEvent::ALL {
+        if !n.events.iter().any(|s| s.event == e) {
+            n.events.push(EventSetting::default_for(e));
+        }
+    }
+    egui::Grid::new("opt-events").num_columns(5).spacing([10.0, 6.0]).striped(true).show(ui, |ui| {
+        ui.label("");
+        ui.label(RichText::new(t!("options.nt_sound")).weak());
+        ui.label("");
+        ui.label("");
+        ui.label(RichText::new(t!("options.nt_popup")).weak());
+        ui.end_row();
+        for s in &mut n.events {
+            let name = match s.event {
+                NotifyEvent::Connected => t!("notify.ev_connected"),
+                NotifyEvent::Disconnected => t!("notify.ev_disconnected"),
+                NotifyEvent::QueueFinished => t!("notify.ev_queue_finished"),
+                NotifyEvent::TransferFailed => t!("notify.ev_transfer_failed"),
+                NotifyEvent::NewItems => t!("notify.ev_new_items"),
+            };
+            ui.label(&name);
+            let r = ui.add(theme::single_line(&mut s.sound).hint_text(t!("options.nt_sound_hint")).desired_width(220.0));
+            theme::name(&r, format!("{name}: {}", t!("options.nt_sound")));
+            if ui.button(t!("common.browse")).clicked()
+                && let Some(p) = rfd::FileDialog::new().add_filter("WAV", &["wav"]).pick_file()
+            {
+                s.sound = p.to_string_lossy().into_owned();
+            }
+            if theme::icon_button(ui, "▶", format!("{name}: {}", t!("options.nt_try"))).clicked() {
+                match s.sound.trim() {
+                    "" => {}
+                    "system" => urftp_sys::tray::play_sound(None),
+                    f => urftp_sys::tray::play_sound(Some(std::path::Path::new(f))),
+                }
+            }
+            let r = ui.checkbox(&mut s.popup, "");
+            theme::name(&r, format!("{name}: {}", t!("options.nt_popup")));
+            ui.end_row();
+        }
+    });
+    ui.label(RichText::new(t!("options.nt_events_note")).weak());
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("options.nt_monitor_section")).strong());
+    let mut remove = None;
+    egui::Grid::new("opt-monitors").num_columns(5).spacing([10.0, 6.0]).show(ui, |ui| {
+        ui.label("");
+        ui.label(RichText::new(t!("options.nt_site")).weak());
+        ui.label(RichText::new(t!("options.nt_folder")).weak());
+        ui.label(RichText::new(t!("options.nt_every")).weak());
+        ui.end_row();
+        for (i, m) in n.monitors.iter_mut().enumerate() {
+            let r = ui.checkbox(&mut m.enabled, "");
+            theme::name(&r, format!("{} {}", t!("options.nt_monitor_on"), i + 1));
+            let r = ui.add(theme::single_line(&mut m.site).desired_width(150.0));
+            theme::name(&r, format!("{} {}", t!("options.nt_site"), i + 1));
+            let r = ui.add(theme::single_line(&mut m.path).desired_width(200.0));
+            theme::name(&r, format!("{} {}", t!("options.nt_folder"), i + 1));
+            let r = ui.add(egui::DragValue::new(&mut m.interval_mins).range(1..=1440).suffix(" min"));
+            theme::name(&r, format!("{} {}", t!("options.nt_every"), i + 1));
+            if theme::icon_button(ui, "✕", t!("common.remove")).clicked() {
+                remove = Some(i);
+            }
+            ui.end_row();
+        }
+    });
+    if let Some(i) = remove {
+        n.monitors.remove(i);
+    }
+    if ui.button(t!("options.browse_add")).clicked() {
+        n.monitors.push(FolderMonitor::default());
+    }
+    ui.label(RichText::new(t!("options.nt_monitor_note")).weak());
 }
 
 /// Shortcut manager: the keys of each command, the conflicts.

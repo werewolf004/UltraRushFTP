@@ -496,6 +496,103 @@ pub struct Settings {
     pub site_commands: Vec<SiteCommand>,
     /// Sites of the site manager last connected, most recent first.
     pub recent_sites: Vec<u64>,
+    pub notify: NotifySettings,
+}
+
+/// Notification area icon, event notifications and folder monitoring.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotifySettings {
+    /// The icon is always in the notification area.
+    pub tray_always: bool,
+    /// Minimizing the window hides it in the notification area.
+    pub minimize_to_tray: bool,
+    /// The taskbar button flashes when a queue ends while the window is in the background.
+    pub flash_on_queue_end: bool,
+    /// What each event does (see [`NotifyEvent`]).
+    pub events: Vec<EventSetting>,
+    /// Remote folders checked for new items.
+    pub monitors: Vec<FolderMonitor>,
+}
+
+impl Default for NotifySettings {
+    fn default() -> Self {
+        Self {
+            tray_always: false,
+            minimize_to_tray: false,
+            flash_on_queue_end: true,
+            events: NotifyEvent::ALL.iter().map(|&e| EventSetting::default_for(e)).collect(),
+            monitors: Vec::new(),
+        }
+    }
+}
+
+impl NotifySettings {
+    /// Setting of an event (the default one when missing).
+    pub fn event(&self, e: NotifyEvent) -> EventSetting {
+        self.events.iter().find(|s| s.event == e).cloned().unwrap_or_else(|| EventSetting::default_for(e))
+    }
+}
+
+/// Events that can play a sound or show a pop-up message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotifyEvent {
+    Connected,
+    Disconnected,
+    QueueFinished,
+    TransferFailed,
+    /// A monitored folder has new items.
+    NewItems,
+}
+
+impl NotifyEvent {
+    pub const ALL: [NotifyEvent; 5] =
+        [NotifyEvent::Connected, NotifyEvent::Disconnected, NotifyEvent::QueueFinished, NotifyEvent::TransferFailed, NotifyEvent::NewItems];
+}
+
+/// Sound and pop-up of an event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventSetting {
+    pub event: NotifyEvent,
+    /// Empty: no sound; `system`: the Windows notification sound; otherwise a `.wav` file.
+    pub sound: String,
+    pub popup: bool,
+}
+
+impl Default for EventSetting {
+    fn default() -> Self {
+        Self::default_for(NotifyEvent::QueueFinished)
+    }
+}
+
+impl EventSetting {
+    pub fn default_for(event: NotifyEvent) -> Self {
+        let (sound, popup) = match event {
+            NotifyEvent::Connected | NotifyEvent::Disconnected => ("", false),
+            NotifyEvent::QueueFinished | NotifyEvent::NewItems => ("system", true),
+            NotifyEvent::TransferFailed => ("", true),
+        };
+        Self { event, sound: sound.into(), popup }
+    }
+}
+
+/// A remote folder listed every `interval_mins` minutes; new names are notified.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FolderMonitor {
+    pub enabled: bool,
+    /// Name of a site of the site manager.
+    pub site: String,
+    pub path: String,
+    pub interval_mins: u32,
+}
+
+impl Default for FolderMonitor {
+    fn default() -> Self {
+        Self { enabled: true, site: String::new(), path: "/".into(), interval_mins: 10 }
+    }
 }
 
 /// A predefined command: one FTP command per line; `%1` is a parameter typed before
@@ -765,6 +862,7 @@ impl Default for Settings {
             interface: InterfaceSettings::default(),
             site_commands: default_site_commands(),
             recent_sites: Vec::new(),
+            notify: NotifySettings::default(),
         }
     }
 }

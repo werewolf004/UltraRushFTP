@@ -1268,3 +1268,16 @@ fn chosen_keys_replace_the_defaults_and_busy_tabs_ask_before_closing() {
     ui.run();
     assert!(ui.app().tabs[0].queue.lock().get(ids[0]).is_none());
 }
+
+#[test]
+fn events_show_a_pop_up_and_go_to_the_system_log() {
+    let mut ui = Ui::start(Lang::En, true);
+    use urftp_core::settings::NotifyEvent;
+    ui.app().tabs[0].events.push((NotifyEvent::QueueFinished, "3 item(s) done".into()));
+    ui.app().tabs[0].events.push((NotifyEvent::Connected, "Demo".into()));
+    ui.run();
+    assert!(ui.has_label("3 item(s) done"), "pop-up in the window (no tray icon in the tests)");
+    assert!(!ui.has_label("Demo"), "no pop-up for a connection by default");
+    let log: Vec<String> = ui.app().tabs[0].log.iter().filter(|e| e.channel == super::LogChannel::System).map(|e| e.text.clone()).collect();
+    assert!(log.iter().any(|l| l.ends_with("3 item(s) done")) && log.iter().any(|l| l.ends_with("Demo")), "{log:?}");
+}

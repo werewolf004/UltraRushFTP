@@ -38,6 +38,7 @@ mod favorites;
 mod fileops;
 pub(crate) mod input;
 mod logs;
+mod notify;
 mod raw;
 mod rushapp;
 #[cfg(test)]
@@ -552,6 +553,8 @@ struct Container {
     background: Vec<std::sync::mpsc::Receiver<(LogKind, String)>>,
     /// Profiles of the addresses queued by "Manual download" (not in the site manager).
     adhoc: Vec<SiteProfile>,
+    /// Events of the frame for the notifications (connected, queue finished...).
+    events: Vec<(urftp_core::settings::NotifyEvent, String)>,
     /// Dialogs, windows and background work of the file operations.
     tools: fileops::Tools,
 }
@@ -655,6 +658,7 @@ impl Container {
             condition: None,
             background: Vec::new(),
             adhoc: Vec::new(),
+            events: Vec::new(),
             tools: fileops::Tools::default(),
         }
     }
@@ -811,7 +815,11 @@ impl Container {
                 EngineEvent::RetryRound { round, items } => {
                     self.push_transfer(0, LogKind::Status, t!("log.retry_round", round = round, n = items))
                 }
-                EngineEvent::Failed { id, error } => self.push_transfer(0, LogKind::Error, t!("log.item_failed", id = id, error = error)),
+                EngineEvent::Failed { id, error } => {
+                    let paths = self.item_paths(id);
+                    self.events.push((urftp_core::settings::NotifyEvent::TransferFailed, format!("{paths}: {error}")));
+                    self.push_transfer(0, LogKind::Error, t!("log.item_failed", id = id, error = error));
+                }
                 EngineEvent::Retrying { id, attempt, error } => {
                     self.push_transfer(0, LogKind::Status, t!("log.item_retry", id = id, attempt = attempt, error = error))
                 }
@@ -822,6 +830,9 @@ impl Container {
             self.engine_events = None;
             self.engine = None;
             self.push_transfer(0, LogKind::Status, t!("log.queue_finished"));
+            let st = self.queue.lock().stats();
+            self.events
+                .push((urftp_core::settings::NotifyEvent::QueueFinished, t!("notify.queue_text", done = st.done, failed = st.failed)));
             self.just_finished = true;
             self.refresh_both();
         }
@@ -836,6 +847,9 @@ impl Container {
                     r.path_edit.clone_from(&dir);
                     r.parts().load(entries.iter().map(FileRow::from_remote).collect(), &dir);
                     r.dir = dir;
+                    if r.state != RemoteState::Connected {
+                        self.events.push((urftp_core::settings::NotifyEvent::Connected, r.profile.name.clone()));
+                    }
                     r.state = RemoteState::Connected;
                 }
             }
@@ -864,6 +878,9 @@ impl Container {
             }
             BrowserEvent::Disconnected => {
                 if let Side::Remote(r) = &mut self.sides[side] {
+                    if r.state == RemoteState::Connected {
+                        self.events.push((urftp_core::settings::NotifyEvent::Disconnected, r.profile.name.clone()));
+                    }
                     r.state = RemoteState::Disconnected;
                     r.parts().load(Vec::new(), "");
                 }
@@ -1272,6 +1289,7 @@ pub struct UltraRushApp {
     exit_confirmed: bool,
     /// The next queue removals were confirmed.
     queue_remove_confirmed: bool,
+    notifier: notify::Notifier,
 }
 
 /// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
@@ -1430,6 +1448,7 @@ impl UltraRushApp {
             confirm: None,
             exit_confirmed: false,
             queue_remove_confirmed: false,
+            notifier: notify::Notifier::default(),
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -3024,6 +3043,7 @@ impl eframe::App for UltraRushApp {
         for t in &mut self.tabs {
             t.poll_edits(&self.options.settings.browse, &self.rt, ctx);
         }
+        self.notify_tick(ctx);
         if self.logs_flushed.elapsed() >= Duration::from_secs(1) || ctx.input(|i| i.viewport().close_requested()) {
             self.logs_flushed = std::time::Instant::now();
             if let Err(e) = logs::flush() {
@@ -3058,6 +3078,7 @@ impl eframe::App for UltraRushApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.check_exit(&ctx);
+        self.notify_ui(&ctx);
         // Starts Ident on the first frame, then whenever its settings change.
         if self.ident_applied.is_none() {
             self.sync_ident();
