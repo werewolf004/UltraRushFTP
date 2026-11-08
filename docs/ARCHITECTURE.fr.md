@@ -10,11 +10,11 @@ pour les types de connexion.
 
 | Crate | Rôle | `unsafe` |
 |---|---|---|
-| `urftp-core` | Modèle : sites et signets, enregistrement du carnet, options, file d'attente et fichiers de file, options d'élément des scripts et du transfert conditionnel (`itemopts`), liste d'exclusion, priorités, règles « fichier existant », sommes SFV / MD5, imports, secrets protégés par DPAPI | interdit |
+| `urftp-core` | Modèle : sites et signets, enregistrement du carnet, options, file d'attente et fichiers de file, options d'élément des scripts et du transfert conditionnel (`itemopts`), liste d'exclusion, priorités, règles « fichier existant », sommes SFV / MD5, aides des panneaux (`browsing` : filtre rapide, masques, renommage de plusieurs éléments, comparaison de dossiers, parcours locaux, espace utilisé, arborescence, modes CHMOD, dates), imports, secrets protégés par DPAPI | interdit |
 | `urftp-proto` | Client FTP, FTPS explicite/implicite, SFTP, FXP, proxys, serveur Ident, moteur de file, limitation de débit, conversion fiche de site → profil de connexion | interdit |
 | `urftp-script` | Interpréteur du sous-ensemble Pascal Script de FTPRush (`RushApp.*`, drapeaux `RS_*`) | interdit |
 | `urftp-i18n` | Catalogues anglais et français (`locales/*.json`), macro `t!`, détection de la langue de Windows | interdit |
-| `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : fenêtre de la liaison mIRC (`TfmUltraRush`, ou `TfmRush` en mode compatibilité) et mémoire partagée (côté application du protocole mIRC), DPAPI, veille / veille prolongée / arrêt (`power`), espace disque libre, exports de `rushmirc.dll` (fonctionnalité `mirc-dll`) | autorisé, audité |
+| `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : fenêtre de la liaison mIRC (`TfmUltraRush`, ou `TfmRush` en mode compatibilité) et mémoire partagée (côté application du protocole mIRC), DPAPI, veille / veille prolongée / arrêt (`power`), espace disque libre, fichiers copiés dans l'Explorateur (`CF_HDROP`) et état de la touche `Ctrl+V`, exports de `rushmirc.dll` (fonctionnalité `mirc-dll`) | autorisé, audité |
 | `rushmirc` | DLL mIRC (`cdylib`) : réexporte `urftp_sys::mirc`, sans code propre | interdit |
 | `urftp-cli` | Outil en ligne de commande `urftp` | interdit |
 | `urftp-gui` | Interface `UltraRushFTP.exe` (egui / eframe, egui_dock) | interdit |
@@ -103,6 +103,22 @@ les crates :
   contournement des adresses locales et par masques d'hôtes.
 - **Ident** (RFC 1413) : serveur sur TCP 113 (modifiable), nom global (`URUSHFTP` par
   défaut), système « UNIX ».
+
+### Connexion de navigation et outils de dossier
+
+- Chaque panneau distant a une connexion de navigation (`urftp_proto::browse`) : un acteur
+  qui exécute les commandes du panneau l'une après l'autre (lister, changer de dossier,
+  renommer, `SITE CHMOD`, `MFMT` / `SITE UTIME`, listing brut), maintient la connexion et se
+  reconnecte. Après une série d'opérations, il revient dans le dossier du panneau, car le
+  parcours du contenu d'un dossier change le dossier courant FTP.
+- Le cache des dossiers vit dans cet acteur (par connexion, par dossier) ; une
+  actualisation relit toujours le serveur, et l'interface lui fait oublier les dossiers
+  dans lesquels un transfert a écrit.
+- Les parcours plus longs (espace utilisé, arborescence, recherche sur les sites) et les
+  fichiers ouverts avec un autre programme ont leurs propres connexions
+  (`RemoteSession::walk`, `retr`, `stor`) : le panneau reste libre ; leurs résultats
+  reviennent à l'interface par des canaux. Les parcours locaux tournent sur un fil
+  (`urftp_core::browsing::walk_local`).
 
 ### Protocole mIRC (`rushmirc.dll`)
 

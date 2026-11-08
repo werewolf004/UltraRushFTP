@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -95,14 +95,14 @@ planned work is grouped below into blocks, each ending with a release.
   remove the 0-byte target when an FXP source refuses (H6).
 
 ### I — Browsing and file operations
-- ⬜ Quick filter (`Ctrl+F`), marks, select by mask, copy several names, rename several
-  files.
-- ⬜ CHMOD, move to, modify date, view raw listing, attribute / owner / group columns.
-- ⬜ Compare folders (name, size, partial, hide same), find files on sites, used space,
-  directory tree export.
-- ⬜ Directory cache; view and edit remote files with external programs.
-- ⬜ Drag from Explorer, paste local files, both-sides navigation (`Shift`+bookmark,
-  `Shift`+double-click).
+- ✅ Quick filter (`Ctrl+F`), marks, select by mask, copy several names, rename several
+  files (I1).
+- ✅ CHMOD, move to, modify date, view raw listing, attribute / owner / group columns (I2).
+- ✅ Compare folders (name, size, partial, hide same), find files on sites, used space,
+  directory tree export (I3).
+- ✅ Directory cache; view and edit remote files with external programs (I4).
+- ✅ Drag from Explorer, paste local files, both-sides navigation (`Shift`+bookmark,
+  `Shift`+double-click) (I5).
 
 ### J — Interface
 - ⬜ Separate FTP / transfer / system logs, log to disk, site names in the log; status bar

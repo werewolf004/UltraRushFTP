@@ -25,6 +25,57 @@ pub fn free_space(dir: &std::path::Path) -> std::io::Result<u64> {
     if ok == 0 { Err(std::io::Error::last_os_error()) } else { Ok(free) }
 }
 
+/// Files and folders copied in Explorer (`CF_HDROP` on the clipboard); empty when the
+/// clipboard holds something else or cannot be opened.
+pub fn clipboard_files() -> Vec<std::path::PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard};
+    use windows_sys::Win32::System::Ole::CF_HDROP;
+    use windows_sys::Win32::UI::Shell::{DragQueryFileW, HDROP};
+
+    let format = u32::from(CF_HDROP);
+    // SAFETY: plain query of the clipboard formats, no pointer involved.
+    if unsafe { IsClipboardFormatAvailable(format) } == 0 {
+        return Vec::new();
+    }
+    // SAFETY: a null owner window is allowed; the clipboard is closed below.
+    if unsafe { OpenClipboard(std::ptr::null_mut()) } == 0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    // SAFETY: the clipboard is open; the handle stays owned by the clipboard and is only
+    // read until `CloseClipboard`.
+    let handle = unsafe { GetClipboardData(format) };
+    if !handle.is_null() {
+        let drop: HDROP = handle;
+        // SAFETY: index 0xFFFFFFFF with a null buffer returns the number of files.
+        let count = unsafe { DragQueryFileW(drop, u32::MAX, std::ptr::null_mut(), 0) };
+        for i in 0..count {
+            // SAFETY: a null buffer returns the length of name `i` (without the NUL).
+            let len = unsafe { DragQueryFileW(drop, i, std::ptr::null_mut(), 0) };
+            let mut buf = vec![0u16; len as usize + 1];
+            let cap = u32::try_from(buf.len()).unwrap_or(u32::MAX);
+            // SAFETY: `buf` has room for `cap` UTF-16 units, the NUL included.
+            let got = unsafe { DragQueryFileW(drop, i, buf.as_mut_ptr(), cap) } as usize;
+            if got > 0 {
+                out.push(std::path::PathBuf::from(std::ffi::OsString::from_wide(&buf[..got.min(buf.len())])));
+            }
+        }
+    }
+    // SAFETY: the clipboard was opened above by this thread.
+    unsafe { CloseClipboard() };
+    out
+}
+
+/// `Ctrl+V` is held down now (the window framework does not report it when the
+/// clipboard holds files rather than text).
+pub fn ctrl_v_down() -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_CONTROL};
+    // SAFETY: plain query of the keyboard state.
+    let down = |vk: i32| unsafe { GetAsyncKeyState(vk) } < 0;
+    down(i32::from(VK_CONTROL)) && down(0x56)
+}
+
 /// Errors of [`SharedMem`].
 #[derive(Debug, thiserror::Error)]
 pub enum SharedMemError {

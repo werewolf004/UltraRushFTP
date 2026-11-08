@@ -9,6 +9,41 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Browsing and file operations (block I).
+
+### Added
+
+- **Panels**: quick filter (`Ctrl+F`: words, `-word`, masks, regular expression; `F5`
+  shows everything again), marks (`Ctrl+M`, bold and underlined; unmark all, select the
+  marked, copy their paths), select / unselect by mask (`+` / `-`), copy the names
+  (`Ctrl+Shift+C`), *Rename several…* (model with `%f` `%n` `%e` `%c`, replace with text
+  or a regular expression, case, preview), *Move to…*; permissions / owner / group columns
+  in the remote panels, Windows attributes in the local ones; new **Edit** and **FTP**
+  menus.
+- **Remote operations**: *Permissions (CHMOD)* (`SITE CHMOD`, `SETSTAT`, contents of the
+  folders too), *Change the date* (`MFMT`, otherwise `SITE UTIME`; `SETSTAT`), *View the
+  raw listing*.
+- **Folder tools**: *Compare the panels* (name or name and size, extensions ignored, hide
+  the same items, select the others), *Space used*, *Export the directory tree* (indent,
+  sizes, folders only), *Find files at sites* (words and masks, exclusions, kind, dates,
+  sizes, depth; results to the queue or copied as `ftp://` addresses). Walks and
+  searches use a connection of their own; local folders are walked too.
+- **Directory cache** (Options › Browsing, or per site): folders visited again are shown
+  from memory, forgotten when a transfer writes into them; *Clear the cache of this site /
+  every cache*.
+- **View and edit remote files** (`F3` / `F4`, double-click to view): programs chosen by
+  masks in Options › Browsing (Notepad otherwise, never the program of the file type);
+  an edited file is sent back each time it is saved; *Files being edited* window.
+- **Explorer**: files dragged onto a remote panel or pasted with `Ctrl+V` are sent into its
+  folder.
+- **Both panels**: `Shift`+double-click opens a folder on both sides; the new *Bookmarks*
+  menu of a remote panel goes to a bookmark, with `Shift` its local folder too.
+
+### Fixed
+
+- Deleting a remote folder left the browsing connection inside the deleted folder: the
+  panel now goes back to its own folder after every series of operations.
+
 ## [0.4.0] - 2026-11-08
 
 Queue and transfers (block H).

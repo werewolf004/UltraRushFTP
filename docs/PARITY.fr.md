@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
+Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 
 ## Fenêtre principale et menus
 
@@ -28,14 +28,14 @@ Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Recherche (filtre rapide) | ⬜ | Filtre d'un panneau par `Ctrl+F`, mots, `-mot`, expression régulière |
+| Recherche (filtre rapide) | ✅ | `Ctrl+F` : mots, `-mot`, masques, expression régulière ; `F5` réaffiche tout |
 | Renommer | ✅ | `F2` |
 | Supprimer | ✅ | `Suppr`, avec confirmation |
 | Créer un dossier | ✅ | `F7` |
-| Renommer plusieurs fichiers | ⬜ | |
-| Copier les noms sélectionnés | 🟡 | « Copier le chemin » pour un élément ; pas encore plusieurs noms |
-| Marquer / démarquer, tout démarquer, sélectionner les marqués, exporter les marques | ⬜ | Marques distinctes de la sélection |
-| Sélectionner (par masque) | ⬜ | |
+| Renommer plusieurs fichiers | ✅ | Modèle (`%n`, `%e`, `%c`), remplacement (expression régulière), casse, aperçu |
+| Copier les noms sélectionnés | ✅ | `Ctrl+Maj+C`, un nom par ligne |
+| Marquer / démarquer, tout démarquer, sélectionner les marqués, exporter les marques | ✅ | `Ctrl+M` ; lignes marquées en gras soulignées |
+| Sélectionner (par masque) | ✅ | `+` / `-`, masques séparés par `;` |
 | Tout sélectionner | ✅ | `Ctrl+A` |
 
 ### Affichage
@@ -48,25 +48,25 @@ Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Journal système, journal des transferts, journal FTP | 🟡 | Un journal par onglet, couleurs commande / réponse / état / erreur |
 | Fenêtre des tâches | ⬜ | Tâches planifiées |
 | Colonnes distantes taille / date | ✅ | |
-| Colonnes distantes attributs / utilisateur / groupe | ⬜ | Lues par l'analyse du listing, non affichées |
+| Colonnes distantes attributs / utilisateur / groupe | ✅ | Panneaux distants ; les panneaux locaux montrent les attributs Windows |
 | Colonnes locales taille / date | ✅ | |
 | Colonnes de la liste des fenêtres | ⬜ | |
 | Lignes de grille | ➖ | Lignes alternées à la place |
 | Ajustement automatique des colonnes | 🟡 | Colonnes redimensionnables, sans ajustement automatique |
-| Fichiers en cours d'édition | ⬜ | Vient avec les *Associations de fichiers* |
+| Fichiers en cours d'édition | ✅ | Menu FTP → Fichiers en cours de modification |
 
 ### FTP
 
 | Sujet | État | Remarques |
 |---|---|---|
 | Boîte de connexion rapide | ✅ | Barre de connexion rapide |
-| Attributs (CHMOD) | ⬜ | `SITE CHMOD` |
-| Déplacer vers | ⬜ | `RNFR`/`RNTO` distant vers un autre dossier |
-| Modifier la date de fichiers FTP | ⬜ | `MFMT` / `SITE UTIME` |
-| Calculer l'espace FTP utilisé | ⬜ | Taille récursive avec profondeur |
-| Exporter l'arborescence | ⬜ | |
-| Chercher des fichiers sur les sites | ⬜ | Recherche récursive avec filtres |
-| Vider le cache du site / de tous les sites | ⬜ | Vient avec le cache des dossiers |
+| Attributs (CHMOD) | ✅ | `SITE CHMOD` (FTP), `SETSTAT` (SFTP), contenu des dossiers aussi |
+| Déplacer vers | ✅ | Distant (`RNFR`/`RNTO`) et local |
+| Modifier la date de fichiers FTP | ✅ | `MFMT`, sinon `SITE UTIME` ; `SETSTAT` en SFTP |
+| Calculer l'espace FTP utilisé | ✅ | Distant et local, avec une profondeur |
+| Exporter l'arborescence | ✅ | Retrait, tailles, dossiers seulement ; copie ou enregistrement |
+| Chercher des fichiers sur les sites | ✅ | Mots et masques, exclusions, type, dates, tailles, profondeur ; vers la file, copie de l'adresse |
+| Vider le cache du site / de tous les sites | ✅ | |
 
 ### Outils → File d'attente
 
@@ -96,8 +96,8 @@ Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Commandes (commandes de site prédéfinies) | ⬜ | Menu de commandes `SITE` selon le type de serveur |
 | Concepteur de commandes | ⬜ | |
 | Envoyer une commande RAW | 🟡 | `RushApp.FTP.RAW` depuis la console de script ; pas de boîte de dialogue ni « envoyer à tous » |
-| Comparer le contenu des dossiers (nom, taille, partiel, masquer les identiques) | ⬜ | |
-| Voir le listing brut | ⬜ | Listing non analysé |
+| Comparer le contenu des dossiers (nom, taille, partiel, masquer les identiques) | ✅ | Menu FTP → Comparer les panneaux |
+| Voir le listing brut | ✅ | FTP : tel qu'envoyé par le serveur ; SFTP : lignes `ls -l` |
 | Concepteur de scripts | 🟡 | Console de script dans chaque onglet ; pas d'éditeur avec fichiers |
 | Langues | 🟡 | Anglais et français |
 | Gestionnaire de raccourcis | ⬜ | Raccourcis fixes (liste : `F1`) |
@@ -141,11 +141,11 @@ Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Signets | 🟡 | Nom, chemins distant et local ; jetons de date (`%yyyy%`, `%mm%`…) pas encore |
 | Créer des sommes de contrôle CRC | ✅ | Fichiers SFV et MD5 |
 | Transfert conditionnel | ✅ | Voir *Transfert conditionnel* |
-| Calculer l'espace FTP utilisé | ⬜ | |
+| Calculer l'espace FTP utilisé | ✅ | |
 | Modifier un élément de la file | ✅ | |
-| Exporter l'arborescence | ⬜ | |
-| Recherche rapide | ⬜ | |
-| Chercher des fichiers sur les sites | ⬜ | |
+| Exporter l'arborescence | ✅ | |
+| Recherche rapide | ✅ | Voir *Recherche (filtre rapide)* |
+| Chercher des fichiers sur les sites | ✅ | |
 | Gestionnaire de raccourcis | ⬜ | |
 | Boîte RAW (`Ctrl+R`, plusieurs lignes, tous les sites) | ⬜ | |
 | Téléchargement manuel | ⬜ | |
@@ -200,7 +200,7 @@ Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Mode de listing : retirer les espaces de tête | ✅ | Toujours fait pour `STAT` |
 | Mode de listing : commande personnalisée | ✅ | |
 | Mode de listing : UPnP | ⬜ | |
-| Cache des dossiers par site | ⬜ | |
+| Cache des dossiers par site | ✅ | Réglage global, ou oui / non dans la fiche du site |
 | Jeu de caractères des dossiers (serveurs non UTF-8) | ✅ | Commandes, réponses et listings ; 14 jeux de caractères |
 | Choix de l'analyseur de listing | ✅ | Automatique, Unix ou DOS/IIS (`MLSD` est toujours lu comme tel) |
 | SSL : `PBSZ 0` | ✅ | |
@@ -226,7 +226,7 @@ Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Dossier de téléchargement par défaut | ✅ | Les panneaux locaux y démarrent |
 | Dossier des données | ✅ | `-f`, `URUSHFTP_DATA` |
 | Sauvegarde quotidienne de la configuration | ⬜ | |
-| Cache des dossiers FTP, mise à jour du cache du dossier transféré | ⬜ | |
+| Cache des dossiers FTP, mise à jour du cache du dossier transféré | ✅ | Options › Navigation |
 | Vérifier les nouvelles versions au démarrage | ➖ | Pas de mise à jour en ligne dans cette phase |
 | Une seule instance | ⬜ | |
 | Écran de démarrage | ➖ | La fenêtre s'ouvre immédiatement |
@@ -339,10 +339,10 @@ Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Sujet | État | Remarques |
 |---|---|---|
 | Actions du double-clic (fichier, journal, site, indicateur de côté, onglet, élément de file) | 🟡 | Fixe : ouvre les dossiers ; pas de choix |
-| Glisser depuis l'Explorateur vers un panneau distant | ⬜ | Le glisser-déposer marche entre les deux panneaux |
-| Coller des fichiers locaux dans un panneau distant (`Ctrl+V`) | ⬜ | |
+| Glisser depuis l'Explorateur vers un panneau distant | ✅ | Dans le dossier du panneau distant sous le pointeur |
+| Coller des fichiers locaux dans un panneau distant (`Ctrl+V`) | ✅ | |
 | Menu contextuel de l'Explorateur dans le panneau local | ⬜ | |
-| Associations de fichiers : voir et modifier les fichiers distants avec des programmes externes | ⬜ | |
+| Associations de fichiers : voir et modifier les fichiers distants avec des programmes externes | ✅ | Options › Navigation ; Bloc-notes quand aucun programme ne correspond ; un fichier modifié est renvoyé à l'enregistrement |
 | Notification d'événements : sons, bulles de notification, liste d'événements | ⬜ | |
 | Confirmations : supprimer des fichiers locaux | ✅ | Toujours demandée |
 | Confirmations : quitter, éteindre, fermer un onglet connecté ou avec une file, supprimer des éléments de file | ⬜ | |
@@ -388,8 +388,8 @@ Résumé (284 sujets) : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | FAQ : limiter les connexions d'un site | ✅ | |
 | Astuce : `Maj` + connexion = connexion fantôme `!user` | ✅ | Gestionnaire de sites ; `RS_GHOST` dans les scripts |
 | Astuce : `Ctrl` + connexion = `-motdepasse` | ✅ | Gestionnaire de sites ; `RS_INVERT` dans les scripts |
-| Astuce : `Maj` + signet = les deux côtés | ⬜ | |
-| Astuce : `Maj` + double-clic sur un dossier = les deux côtés | ⬜ | |
+| Astuce : `Maj` + signet = les deux côtés | ✅ | Menu Signets du panneau distant |
+| Astuce : `Maj` + double-clic sur un dossier = les deux côtés | ✅ | |
 | Astuce : `%F%` / `%D%` dans les listes d'exclusion et d'autorisation de `Transfer` | ✅ | |
 | DLL mIRC (`rushmirc.dll`, `Invoke`, `RushScript`…) | ✅ | 32 et 64 bits |
 

@@ -10,6 +10,44 @@ la traduction.
 
 ## [Non publié]
 
+Navigation et opérations sur les fichiers (bloc I).
+
+### Ajouté
+
+- **Panneaux** : filtre rapide (`Ctrl+F` : mots, `-mot`, masques, expression régulière ;
+  `F5` réaffiche tout), marques (`Ctrl+M`, en gras souligné ; tout démarquer, sélectionner
+  les marqués, copier leurs chemins), sélection / désélection par masque (`+` / `-`),
+  copie des noms (`Ctrl+Maj+C`), *Renommer plusieurs…* (modèle avec `%f` `%n` `%e` `%c`,
+  remplacement par texte ou expression régulière, casse, aperçu), *Déplacer vers…* ;
+  colonnes droits / propriétaire / groupe dans les panneaux distants, attributs Windows
+  dans les locaux ; nouveaux menus **Édition** et **FTP**.
+- **Opérations distantes** : *Droits (CHMOD)* (`SITE CHMOD`, `SETSTAT`, contenu des
+  dossiers aussi), *Modifier la date* (`MFMT`, sinon `SITE UTIME` ; `SETSTAT`), *Voir le
+  listing brut*.
+- **Outils de dossier** : *Comparer les panneaux* (nom ou nom et taille, extensions
+  ignorées, masquer les identiques, sélectionner les autres), *Espace utilisé*, *Exporter
+  l'arborescence* (retrait, tailles, dossiers seulement), *Chercher sur les sites* (mots et
+  masques, exclusions, type, dates, tailles, profondeur ; résultats vers la file ou
+  copiés en adresses `ftp://`). Parcours et recherches ont leur propre connexion ; les
+  dossiers locaux se parcourent aussi.
+- **Cache des dossiers** (Options › Navigation, ou par site) : les dossiers revisités sont
+  montrés de mémoire, oubliés quand un transfert y écrit ; *Vider le cache de ce site /
+  tous les caches*.
+- **Voir et modifier les fichiers distants** (`F3` / `F4`, double-clic pour voir) :
+  programmes choisis par masques dans Options › Navigation (sinon le Bloc-notes, jamais le
+  programme du type de fichier) ; un fichier modifié est renvoyé à chaque enregistrement ;
+  fenêtre *Fichiers en cours de modification*.
+- **Explorateur** : les fichiers glissés sur un panneau distant ou collés par `Ctrl+V`
+  sont envoyés dans son dossier.
+- **Deux panneaux** : `Maj`+double-clic ouvre un dossier des deux côtés ; le nouveau menu
+  *Signets* d'un panneau distant va à un signet, avec `Maj` aussi dans son dossier local.
+
+### Corrigé
+
+- Supprimer un dossier distant laissait la connexion de navigation dans le dossier
+  supprimé : le panneau revient maintenant dans son propre dossier après chaque série
+  d'opérations.
+
 ## [0.4.0] - 2026-11-08
 
 File et transferts (bloc H).

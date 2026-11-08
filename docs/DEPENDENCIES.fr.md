@@ -51,7 +51,7 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `regex` | 1.13 | MIT / Apache-2.0 | core | Masques en expressions régulières |
 | `roxmltree` | 0.21 | MIT / Apache-2.0 | core | Analyseur XML en lecture seule pour les imports |
 | `base64` | 0.23 | MIT / Apache-2.0 | core | Codage des secrets, imports |
-| `windows-sys` | 0.61 | MIT / Apache-2.0 | sys | API Win32 (fenêtres, mémoire partagée, DPAPI, alimentation, espace disque) |
+| `windows-sys` | 0.61 | MIT / Apache-2.0 | sys | API Win32 (fenêtres, mémoire partagée, DPAPI, alimentation, espace disque, fichiers du presse-papiers, état des touches) |
 | `eframe` | 0.36 | MIT / Apache-2.0 | gui | Fenêtre native et rendu pour egui |
 | `egui_extras` | 0.36 | MIT / Apache-2.0 | gui | Tableaux des panneaux de fichiers et de la file |
 | `egui_dock` | 0.21 | MIT | gui | Panneaux réorganisables dans chaque onglet |

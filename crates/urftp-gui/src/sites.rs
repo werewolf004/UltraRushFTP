@@ -925,6 +925,20 @@ fn own_settings(ui: &mut egui::Ui, s: &mut Site, global: &Settings, show_passwor
                 );
             });
         }
+        ui.horizontal(|ui| {
+            let l = ui.label(t!("site.dir_cache"));
+            let label = |v: Option<bool>| match v {
+                None => t!("site.dir_cache_global"),
+                Some(true) => t!("common.yes"),
+                Some(false) => t!("common.no"),
+            };
+            let combo = egui::ComboBox::from_id_salt("site-dir-cache").selected_text(label(o.dir_cache)).show_ui(ui, |ui| {
+                for v in [None, Some(true), Some(false)] {
+                    ui.selectable_value(&mut o.dir_cache, v, label(v));
+                }
+            });
+            combo.response.labelled_by(l.id);
+        });
         if let Some(k) = own(ui, &mut o.keep_alive, &global.keep_alive, t!("site.own_keep_alive")) {
             ui.indent("site-own-ka", |ui| crate::options::keep_alive_ui(ui, k));
         }

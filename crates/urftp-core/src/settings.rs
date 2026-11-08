@@ -490,6 +490,43 @@ pub struct Settings {
     pub ftprush_dll_window: bool,
     /// Schemes saved in the conditional transfer dialog.
     pub condition_schemes: Vec<ConditionScheme>,
+    pub browse: BrowseSettings,
+}
+
+/// Browsing of the panels ("Cache" and "File associations" of FTPRush v2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BrowseSettings {
+    /// Folders already visited are shown from memory ("Cache FTP directories"); `F5`
+    /// always lists from the server.
+    pub dir_cache: bool,
+    /// The cached listing of a folder a transfer wrote into is forgotten
+    /// ("Update cache of transferring directory").
+    pub update_cache_on_transfer: bool,
+    /// Programs that show a remote file ("View file").
+    pub view: Vec<FileAssociation>,
+    /// Programs that edit a remote file ("Edit file"); the file is sent back when saved.
+    pub edit: Vec<FileAssociation>,
+}
+
+impl Default for BrowseSettings {
+    fn default() -> Self {
+        Self { dir_cache: false, update_cache_on_transfer: true, view: Vec::new(), edit: Vec::new() }
+    }
+}
+
+/// Program used for the files matching some masks (`*.nfo;*.txt`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct FileAssociation {
+    pub masks: String,
+    pub program: String,
+}
+
+/// Program of the first association whose masks match `name` (`None`: the program
+/// Windows opens the file with).
+pub fn program_for<'a>(list: &'a [FileAssociation], name: &str) -> Option<&'a str> {
+    list.iter().find(|a| !a.program.trim().is_empty() && crate::browsing::mask_matches(&a.masks, name)).map(|a| a.program.trim())
 }
 
 /// Settings of the conditional transfer dialog, kept as a named scheme.
@@ -626,6 +663,7 @@ impl Default for Settings {
             queue_at_start: QueueAtStart::Ask,
             ftprush_dll_window: false,
             condition_schemes: Vec::new(),
+            browse: BrowseSettings::default(),
         }
     }
 }

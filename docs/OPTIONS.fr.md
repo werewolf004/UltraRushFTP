@@ -22,6 +22,10 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | Connexion → Gestionnaire de sites | Ouvre le gestionnaire de sites |
 | Connexion → Reconnecter / Déconnecter | Agit sur la connexion du panneau actif |
 | Connexion → Local / *site* | Bascule le panneau actif entre son dossier local et sa connexion |
+| Édition → Filtre rapide, Tout sélectionner, Sélectionner / Désélectionner par masque, Copier les noms, Marques, Renommer plusieurs, Déplacer vers, Coller des fichiers | Agissent sur le panneau actif (voir *Panneaux de fichiers*) |
+| FTP → Droits, Modifier la date, Voir le listing brut | Agissent sur le panneau distant actif |
+| FTP → Espace utilisé, Exporter l'arborescence, Chercher sur les sites, Comparer les panneaux | Voir *Outils de dossier* |
+| FTP → Vider le cache de ce site / tous les caches, Fichiers en cours de modification | Voir *Outils de dossier* |
 | Affichage → Thème clair / Thème sombre | Change le thème (enregistré aussi dans les options) |
 | Aide → Raccourcis clavier | Liste les raccourcis ci-dessous (aussi `F1`) |
 | Aide → À propos d'UltraRushFTP | Version, compilation et licence |
@@ -37,6 +41,7 @@ Chaque panneau a sa propre barre de connexion, au-dessus de son dossier :
 | `🔌 Connexion ▾` | Menu des sites du gestionnaire (les dossiers en sous-menus) et *Gestionnaire de sites* : connecte **ce** panneau ; `Maj` : connexion fantôme, `Ctrl` : `-password`. Le dossier local du site, s'il est rempli, va dans l'autre panneau quand celui-ci est local. |
 | `⟲ Reconnecter` | Rouvre la connexion du panneau, dans le même dossier |
 | `Déconnecter` | Ferme la connexion du panneau (affichée, ou gardée derrière le dossier local) |
+| `Signets ▾` | Signets de la fiche du site (panneau distant) : va dans le dossier distant ; `Maj` : le dossier local du signet dans l'autre panneau aussi |
 | `💻 Local` / `🌐 site` | Bascule le panneau entre son dossier local et sa connexion ; la connexion reste ouverte pendant ce temps, et l'onglet garde son nom |
 
 Dans un panneau distant, le champ du chemin accepte un dossier (absolu, ou relatif au
@@ -59,6 +64,17 @@ dossier courant) : `Entrée` y va.
 | Transfert conditionnel | clic droit → Transfert conditionnel… (voir plus bas) | — |
 | Fichier SFV ou MD5 des fichiers sélectionnés | clic droit → Créer un fichier SFV / Créer un fichier MD5 (panneau local) | — |
 | Trier | clic sur un en-tête de colonne (à nouveau : ordre inverse) | — |
+| Filtre rapide : seulement les noms qui ont tous les mots, `-mot` exclut, `*.masque`, `"-mot"` tel quel, ou une expression régulière | Édition → Filtre rapide | `Ctrl+F` ; `Échap` le ferme, `F5` réaffiche tout |
+| Marquer / démarquer (gras souligné) | clic droit → Marquer / démarquer ; Édition → Marques (tout démarquer, sélectionner les marqués, copier leurs chemins) | `Ctrl+M` |
+| Sélectionner / désélectionner par masque (`*.rar;*.r??`) | menu Édition | `+` / `-` |
+| Copier les noms de la sélection, un par ligne | clic droit → Copier les noms | `Ctrl+Maj+C` |
+| Renommer plusieurs éléments : modèle `%f` (nom), `%n` (sans extension), `%e` (extension), `%c` (compteur, départ, pas, chiffres), remplacement (texte ou expression régulière, groupes `$1`/`${1}`), casse, aperçu | clic droit → Renommer plusieurs… | — |
+| Déplacer vers un dossier (relatif ou absolu ; le dossier de l'autre panneau est proposé quand il montre le même site) | clic droit → Déplacer vers… | — |
+| Droits (CHMOD) : cases ou valeur octale, contenu des dossiers aussi | clic droit → Droits (distant) | — |
+| Modifier la date (UTC ; `MFMT`, sinon `SITE UTIME` ; `SETSTAT` en SFTP) | clic droit → Modifier la date (distant) | — |
+| Voir / modifier un fichier distant avec son programme (voir *Navigation*) | double-clic sur un fichier distant (voir) ; clic droit → Voir / Modifier | `F3` / `F4` |
+| Ouvrir un dossier dans les deux panneaux | `Maj`+double-clic | — |
+| Envoyer des fichiers de l'Explorateur dans le panneau distant | les glisser sur le panneau | `Ctrl+V` après les avoir copiés dans l'Explorateur |
 
 Les touches de la liste agissent sur le panneau actif (marqué `▸`, curseur encadré) quand
 aucun contrôle n'a le focus clavier. `Tab` / `Maj+Tab` passent d'un contrôle à l'autre et
@@ -66,8 +82,26 @@ aucun contrôle n'a le focus clavier. `Tab` / `Maj+Tab` passent d'un contrôle �
 
 ![Raccourcis clavier](images/shortcuts.fr.png)
 
+Les panneaux distants montrent les colonnes droits, propriétaire et groupe ; les panneaux
+locaux les attributs Windows (`R` lecture seule, `H` caché, `S` système, `A` archive).
+
 Les fichiers SFV et MD5 portent le nom du dossier (`dossier.sfv`, `dossier.md5`) et y
 sont écrits, en arrière-plan ; le journal indique quand ils sont prêts.
+
+### Outils de dossier
+
+| Outil | Effet |
+|---|---|
+| Comparer les panneaux | Options cochées dans le sous-menu : *même nom* ou *même nom et même taille* (dossiers : nom seulement), *ignorer les extensions*, *masquer ce qui est identique*, *sélectionner ce qui diffère* ; puis *Comparer maintenant*. `F5` réaffiche tout |
+| Espace utilisé | Fichiers, dossiers et taille d'un dossier (distant ou local), et de chaque dossier qu'il contient ; *Profondeur* 0 = tous les niveaux, 1 = seulement les dossiers qu'il contient… |
+| Exporter l'arborescence | L'arborescence en texte (retrait, tailles, dossiers seulement), à copier ou enregistrer |
+| Chercher sur les sites | Mots séparés par `;` (un mot avec `*` ou `?` est un masque du nom entier, les autres sont cherchés dans les noms), mots à exclure, dossier, profondeur, type, dates (`AAAA-MM-JJ`), tailles (Kio) ; les sites cochés sont parcourus l'un après l'autre, chacun avec sa propre connexion. Clic droit sur les résultats : les ajouter (ou leur dossier) à la file, vers le panneau local de l'onglet, ou copier leur adresse `ftp://` |
+| Voir le listing brut | Le listing du dossier tel que le serveur l'a envoyé (FTP), ou en lignes `ls -l` (SFTP) |
+| Vider le cache | Oublie les dossiers gardés par le cache des dossiers (voir *Navigation*) |
+| Fichiers en cours de modification | Fichiers distants ouverts avec un programme : état, *Renvoyer maintenant*, *Ne plus surveiller* |
+
+Les parcours et les recherches ont leur propre connexion : le panneau reste libre pendant ce
+temps.
 
 ### Transfert conditionnel
 
@@ -321,6 +355,21 @@ les clés de confiance restent toujours vides. *Valeurs par défaut* remet le mo
 | Ne pas transférer un sous-dossier qui porte le nom de son parent | désactivé | `release/release`, une erreur courante |
 | Supprimer le fichier cible de 0 octet quand la source d'un FXP refuse | activé | |
 
+### Navigation
+
+![Navigation](images/options-browse.fr.png)
+
+| Option | Défaut | Effet |
+|---|---|---|
+| Garder les listings des dossiers visités | désactivé | Un dossier revisité est montré de mémoire ; `F5` relit toujours le serveur. Une fiche de site peut dire oui ou non |
+| Oublier le listing d'un dossier dans lequel un transfert écrit | activé | Avec le cache : les dossiers cibles des transferts sont relus |
+| Programme pour voir un fichier distant (`F3`) | — | Lignes de masques (`*.nfo;*.txt`) et un programme ; la première ligne qui correspond sert |
+| Programme pour modifier un fichier distant (`F4`) | — | Idem ; le fichier est surveillé et renvoyé sur le serveur à chaque enregistrement dans le programme |
+
+Le fichier est téléchargé dans `%TEMP%\UltraRushFTP\files`. Sans ligne correspondante, il
+s'ouvre dans le Bloc-notes : jamais avec le programme que Windows associe à son type, qui
+pourrait lancer un programme téléchargé.
+
 ## Fiche de site
 
 ![Gestionnaire de sites](images/site-manager.fr.png)
@@ -371,6 +420,7 @@ les clés de confiance restent toujours vides. *Valeurs par défaut* remet le mo
 |---|---|---|
 | Essais et délais propres au site | non | Nombre d'essais, délai entre deux essais, délais de connexion et de réponse ; ils partent des valeurs globales (page Transferts) |
 | Reprendre les transferts interrompus | oui | Désactivé : un fichier partiel est toujours retransféré depuis zéro (pas de `REST`) |
+| Cache des dossiers | Réglage global | Oui / Non remplace *Garder les listings des dossiers visités* pour ce site |
 | Demander ses fonctions au serveur (FEAT) | oui | FTP : à désactiver pour les vieux serveurs qui n'aiment pas `FEAT` (`MLSD`, `PRET`, `UTF8` ne sont alors pas détectés) |
 | Nom du client (CLNT) | vide | FTP : envoyé par `CLNT` après la connexion (vide : pas envoyé) |
 | Maintien de connexion et reconnexion propres au site | non | Mêmes champs que la page Maintien de connexion |

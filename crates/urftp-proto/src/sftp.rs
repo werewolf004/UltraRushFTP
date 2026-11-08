@@ -351,6 +351,24 @@ impl SftpClient {
         Ok(to_entry(path::split(&t).1.to_string(), &meta))
     }
 
+    /// Changes the permission bits (`SETSTAT`).
+    pub async fn chmod(&mut self, p: &str, mode: u32) -> Result<()> {
+        let t = self.abs(p);
+        let mut attrs = FileAttributes::empty();
+        attrs.permissions = Some(mode & 0o7777);
+        self.sftp.set_metadata(t.clone(), attrs).await.map_err(op_err("CHMOD", &t))
+    }
+
+    /// Changes the access and modification dates (`SETSTAT`, seconds since 1970).
+    pub async fn set_times(&mut self, p: &str, epoch: i64) -> Result<()> {
+        let t = self.abs(p);
+        let secs = u32::try_from(epoch).map_err(|_| SftpError::InvalidArgument(format!("date out of range: {epoch}")))?;
+        let mut attrs = FileAttributes::empty();
+        attrs.atime = Some(secs);
+        attrs.mtime = Some(secs);
+        self.sftp.set_metadata(t.clone(), attrs).await.map_err(op_err("SETSTAT", &t))
+    }
+
     pub async fn size(&mut self, p: &str) -> Result<u64> {
         Ok(self.stat(p).await?.size)
     }

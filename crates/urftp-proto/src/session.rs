@@ -239,6 +239,22 @@ fn rotates(e: &SessionError) -> bool {
     }
 }
 
+/// `ls -l` style line of an SFTP entry.
+fn long_line(e: &RemoteEntry) -> String {
+    let date = e
+        .modified
+        .map(|t| format!("{:04}-{:02}-{:02} {:02}:{:02}", t.year.unwrap_or(0), t.month, t.day, t.hour, t.minute))
+        .unwrap_or_default();
+    format!(
+        "{} {:<8} {:<8} {:>12} {date} {}",
+        e.permissions.as_deref().unwrap_or("----------"),
+        e.owner.as_deref().unwrap_or("-"),
+        e.group.as_deref().unwrap_or("-"),
+        e.size,
+        e.name
+    )
+}
+
 /// Open, authenticated connection to a site.
 pub enum RemoteSession {
     Ftp(Box<FtpClient>),
@@ -427,6 +443,89 @@ impl RemoteSession {
         match self {
             RemoteSession::Ftp(c) => c.cwd(dir).await?,
             RemoteSession::Sftp(c) => c.cwd(dir).await?,
+        }
+        Ok(())
+    }
+
+    /// Changes the permissions of a file or folder: `SITE CHMOD` (FTP), `SETSTAT` (SFTP).
+    pub async fn chmod(&mut self, p: &str, mode: u32) -> Result<()> {
+        match self {
+            RemoteSession::Ftp(c) => {
+                let cmd = format!("SITE CHMOD {mode:o} {p}");
+                let reply = c.raw(&cmd).await?;
+                if !(200..300).contains(&reply.code) {
+                    return Err(FtpError::Unexpected { command: cmd, reply }.into());
+                }
+            }
+            RemoteSession::Sftp(c) => c.chmod(p, mode).await?,
+        }
+        Ok(())
+    }
+
+    /// Changes the date of a file or folder (seconds since 1970, UTC): `MFMT` when the
+    /// server announces it, otherwise `SITE UTIME` (FTP); `SETSTAT` (SFTP).
+    pub async fn set_modified(&mut self, p: &str, epoch: i64) -> Result<()> {
+        match self {
+            RemoteSession::Ftp(c) => {
+                let stamp = urftp_core::browsing::ftp_timestamp(epoch);
+                let cmd = if c.features().has("MFMT") { format!("MFMT {stamp} {p}") } else { format!("SITE UTIME {stamp} {p}") };
+                let reply = c.raw(&cmd).await?;
+                if !(200..300).contains(&reply.code) {
+                    return Err(FtpError::Unexpected { command: cmd, reply }.into());
+                }
+            }
+            RemoteSession::Sftp(c) => c.set_times(p, epoch).await?,
+        }
+        Ok(())
+    }
+
+    /// Listing of a folder as the server sent it (FTP), or as `ls -l` lines (SFTP).
+    pub async fn raw_listing(&mut self, dir: &str) -> Result<String> {
+        Ok(match self {
+            RemoteSession::Ftp(c) => c.list_raw(Some(dir)).await?.0,
+            RemoteSession::Sftp(c) => c.list(Some(dir)).await?.iter().map(long_line).collect::<Vec<_>>().join("\n"),
+        })
+    }
+
+    /// Every item under `root` (not `root` itself), level by level; `depth` 0 = every
+    /// level. `stop` is checked between folders; `found` receives each item as it is
+    /// listed. A folder that cannot be listed is skipped and reported to `failed`.
+    pub async fn walk(
+        &mut self,
+        root: &str,
+        depth: usize,
+        stop: &std::sync::atomic::AtomicBool,
+        mut found: impl FnMut(urftp_core::browsing::WalkEntry),
+        mut failed: impl FnMut(String, SessionError),
+    ) -> Result<()> {
+        let mut todo = std::collections::VecDeque::from([(String::new(), 0usize)]);
+        while let Some((rel, level)) = todo.pop_front() {
+            if stop.load(Ordering::SeqCst) {
+                break;
+            }
+            let dir = if rel.is_empty() { root.to_string() } else { path::join(root, &rel) };
+            let entries = match self.list(&dir).await {
+                Ok(v) => v,
+                Err(e) if level > 0 && !crate::keepalive::is_connection_lost(&e) => {
+                    failed(dir, e);
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
+            for e in entries {
+                let child = if rel.is_empty() { e.name.clone() } else { format!("{rel}/{}", e.name) };
+                let is_dir = e.is_dir();
+                found(urftp_core::browsing::WalkEntry {
+                    path: child.clone(),
+                    depth: level + 1,
+                    is_dir,
+                    size: e.size,
+                    modified: e.modified.map(|t| t.epoch(crate::ftp::FtpTime::now_epoch())),
+                });
+                if is_dir && (depth == 0 || level + 1 < depth) {
+                    todo.push_back((child, level + 1));
+                }
+            }
         }
         Ok(())
     }

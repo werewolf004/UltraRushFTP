@@ -33,9 +33,12 @@ use urftp_i18n::{Lang, language, t};
 use urftp_proto::ident::{IdentConfig, IdentServer};
 use urftp_proto::throttle::RateLimiter;
 
+mod fileops;
 mod rushapp;
 #[cfg(test)]
 mod shots;
+
+use fileops::{ListState, Op, Parts};
 #[cfg(test)]
 mod ui_tests;
 
@@ -60,6 +63,10 @@ struct FileRow {
     mtime: i64,
     /// Date in seconds since 1970 (conditional transfer).
     epoch: Option<i64>,
+    /// Permissions (`drwxr-xr-x`; local panels: Windows attributes `RHSA`), owner, group.
+    perms: String,
+    owner: String,
+    group: String,
 }
 
 impl FileRow {
@@ -71,7 +78,25 @@ impl FileRow {
             modified: e.modified.map(fmt_time).unwrap_or_default(),
             mtime: e.modified.map(time_key).unwrap_or(0),
             epoch: e.modified.map(|t| t.epoch(FtpTime::now_epoch())),
+            perms: e.permissions.clone().unwrap_or_default(),
+            owner: e.owner.clone().unwrap_or_default(),
+            group: e.group.clone().unwrap_or_default(),
         }
+    }
+}
+
+/// Windows attributes of a local item as letters: read-only, hidden, system, archive.
+fn local_attributes(meta: &std::fs::Metadata) -> String {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        let a = meta.file_attributes();
+        [(0x1, 'R'), (0x2, 'H'), (0x4, 'S'), (0x20, 'A')].iter().filter(|(bit, _)| a & bit != 0).map(|(_, c)| *c).collect()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = meta;
+        String::new()
     }
 }
 
@@ -174,7 +199,9 @@ const PAGE_ROWS: isize = 15;
 struct LocalView {
     path: PathBuf,
     path_edit: String,
+    /// Rows shown (after the quick filter); [`ListState::all`] has the whole folder.
     rows: Vec<FileRow>,
+    list: Box<ListState>,
     selected: BTreeSet<usize>,
     cursor: Cursor,
     error: Option<String>,
@@ -187,6 +214,7 @@ impl LocalView {
             path_edit: path.to_string_lossy().into_owned(),
             path,
             rows: Vec::new(),
+            list: Box::default(),
             selected: BTreeSet::new(),
             cursor: Cursor::default(),
             error: None,
@@ -196,13 +224,16 @@ impl LocalView {
         v
     }
 
+    fn parts(&mut self) -> Parts<'_> {
+        Parts { list: &mut self.list, rows: &mut self.rows, selected: &mut self.selected, cursor: &mut self.cursor, sort: &mut self.sort }
+    }
+
     fn reload(&mut self) {
-        self.selected.clear();
-        self.cursor = Cursor::default();
         self.path_edit = self.path.to_string_lossy().into_owned();
+        let dir = self.path_edit.clone();
         match std::fs::read_dir(&self.path) {
             Ok(rd) => {
-                let mut rows: Vec<FileRow> = rd
+                let rows: Vec<FileRow> = rd
                     .flatten()
                     .filter_map(|e| {
                         let meta = e.metadata().ok()?;
@@ -219,15 +250,17 @@ impl LocalView {
                             modified: t.map(fmt_time).unwrap_or_default(),
                             mtime: t.map(time_key).unwrap_or(0),
                             epoch: secs,
+                            perms: local_attributes(&meta),
+                            owner: String::new(),
+                            group: String::new(),
                         })
                     })
                     .collect();
-                sort_rows(&mut rows, self.sort);
-                self.rows = rows;
+                self.parts().load(rows, &dir);
                 self.error = None;
             }
             Err(e) => {
-                self.rows.clear();
+                self.parts().load(Vec::new(), &dir);
                 self.error = Some(e.to_string());
             }
         }
@@ -253,6 +286,7 @@ struct RemoteView {
     /// Text of the path field (Enter goes there).
     path_edit: String,
     rows: Vec<FileRow>,
+    list: Box<ListState>,
     selected: BTreeSet<usize>,
     cursor: Cursor,
     state: RemoteState,
@@ -263,12 +297,36 @@ struct RemoteView {
     http: urftp_core::site::HttpMapping,
 }
 
+impl RemoteView {
+    fn parts(&mut self) -> Parts<'_> {
+        Parts { list: &mut self.list, rows: &mut self.rows, selected: &mut self.selected, cursor: &mut self.cursor, sort: &mut self.sort }
+    }
+}
+
 enum Side {
     Local(LocalView),
     Remote(Box<RemoteView>),
 }
 
 impl Side {
+    fn parts(&mut self) -> Parts<'_> {
+        match self {
+            Side::Local(l) => l.parts(),
+            Side::Remote(r) => r.parts(),
+        }
+    }
+
+    fn list(&self) -> &ListState {
+        match self {
+            Side::Local(l) => &l.list,
+            Side::Remote(r) => &r.list,
+        }
+    }
+
+    fn is_remote(&self) -> bool {
+        matches!(self, Side::Remote(_))
+    }
+
     fn rows(&self) -> &[FileRow] {
         match self {
             Side::Local(l) => &l.rows,
@@ -373,14 +431,12 @@ impl Side {
 
     /// Changes the sort and reorders the list (the selection is cleared).
     fn set_sort(&mut self, s: Sort) {
-        let (rows, sort, sel, cur) = match self {
-            Side::Local(l) => (&mut l.rows, &mut l.sort, &mut l.selected, &mut l.cursor),
-            Side::Remote(r) => (&mut r.rows, &mut r.sort, &mut r.selected, &mut r.cursor),
-        };
-        *sort = s;
-        sort_rows(rows, s);
-        sel.clear();
-        *cur = Cursor::default();
+        let mut p = self.parts();
+        *p.sort = s;
+        sort_rows(&mut p.list.all, s);
+        p.selected.clear();
+        *p.cursor = Cursor::default();
+        p.show();
     }
 
     /// Full path of a name (display, clipboard, operations).
@@ -481,6 +537,8 @@ struct Container {
     condition: Option<ConditionDialog>,
     /// Messages of work done in the background (SFV / MD5 files).
     background: Vec<std::sync::mpsc::Receiver<(LogKind, String)>>,
+    /// Dialogs, windows and background work of the file operations.
+    tools: fileops::Tools,
 }
 
 /// Form of the conditional transfer dialog for the selection of panel `side`.
@@ -580,6 +638,7 @@ impl Container {
             close_when_done: false,
             condition: None,
             background: Vec::new(),
+            tools: fileops::Tools::default(),
         }
     }
 
@@ -650,8 +709,9 @@ impl Container {
         });
     }
 
-    /// `log_paths`: source and target of each item in the log.
-    fn poll(&mut self, log_paths: bool) -> Vec<(TransferKind, u64)> {
+    /// `log_paths`: source and target of each item in the log. `invalidate`: the cached
+    /// listing of the folder a transfer wrote into is forgotten.
+    fn poll(&mut self, log_paths: bool, invalidate: bool) -> Vec<(TransferKind, u64)> {
         let mut done = Vec::new();
         self.background.retain(|rx| match rx.try_recv() {
             Ok(m) => {
@@ -704,6 +764,17 @@ impl Container {
                     if self.queue.lock().get(id).map(QueueItem::kind) == Some(TransferKind::Fxp) {
                         traffic.push((TransferKind::Fxp, bytes));
                     }
+                    let dst = self.queue.lock().get(id).map(|i| i.dst.clone());
+                    if invalidate && let Some(Endpoint { site: Some(site), path }) = dst {
+                        let parent = rpath::split(&path).0.unwrap_or("/").to_string();
+                        for s in self.sides.iter().chain(self.parked.iter().flatten()) {
+                            if let Side::Remote(r) = s
+                                && r.profile.name == site
+                            {
+                                r.handle.send(BrowserCmd::Invalidate(vec![parent.clone(), path.clone()]));
+                            }
+                        }
+                    }
                     if log_paths {
                         let paths = self.item_paths(id);
                         self.push_log(0, LogKind::Status, t!("log.item_done", paths = paths));
@@ -744,14 +815,12 @@ impl Container {
 
     fn on_browser_event(&mut self, side: usize, e: BrowserEvent) {
         match e {
-            BrowserEvent::Listing { dir, entries } => {
+            BrowserEvent::RawListing { dir, text } => fileops::raw_listing(self, side, dir, text),
+            BrowserEvent::Listing { dir, entries, .. } => {
                 if let Side::Remote(r) = &mut self.sides[side] {
                     r.path_edit.clone_from(&dir);
+                    r.parts().load(entries.iter().map(FileRow::from_remote).collect(), &dir);
                     r.dir = dir;
-                    r.rows = entries.iter().map(FileRow::from_remote).collect();
-                    sort_rows(&mut r.rows, r.sort);
-                    r.selected.clear();
-                    r.cursor = Cursor::default();
                     r.state = RemoteState::Connected;
                 }
             }
@@ -781,7 +850,7 @@ impl Container {
             BrowserEvent::Disconnected => {
                 if let Side::Remote(r) = &mut self.sides[side] {
                     r.state = RemoteState::Disconnected;
-                    r.rows.clear();
+                    r.parts().load(Vec::new(), "");
                 }
             }
             BrowserEvent::NotConnected => self.push_log(side, LogKind::Error, t!("browser.not_connected")),
@@ -1173,6 +1242,8 @@ pub struct UltraRushApp {
     power: fn(QueueEnd) -> Result<(), String>,
     /// mIRC link (`TfmRush` window); off in the interface tests.
     ipc_enabled: bool,
+    /// `Ctrl+V` was down on the previous frame.
+    paste_down: bool,
 }
 
 /// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
@@ -1196,7 +1267,7 @@ fn parse_connect_url(url: &str) -> Option<QuickConnect> {
 }
 
 /// Keyboard shortcuts shown by F1: (keys, description), as catalogue keys.
-const SHORTCUTS: [(&str, &str); 17] = [
+const SHORTCUTS: [(&str, &str); 25] = [
     ("shortcuts.k_tab", "shortcuts.tab"),
     ("shortcuts.k_escape", "shortcuts.escape"),
     ("shortcuts.k_f6", "shortcuts.f6"),
@@ -1211,12 +1282,22 @@ const SHORTCUTS: [(&str, &str); 17] = [
     ("shortcuts.k_f5", "shortcuts.f5"),
     ("shortcuts.k_f7", "shortcuts.f7"),
     ("shortcuts.k_delete", "shortcuts.delete"),
+    ("shortcuts.k_ctrl_f", "shortcuts.ctrl_f"),
+    ("shortcuts.k_ctrl_m", "shortcuts.ctrl_m"),
+    ("shortcuts.k_plus_minus", "shortcuts.plus_minus"),
+    ("shortcuts.k_ctrl_shift_c", "shortcuts.ctrl_shift_c"),
+    ("shortcuts.k_ctrl_v", "shortcuts.ctrl_v"),
+    ("shortcuts.k_f3_f4", "shortcuts.f3_f4"),
+    ("shortcuts.k_shift_dblclick", "shortcuts.shift_dblclick"),
+    ("shortcuts.k_shift_bookmark", "shortcuts.shift_bookmark"),
     ("shortcuts.k_ctrl_t", "shortcuts.ctrl_t"),
     ("shortcuts.k_ctrl_tab", "shortcuts.ctrl_tab"),
     ("shortcuts.k_f1", "shortcuts.f1"),
 ];
 
 enum Action {
+    /// Operation of the Edit / FTP menus on a panel (see [`fileops::Op`]).
+    Op(usize, Op),
     Open(usize, String),
     Up(usize),
     Refresh(usize),
@@ -1319,6 +1400,7 @@ impl UltraRushApp {
             queue_end: None,
             power: run_power_action,
             ipc_enabled: true,
+            paste_down: false,
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -1611,6 +1693,7 @@ impl UltraRushApp {
             dir: "/".into(),
             path_edit: "/".into(),
             rows: Vec::new(),
+            list: Box::default(),
             selected: BTreeSet::new(),
             cursor: Cursor::default(),
             state: RemoteState::Connecting,
@@ -2194,6 +2277,8 @@ impl UltraRushApp {
                     ui.close();
                 }
             });
+            ui.menu_button(t!("menu.edit"), |ui| fileops::edit_menu(ui, &self.tabs[self.active], &mut actions));
+            ui.menu_button(t!("menu.ftp"), |ui| fileops::ftp_menu(ui, &mut self.tabs[self.active], &mut actions));
             ui.menu_button(t!("menu.view"), |ui| {
                 if ui.button(if self.dark { t!("menu.light_theme") } else { t!("menu.dark_theme") }).clicked() {
                     self.dark = !self.dark;
@@ -2362,6 +2447,7 @@ impl UltraRushApp {
         let opts = self.engine_options();
         let extra = self.queue_site_profiles(self.active);
         let mut scripts = Vec::new();
+        let mut ops = Vec::new();
         let (mut connects, mut reconnects, mut open_sites) = (Vec::new(), Vec::new(), false);
         let clear_on_logout = self.options.settings.transfer.clear_queue_on_logout;
         // Queue file: Some(true) = save, Some(false) = load (file dialog after the loop).
@@ -2369,6 +2455,7 @@ impl UltraRushApp {
         let tab = &mut self.tabs[self.active];
         for a in actions {
             match a {
+                Action::Op(side, op) => ops.push((side, op)),
                 Action::RunScript => scripts.push(false),
                 Action::Invoke => scripts.push(true),
                 Action::Open(side, name) => match &mut tab.sides[side] {
@@ -2379,10 +2466,13 @@ impl UltraRushApp {
                     Side::Local(l) => l.up(),
                     Side::Remote(r) => r.handle.send(BrowserCmd::Cwd("..".into())),
                 },
-                Action::Refresh(side) => match &mut tab.sides[side] {
-                    Side::Local(l) => l.reload(),
-                    Side::Remote(r) => r.handle.send(BrowserCmd::Refresh),
-                },
+                Action::Refresh(side) => {
+                    tab.sides[side].clear_filter();
+                    match &mut tab.sides[side] {
+                        Side::Local(l) => l.reload(),
+                        Side::Remote(r) => r.handle.send(BrowserCmd::Refresh),
+                    }
+                }
                 Action::Disconnect(side) => {
                     if clear_on_logout {
                         let site =
@@ -2510,6 +2600,9 @@ impl UltraRushApp {
         if open_sites {
             self.sites.open = true;
         }
+        for (side, op) in ops {
+            self.run_op(side, op, ctx);
+        }
         match queue_file {
             Some(true) => {
                 let name = format!("{}.urq", self.tabs[self.active].title(self.active + 1));
@@ -2604,8 +2697,13 @@ impl UltraRushApp {
         }
         let tab = &self.tabs[self.active];
         let busy = ctx.egui_wants_keyboard_input() || ctx.memory(|m| m.focused().is_some());
-        let queue_dialog =
-            self.queue_end.is_some() || self.tabs.get(self.active).is_some_and(|t| t.queue_edit.is_some() || t.condition.is_some());
+        let queue_dialog = self.queue_end.is_some()
+            || self.tabs.get(self.active).is_some_and(|t| t.queue_edit.is_some() || t.condition.is_some() || t.tools.busy());
+        // `Ctrl+V` with files on the clipboard reaches no text field: it is read from the
+        // keyboard state (only on the press).
+        let paste = urftp_sys::win::ctrl_v_down() && ctx.input(|i| i.focused);
+        let paste_pressed = paste && !std::mem::replace(&mut self.paste_down, paste);
+        self.paste_down = paste;
         if busy || queue_dialog || self.sites.open || self.options.open || self.shortcuts_open || self.about_open {
             return Vec::new();
         }
@@ -2634,6 +2732,32 @@ impl UltraRushApp {
         }
         if pressed(Modifiers::COMMAND, Key::A) {
             out.push(Action::SelectAll(side));
+        }
+        if paste_pressed {
+            out.push(Action::Op(side, Op::Paste));
+        }
+        for (m, key, op) in [
+            (Modifiers::COMMAND, Key::F, Op::Filter),
+            (Modifiers::COMMAND, Key::M, Op::Mark),
+            (Modifiers::COMMAND | Modifiers::SHIFT, Key::C, Op::CopyNames),
+            (Modifiers::NONE, Key::Plus, Op::SelectMask(true)),
+            (Modifiers::NONE, Key::Minus, Op::SelectMask(false)),
+        ] {
+            if pressed(m, key) {
+                out.push(Action::Op(side, op));
+            }
+        }
+        let file_at_cursor =
+            tab.sides[side].cursor().row.and_then(|i| tab.sides[side].rows().get(i)).filter(|r| !r.is_dir).map(|r| r.name.clone());
+        if tab.sides[side].is_remote()
+            && let Some(name) = file_at_cursor
+        {
+            if pressed(Modifiers::NONE, Key::F3) {
+                out.push(Action::Op(side, Op::View(name.clone())));
+            }
+            if pressed(Modifiers::NONE, Key::F4) {
+                out.push(Action::Op(side, Op::Edit(name)));
+            }
         }
         if pressed(Modifiers::NONE, Key::Enter)
             && let Some(n) = tab.sides[side].folder_to_open()
@@ -2844,7 +2968,12 @@ impl eframe::App for UltraRushApp {
     // and mIRC requests keep being processed.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let log_paths = self.options.settings.transfer.log_paths;
-        let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(|t| t.poll(log_paths)).collect();
+        let browse = &self.options.settings.browse;
+        let invalidate = browse.dir_cache && browse.update_cache_on_transfer;
+        let traffic: Vec<(TransferKind, u64)> = self.tabs.iter_mut().flat_map(|t| t.poll(log_paths, invalidate)).collect();
+        for t in &mut self.tabs {
+            t.poll_edits(&self.options.settings.browse, &self.rt, ctx);
+        }
         self.stats.record(&traffic);
         self.check_queue_end(ctx);
         self.forward_raw_replies();
@@ -2905,13 +3034,14 @@ impl eframe::App for UltraRushApp {
         let mut actions = self.keyboard(&ctx);
         actions.append(&mut menu_actions);
         let entries = self.site_entries();
+        let bookmarks = self.panel_bookmarks();
         egui::CentralPanel::default().show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
             let running = tab.engine.is_some();
             let switch = [tab.switch_label(0), tab.switch_label(1)];
             let parked_remote = [0, 1].map(|s| matches!(tab.parked[s], Some(Side::Remote(_))));
             let paused = tab.paused();
-            let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, .. } = tab;
+            let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, tools, .. } = tab;
             let mut viewer = PaneViewer {
                 sides,
                 queue,
@@ -2928,6 +3058,8 @@ impl eframe::App for UltraRushApp {
                 parked_remote,
                 queue_sel,
                 paused,
+                list_rect: &mut tools.list_rect,
+                bookmarks: &bookmarks,
             };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
@@ -2938,7 +3070,9 @@ impl eframe::App for UltraRushApp {
                 .show_inside(ui, &mut viewer);
         });
         self.apply(actions, &ctx);
+        self.files_dropped(&ctx);
         self.prompt_dialog(&ctx);
+        self.tools_ui(&ctx);
         self.saved_queue_dialog(&ctx);
         self.trust_dialog(&ctx);
         self.shortcuts_window(&ctx);
@@ -2983,6 +3117,10 @@ struct PaneViewer<'a> {
     queue_sel: &'a BTreeSet<ItemId>,
     /// The engine of the tab is paused.
     paused: bool,
+    /// Screen area of each file list (files dropped from Explorer).
+    list_rect: &'a mut [Option<egui::Rect>; 2],
+    /// Bookmarks of the site of each panel.
+    bookmarks: &'a [Vec<String>; 2],
 }
 
 /// A site of the site manager, for the connection menus.
@@ -3086,6 +3224,7 @@ impl PaneViewer<'_> {
             if r.clicked() {
                 self.actions.push(Action::SwitchSide(side));
             }
+            fileops::bookmarks_menu(ui, side, &self.bookmarks[side], self.actions);
         });
         ui.horizontal(|ui| {
             if theme::icon_button(ui, "⬆", t!("files.parent")).clicked() {
@@ -3149,9 +3288,12 @@ impl PaneViewer<'_> {
             },
             _ => {}
         }
+        fileops::filter_bar(ui, &mut self.sides[side]);
         ui.separator();
 
         let rows: Vec<FileRow> = self.sides[side].rows().to_vec();
+        let marks = self.sides[side].list().marks.clone();
+        let remote_panel = self.sides[side].is_remote();
         let http = matches!(&self.sides[side], Side::Remote(r) if r.http.is_set());
         let local_panel = matches!(&self.sides[side], Side::Local(_));
         let selected = self.sides[side].selected().clone();
@@ -3168,7 +3310,7 @@ impl PaneViewer<'_> {
 
         // The whole list is a drop zone: files dragged from the other panel are
         // transferred into it.
-        let (_, dropped) = ui.dnd_drop_zone::<DragFiles, ()>(egui::Frame::new(), |ui| {
+        let (zone, dropped) = ui.dnd_drop_zone::<DragFiles, ()>(egui::Frame::new(), |ui| {
             let painter = ui.painter().clone();
             let mut table = TableBuilder::new(ui);
             if cursor.scroll
@@ -3184,6 +3326,7 @@ impl PaneViewer<'_> {
                 .column(Column::remainder().at_least(160.0).clip(true))
                 .column(Column::initial(90.0).at_least(60.0))
                 .column(Column::initial(130.0).at_least(80.0))
+                .columns(Column::initial(80.0).at_least(40.0).clip(true), if remote_panel { 3 } else { 1 })
                 .header(22.0, |mut h| {
                     for (col, label) in [
                         (SortCol::Name, t!("files.col_name")),
@@ -3198,15 +3341,25 @@ impl PaneViewer<'_> {
                             }
                         });
                     }
+                    let extra: &[&str] =
+                        if remote_panel { &["files.col_perms", "files.col_owner", "files.col_group"] } else { &["files.col_attributes"] };
+                    for k in extra {
+                        h.col(|ui| {
+                            ui.label(RichText::new(urftp_i18n::text(k)).strong());
+                        });
+                    }
                 })
                 .body(|body| {
                     body.rows(22.0, rows.len(), |mut row| {
                         let i = row.index();
                         let f = &rows[i];
                         row.set_selected(selected.contains(&i));
+                        let marked = marks.contains(&f.name);
                         row.col(|ui| {
                             let icon = if f.is_dir { "📁" } else { "📄" };
-                            ui.label(format!("{icon} {}", f.name));
+                            let text = RichText::new(format!("{icon} {}", f.name));
+                            // Marked: bold and underlined, not told by colour alone.
+                            ui.label(if marked { text.strong().underline() } else { text });
                         });
                         row.col(|ui| {
                             ui.label(if f.is_dir { String::new() } else { human_size(f.size) });
@@ -3214,12 +3367,27 @@ impl PaneViewer<'_> {
                         row.col(|ui| {
                             ui.label(RichText::new(&f.modified).weak());
                         });
+                        row.col(|ui| {
+                            ui.label(RichText::new(&f.perms).monospace().weak());
+                        });
+                        if remote_panel {
+                            row.col(|ui| {
+                                ui.label(RichText::new(&f.owner).weak());
+                            });
+                            row.col(|ui| {
+                                ui.label(RichText::new(&f.group).weak());
+                            });
+                        }
                         let resp = row.response();
                         if cursor_row == Some(i) {
                             painter.rect_stroke(resp.rect.shrink(1.0), 3.0, cursor_stroke, egui::StrokeKind::Inside);
                         }
                         let size = if f.is_dir { t!("files.folder") } else { human_size(f.size) };
-                        let spoken = format!("{}, {size}, {}", f.name, f.modified);
+                        let spoken = if marked {
+                            format!("{}, {}, {size}, {}", f.name, t!("files.marked"), f.modified)
+                        } else {
+                            format!("{}, {size}, {}", f.name, f.modified)
+                        };
                         let is_selected = selected.contains(&i);
                         resp.ctx.accesskit_node_builder(resp.id, |n| {
                             n.set_label(spoken);
@@ -3230,7 +3398,13 @@ impl PaneViewer<'_> {
                         }
                         resp.dnd_set_drag_payload(DragFiles { from: side });
                         if resp.double_clicked() && f.is_dir {
-                            opened = Some(f.name.clone());
+                            if resp.ctx.input(|i| i.modifiers.shift) {
+                                menu.push(Action::Op(side, Op::OpenBoth(f.name.clone())));
+                            } else {
+                                opened = Some(f.name.clone());
+                            }
+                        } else if resp.double_clicked() && remote_panel {
+                            menu.push(Action::Op(side, Op::View(f.name.clone())));
                         } else if resp.clicked() {
                             let m = resp.ctx.input(|inp| inp.modifiers);
                             clicked = Some((i, m.command, m.shift));
@@ -3260,6 +3434,8 @@ impl PaneViewer<'_> {
                                 menu.push(Action::Open(side, f.name.clone()));
                                 ui.close();
                             }
+                            ui.separator();
+                            fileops::context_menu(ui, side, remote_panel, f, &mut menu);
                             ui.separator();
                             if ui.button(t!("files.ctx_rename")).clicked() {
                                 menu.push(Action::Rename(side));
@@ -3291,6 +3467,7 @@ impl PaneViewer<'_> {
                 });
         });
 
+        self.list_rect[side] = Some(zone.response.rect);
         if let Some(drop) = dropped
             && drop.from != side
         {

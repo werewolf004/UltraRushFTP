@@ -22,6 +22,10 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | Connection → Site manager | Opens the site manager |
 | Connection → Reconnect / Disconnect | Acts on the connection of the active panel |
 | Connection → Local / *site* | Switches the active panel between its local folder and its connection |
+| Edit → Quick filter, Select all, Select / Unselect by mask, Copy the names, Marks, Rename several, Move to, Paste files | Act on the active panel (see *File panels*) |
+| FTP → Permissions, Change the date, View the raw listing | Act on the active remote panel |
+| FTP → Space used, Export the directory tree, Find files at sites, Compare the panels | See *Folder tools* |
+| FTP → Clear the cache of this site / every cache, Files being edited | See *Folder tools* |
 | View → Light theme / Dark theme | Switches the theme (also stored in the options) |
 | Help → Keyboard shortcuts | Lists the shortcuts below (also `F1`) |
 | Help → About UltraRushFTP | Version, build and licence |
@@ -37,6 +41,7 @@ Each panel has its own connection bar, above its folder:
 | `🔌 Connect ▾` | Menu of the sites of the site manager (groups as sub-menus) and *Site manager*: connects **this** panel; `Shift`: ghost login, `Ctrl`: `-password`. The local folder of the site, when set, goes to the other panel if it is local. |
 | `⟲ Reconnect` | Opens the connection of the panel again, in the same folder |
 | `Disconnect` | Closes the connection of the panel (shown, or kept behind the local folder) |
+| `Bookmarks ▾` | Bookmarks of the site record (remote panel): goes to the remote folder; `Shift`: the local folder of the bookmark in the other panel too |
 | `💻 Local` / `🌐 site` | Switches the panel between its local folder and its connection; the connection stays open meanwhile, and the tab keeps its name |
 
 In a remote panel, the path field takes a folder (absolute, or relative to the current
@@ -59,6 +64,17 @@ one): `Enter` goes there.
 | Conditional transfer | right-click → Conditional transfer… (see below) | — |
 | SFV or MD5 file of the selected files | right-click → Create an SFV file / Create an MD5 file (local panel) | — |
 | Sort | click a column header (again: reverse order) | — |
+| Quick filter: only the names with every word, `-word` leaves out, `*.mask`, `"-word"` as it is, or a regular expression | Edit → Quick filter | `Ctrl+F`; `Esc` closes it, `F5` shows everything again |
+| Mark / unmark (bold and underlined) | right-click → Mark / unmark; Edit → Marks (unmark all, select the marked, copy their paths) | `Ctrl+M` |
+| Select / unselect by mask (`*.rar;*.r??`) | Edit menu | `+` / `-` |
+| Copy the names of the selection, one per line | right-click → Copy the names | `Ctrl+Shift+C` |
+| Rename several items: model `%f` (name), `%n` (without extension), `%e` (extension), `%c` (counter, start, step, digits), replace (text or regular expression, `$1`/`${1}` groups), case, preview | right-click → Rename several… | — |
+| Move to a folder (relative or absolute; the other panel's folder is offered when it shows the same site) | right-click → Move to… | — |
+| Permissions (CHMOD): boxes or octal value, contents of the folders too | right-click → Permissions (remote) | — |
+| Change the date (UTC; `MFMT`, otherwise `SITE UTIME`; `SETSTAT` in SFTP) | right-click → Change the date (remote) | — |
+| View / edit a remote file with its program (see *Browsing*) | double-click a remote file (view); right-click → View / Edit | `F3` / `F4` |
+| Open a folder in both panels | `Shift`+double-click | — |
+| Send files from Explorer into the remote panel | drag them onto the panel | `Ctrl+V` after copying them in Explorer |
 
 The file-list keys act on the active panel (marked `▸`, cursor outlined) when no control
 has the keyboard focus. `Tab` / `Shift+Tab` move between the controls of the window and
@@ -66,8 +82,25 @@ has the keyboard focus. `Tab` / `Shift+Tab` move between the controls of the win
 
 ![Keyboard shortcuts](images/shortcuts.en.png)
 
+Remote panels show the permissions, owner and group columns; local panels the Windows
+attributes (`R` read-only, `H` hidden, `S` system, `A` archive).
+
 The SFV and MD5 files are named after the folder (`folder.sfv`, `folder.md5`) and written
 in it, in the background; the log says when they are ready.
+
+### Folder tools
+
+| Tool | Effect |
+|---|---|
+| Compare the panels | Options checked in the sub-menu: *same name* or *same name and size* (folders: name only), *ignore the extensions*, *hide what is the same*, *select what differs*; then *Compare now*. `F5` shows everything again |
+| Space used | Files, folders and size of a folder (remote or local), and of each folder it contains; *Depth* 0 = every level, 1 = only the folders inside... |
+| Export the directory tree | The tree as text (indent, sizes, folders only), to copy or save |
+| Find files at sites | Words separated by `;` (a word with `*` or `?` is a mask of the whole name, the others are looked for inside the names), words to leave out, folder, depth, kind, dates (`YYYY-MM-DD`), sizes (KiB); the sites ticked are searched one after the other, each with its own connection. Right-click on the results: add them (or their folder) to the queue, towards the local panel of the tab, or copy their `ftp://` address |
+| View the raw listing | The listing of the folder as the server sent it (FTP), or as `ls -l` lines (SFTP) |
+| Clear the cache | Forgets the folders kept by the directory cache (see *Browsing*) |
+| Files being edited | Remote files opened with a program: state, *Send back now*, *Stop watching* |
+
+The walks and searches use a connection of their own: the panel stays free meanwhile.
 
 ### Conditional transfer
 
@@ -316,6 +349,21 @@ record). The host, the other addresses, the bookmarks and the trusted keys are a
 | Do not transfer a sub-folder named like its parent | off | `release/release`, a common mistake |
 | Remove the 0-byte target file when the source of an FXP refuses | on | |
 
+### Browsing
+
+![Browsing](images/options-browse.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Keep the listings of the folders visited | off | A folder visited again is shown from memory; `F5` always lists from the server. A site record can say yes or no |
+| Forget the listing of a folder a transfer writes into | on | With the cache: the target folders of the transfers are listed again |
+| Program to view a remote file (`F3`) | — | Lines of masks (`*.nfo;*.txt`) and a program; the first line that matches is used |
+| Program to edit a remote file (`F4`) | — | Same; the file is watched and sent back to the server each time the program saves it |
+
+The file is downloaded to `%TEMP%\UltraRushFTP\files`. Without a matching line it opens in
+Notepad: never with the program Windows associates with its type, which could run a
+downloaded program.
+
 ## Site record
 
 ![Site manager](images/site-manager.en.png)
@@ -366,6 +414,7 @@ site*, *Separate accounts*). A setting left unticked follows the global option.
 |---|---|---|
 | Own retries and timeouts | off | Retries, delay between retries, connection and reply timeouts; they start from the global values (Transfers page) |
 | Resume interrupted transfers | on | Off: a partial file is always transferred again from zero (no `REST`) |
+| Directory cache | Global setting | Yes / No replaces *Keep the listings of the folders visited* for this site |
 | Ask the server its features (FEAT) | on | FTP: off for old servers that dislike `FEAT` (`MLSD`, `PRET`, `UTF8` are then not detected) |
 | Client name (CLNT) | empty | FTP: sent with `CLNT` after the login (empty: not sent) |
 | Own keep alive and reconnection | off | Same fields as the Keep alive page |

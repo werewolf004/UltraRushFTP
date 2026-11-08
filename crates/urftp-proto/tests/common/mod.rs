@@ -83,6 +83,8 @@ pub struct MockConfig {
     /// `SITE XDUPE` accepted; then an upload over an existing file is refused with the
     /// dupes of its folder (`553- X-DUPE:` lines).
     pub xdupe: bool,
+    /// Announces and handles `MFMT` (otherwise only `SITE UTIME`).
+    pub mfmt: bool,
 }
 
 impl Default for MockConfig {
@@ -114,6 +116,7 @@ impl Default for MockConfig {
             mode_z: false,
             xcrc: false,
             xdupe: false,
+            mfmt: false,
         }
     }
 }
@@ -581,6 +584,9 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 if sh.cfg.xcrc {
                     s.push_str(" XCRC\r\n");
                 }
+                if sh.cfg.mfmt {
+                    s.push_str(" MFMT\r\n");
+                }
                 s.push_str("211 End");
                 reply(&mut c, &s).await?;
             }
@@ -597,6 +603,13 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 st.xdupe = true;
                 reply(&mut c, "200 Activated extended dupe mode 3").await?;
             }
+            "SITE"
+                if arg.get(..6).is_some_and(|v| v.eq_ignore_ascii_case("CHMOD "))
+                    || arg.get(..6).is_some_and(|v| v.eq_ignore_ascii_case("UTIME ")) =>
+            {
+                reply(&mut c, "200 SITE command successful").await?;
+            }
+            "MFMT" if sh.cfg.mfmt => reply(&mut c, &format!("213 Modify={}", arg.split(' ').next().unwrap_or_default())).await?,
             "XCRC" if sh.cfg.xcrc => {
                 let crc = fs.lock().unwrap().files.get(&target).map(|b| crc32fast::hash(b));
                 match crc {

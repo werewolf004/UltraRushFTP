@@ -145,6 +145,8 @@ pub struct SiteSettings {
     pub upload_account: Option<Account>,
     /// Login for the downloads (`None`: the main one).
     pub download_account: Option<Account>,
+    /// Directory cache (`None`: the global setting).
+    pub dir_cache: Option<bool>,
 }
 
 impl Default for SiteSettings {
@@ -163,6 +165,7 @@ impl Default for SiteSettings {
             exists: None,
             upload_account: None,
             download_account: None,
+            dir_cache: None,
         }
     }
 }

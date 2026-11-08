@@ -111,7 +111,7 @@ async fn keep_alive_prevents_the_idle_kick() {
 async fn kicked_connection_reconnects_and_returns_to_its_folder() {
     let srv = MockServer::start(MockConfig { idle_kick: Some(Duration::from_millis(150)), ..MockConfig::default() }).await;
     srv.fs.lock().unwrap().mkdir_p("/pub/Releases");
-    let panel = Panel::start(profile(&srv, SessionPolicy { keep_alive: None, reconnect: reconnect_when_kicked() }));
+    let panel = Panel::start(profile(&srv, SessionPolicy { keep_alive: None, reconnect: reconnect_when_kicked(), dir_cache: false }));
     panel.wait_listing("/", 1).await;
     panel.handle.send(BrowseCmd::Cwd("/pub".into()));
     panel.wait_listing("/pub", 1).await;
@@ -151,7 +151,7 @@ async fn a_matching_reply_triggers_a_reconnection() {
     let srv =
         MockServer::start(MockConfig { fail_first_list: Some((1, "530 Sorry, too many users connected")), ..MockConfig::default() }).await;
     let reconnect = Reconnect { on_replies: vec!["530*too many*".into()], delay: Duration::from_millis(10), ..Reconnect::default() };
-    let panel = Panel::start(profile(&srv, SessionPolicy { keep_alive: None, reconnect }));
+    let panel = Panel::start(profile(&srv, SessionPolicy { keep_alive: None, reconnect, dir_cache: false }));
     panel.wait_listing("/", 1).await;
     let ev = panel.events();
     assert!(ev.iter().any(|e| matches!(e, BrowseEvent::Reconnecting { reason, .. } if reason.contains("too many"))), "{ev:#?}");
@@ -163,7 +163,7 @@ async fn reconnection_gives_up_after_its_attempts() {
     let srv =
         MockServer::start(MockConfig { idle_kick: Some(Duration::from_millis(100)), max_logins: Some(1), ..MockConfig::default() }).await;
     let reconnect = Reconnect { attempts: 2, ..reconnect_when_kicked() };
-    let panel = Panel::start(profile(&srv, SessionPolicy { keep_alive: None, reconnect }));
+    let panel = Panel::start(profile(&srv, SessionPolicy { keep_alive: None, reconnect, dir_cache: false }));
     panel.wait_listing("/", 1).await;
     tokio::time::sleep(Duration::from_millis(250)).await;
     panel.handle.send(BrowseCmd::Refresh);
@@ -213,4 +213,72 @@ async fn several_commands_are_sent_in_turn() {
         .take(4)
         .collect();
     assert_eq!(ka, ["NOOP", "PWD", "NOOP", "PWD"]);
+}
+
+fn command(events: &[BrowseEvent], text: &str) -> bool {
+    events.iter().any(|e| matches!(e, BrowseEvent::Log(LogLine::Command(c)) if c == text))
+}
+
+#[tokio::test]
+async fn file_operations_send_their_commands() {
+    let srv = MockServer::start(MockConfig::default()).await;
+    {
+        let mut fs = srv.fs.lock().unwrap();
+        fs.mkdir_p("/rel/sub");
+        fs.files.insert("/a.txt".into(), b"abc".to_vec());
+        fs.files.insert("/rel/sub/x.bin".into(), b"x".to_vec());
+    }
+    let panel = Panel::start(profile(&srv, SessionPolicy::default()));
+    panel.wait_listing("/", 1).await;
+
+    panel.handle.send(BrowseCmd::Chmod { items: vec![("/rel".into(), true)], mode: 0o755, recursive: true });
+    panel.wait_listing("/", 2).await;
+    let ev = panel.events();
+    for p in ["/rel", "/rel/sub", "/rel/sub/x.bin"] {
+        assert!(command(&ev, &format!("SITE CHMOD 755 {p}")), "{p}: {ev:#?}");
+    }
+
+    // 2024-02-29 13:45:07 UTC; no MFMT announced: SITE UTIME.
+    panel.handle.send(BrowseCmd::SetDate { paths: vec!["/a.txt".into()], epoch: 1_709_214_307 });
+    panel.wait_listing("/", 3).await;
+    assert!(command(&panel.events(), "SITE UTIME 20240229134507 /a.txt"), "{:#?}", panel.events());
+
+    panel.handle.send(BrowseCmd::RenameMany(vec![("/a.txt".into(), "/rel/b.txt".into())]));
+    panel.wait_listing("/", 4).await;
+    assert!(srv.fs.lock().unwrap().files.contains_key("/rel/b.txt"), "moved into /rel");
+
+    panel.handle.send(BrowseCmd::RawList);
+    panel.wait("the raw listing", |e| matches!(e, BrowseEvent::RawListing { dir, text } if dir == "/" && text.contains("rel"))).await;
+}
+
+#[tokio::test]
+async fn mfmt_is_preferred_when_announced() {
+    let srv = MockServer::start(MockConfig { mfmt: true, ..MockConfig::default() }).await;
+    srv.fs.lock().unwrap().files.insert("/a.txt".into(), b"abc".to_vec());
+    let panel = Panel::start(profile(&srv, SessionPolicy::default()));
+    panel.wait_listing("/", 1).await;
+    panel.handle.send(BrowseCmd::SetDate { paths: vec!["/a.txt".into()], epoch: 0 });
+    panel.wait_listing("/", 2).await;
+    assert!(command(&panel.events(), "MFMT 19700101000000 /a.txt"), "{:#?}", panel.events());
+}
+
+#[tokio::test]
+async fn directory_cache_spares_the_listings() {
+    let srv = MockServer::start(MockConfig::default()).await;
+    srv.fs.lock().unwrap().mkdir_p("/pub");
+    let panel = Panel::start(profile(&srv, SessionPolicy { dir_cache: true, ..SessionPolicy::default() }));
+    panel.wait_listing("/", 1).await;
+    panel.handle.send(BrowseCmd::Cwd("/pub".into()));
+    panel.wait_listing("/pub", 1).await;
+    panel.handle.send(BrowseCmd::Cwd("/".into()));
+    panel.wait_listing("/", 2).await;
+    let cached = |ev: &[BrowseEvent]| ev.iter().filter(|e| matches!(e, BrowseEvent::Listing { cached: true, .. })).count();
+    assert_eq!(cached(&panel.events()), 1, "the root came from the cache");
+    // A refresh always asks the server, and forgetting a folder lists it again.
+    panel.handle.send(BrowseCmd::Refresh);
+    panel.wait_listing("/", 3).await;
+    panel.handle.send(BrowseCmd::Invalidate(vec!["/pub/".into()]));
+    panel.handle.send(BrowseCmd::Cwd("/pub".into()));
+    panel.wait_listing("/pub", 2).await;
+    assert_eq!(cached(&panel.events()), 1, "{:#?}", panel.events());
 }

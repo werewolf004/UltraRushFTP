@@ -9,11 +9,11 @@ Goal: every feature of FTPRush v2, modernised, with **tabbed** site containers a
 
 | Crate | Role | `unsafe` |
 |---|---|---|
-| `urftp-core` | Data model: sites and bookmarks, site book storage, options, queue and queue files, item options of scripts and conditional transfers (`itemopts`), skip list, priorities, "existing file" rules, SFV / MD5 checksums, imports, DPAPI-protected secrets | forbidden |
+| `urftp-core` | Data model: sites and bookmarks, site book storage, options, queue and queue files, item options of scripts and conditional transfers (`itemopts`), skip list, priorities, "existing file" rules, SFV / MD5 checksums, panel helpers (`browsing`: quick filter, masks, renaming several items, folder comparison, local walks, space used, directory tree, CHMOD modes, dates), imports, DPAPI-protected secrets | forbidden |
 | `urftp-proto` | FTP client, explicit/implicit FTPS, SFTP, FXP, proxies, Ident server, queue engine, speed limiting, site → connection profile conversion | forbidden |
 | `urftp-script` | Interpreter of the FTPRush Pascal Script subset (`RushApp.*`, `RS_*` flags) | forbidden |
 | `urftp-i18n` | English and French catalogs (`locales/*.json`), `t!` macro, Windows language detection | forbidden |
-| `urftp-sys` | **The only crate allowed to contain `unsafe`**: mIRC link window (`TfmUltraRush`, or `TfmRush` in compatibility mode) and shared memory (application side of the mIRC protocol), DPAPI, sleep / hibernate / shut down (`power`), free disk space, `rushmirc.dll` exports (`mirc-dll` feature) | allowed, audited |
+| `urftp-sys` | **The only crate allowed to contain `unsafe`**: mIRC link window (`TfmUltraRush`, or `TfmRush` in compatibility mode) and shared memory (application side of the mIRC protocol), DPAPI, sleep / hibernate / shut down (`power`), free disk space, files copied in Explorer (`CF_HDROP`) and the `Ctrl+V` key state, `rushmirc.dll` exports (`mirc-dll` feature) | allowed, audited |
 | `rushmirc` | mIRC DLL (`cdylib`): re-exports `urftp_sys::mirc`, no code of its own | forbidden |
 | `urftp-cli` | `urftp` command-line tool | forbidden |
 | `urftp-gui` | `UltraRushFTP.exe` interface (egui / eframe, egui_dock) | forbidden |
@@ -97,6 +97,21 @@ Declared once in `[workspace.lints]` (root `Cargo.toml`) and inherited by every 
   local addresses and by host masks.
 - **Ident** (RFC 1413): server on TCP 113 (configurable), global name (`URUSHFTP` by
   default), "UNIX" system.
+
+### Browsing connection and folder tools
+
+- Each remote panel has one browsing connection (`urftp_proto::browse`): an actor that
+  runs the panel commands one after the other (list, change folder, rename, `SITE CHMOD`,
+  `MFMT` / `SITE UTIME`, raw listing), keeps the connection alive and reconnects. After a
+  series of operations it goes back to the folder of the panel, since walking the
+  contents of a folder changes the FTP current folder.
+- The directory cache lives in that actor (per connection, per folder); a refresh always
+  lists from the server, and the interface makes it forget the folders a transfer wrote
+  into.
+- The longer walks (space used, directory tree, find files at sites) and the files opened
+  with another program use connections of their own (`RemoteSession::walk`, `retr`,
+  `stor`), so the panel stays free; their results come back to the interface over
+  channels. Local walks run on a thread (`urftp_core::browsing::walk_local`).
 
 ### mIRC protocol (`rushmirc.dll`)
 

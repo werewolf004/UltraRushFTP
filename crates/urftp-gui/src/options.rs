@@ -30,10 +30,11 @@ pub(crate) enum Page {
     Connection,
     NewSite,
     Advanced,
+    Browse,
 }
 
 impl Page {
-    pub(crate) const ALL: [Page; 12] = [
+    pub(crate) const ALL: [Page; 13] = [
         Page::General,
         Page::Transfers,
         Page::Speed,
@@ -46,6 +47,7 @@ impl Page {
         Page::Connection,
         Page::NewSite,
         Page::Advanced,
+        Page::Browse,
     ];
 
     pub(crate) fn label(self) -> String {
@@ -62,6 +64,7 @@ impl Page {
             Page::Connection => t!("options.page_connection"),
             Page::NewSite => t!("options.page_new_site"),
             Page::Advanced => t!("options.page_advanced"),
+            Page::Browse => t!("options.page_browse"),
         }
     }
 }
@@ -250,6 +253,7 @@ impl OptionsWindow {
                 ui.push_id("opt-new-site", |ui| crate::sites::new_site_ui(ui, &mut s.new_site));
             }
             Page::Advanced => advanced_ui(ui, &mut s.transfer),
+            Page::Browse => browse_ui(ui, &mut s.browse),
             Page::Ident => {
                 let id = &mut s.ident;
                 ui.checkbox(&mut id.enabled, t!("options.ident_enable"));
@@ -643,6 +647,50 @@ fn case_label(c: urftp_core::NameCase) -> String {
 }
 
 /// "Advanced transfer" page: modes, names, data connections, disk and speed, CRC.
+/// "Browsing" page: directory cache and the programs of the remote files.
+fn browse_ui(ui: &mut egui::Ui, b: &mut urftp_core::settings::BrowseSettings) {
+    ui.label(RichText::new(t!("options.browse_cache_section")).strong());
+    ui.checkbox(&mut b.dir_cache, t!("options.browse_dir_cache"));
+    ui.add_enabled(b.dir_cache, egui::Checkbox::new(&mut b.update_cache_on_transfer, t!("options.browse_update_cache")));
+    ui.label(RichText::new(t!("options.browse_cache_note")).weak());
+    ui.add_space(8.0);
+    for (list, title, salt) in
+        [(&mut b.view, t!("options.browse_view_section"), "view"), (&mut b.edit, t!("options.browse_edit_section"), "edit")]
+    {
+        ui.label(RichText::new(title).strong());
+        let mut remove = None;
+        egui::Grid::new(("opt-assoc", salt)).num_columns(4).spacing([8.0, 6.0]).show(ui, |ui| {
+            ui.label(RichText::new(t!("options.browse_masks")).weak());
+            ui.label(RichText::new(t!("options.browse_program")).weak());
+            ui.end_row();
+            for (i, a) in list.iter_mut().enumerate() {
+                let r = ui.add(theme::single_line(&mut a.masks).desired_width(140.0));
+                theme::name(&r, t!("options.browse_masks"));
+                let r = ui.add(theme::single_line(&mut a.program).desired_width(260.0));
+                theme::name(&r, t!("options.browse_program"));
+                if ui.button(t!("common.browse")).clicked()
+                    && let Some(p) =
+                        rfd::FileDialog::new().add_filter(t!("options.browse_programs"), &["exe", "com", "bat", "cmd"]).pick_file()
+                {
+                    a.program = p.to_string_lossy().into_owned();
+                }
+                if theme::icon_button(ui, "✕", t!("common.remove")).clicked() {
+                    remove = Some(i);
+                }
+                ui.end_row();
+            }
+        });
+        if let Some(i) = remove {
+            list.remove(i);
+        }
+        if ui.button(t!("options.browse_add")).clicked() {
+            list.push(urftp_core::settings::FileAssociation { masks: "*.*".into(), program: String::new() });
+        }
+        ui.add_space(6.0);
+    }
+    ui.label(RichText::new(t!("options.browse_assoc_note")).weak());
+}
+
 fn advanced_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings) {
     use urftp_core::{NameCase, TransferMode};
     ui.label(RichText::new(t!("options.adv_mode_section")).strong());

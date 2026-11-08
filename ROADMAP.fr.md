@@ -54,7 +54,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
@@ -105,16 +105,16 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
   parent, retirer la cible de 0 octet quand la source FXP refuse (H6).
 
 ### I — Navigation et opérations sur les fichiers
-- ⬜ Filtre rapide (`Ctrl+F`), marques, sélection par masque, copie de plusieurs noms,
-  renommage multiple.
-- ⬜ CHMOD, déplacer vers, modifier la date, listing brut, colonnes attributs /
-  propriétaire / groupe.
-- ⬜ Comparer des dossiers (nom, taille, partiel, masquer les identiques), chercher sur les
-  sites, espace utilisé, export d'arborescence.
-- ⬜ Cache des dossiers ; voir et modifier les fichiers distants avec des programmes
-  externes.
-- ⬜ Glisser depuis l'Explorateur, coller des fichiers locaux, navigation des deux côtés
-  (`Maj`+signet, `Maj`+double-clic).
+- ✅ Filtre rapide (`Ctrl+F`), marques, sélection par masque, copie de plusieurs noms,
+  renommage multiple (I1).
+- ✅ CHMOD, déplacer vers, modifier la date, listing brut, colonnes attributs /
+  propriétaire / groupe (I2).
+- ✅ Comparer des dossiers (nom, taille, partiel, masquer les identiques), chercher sur les
+  sites, espace utilisé, export d'arborescence (I3).
+- ✅ Cache des dossiers ; voir et modifier les fichiers distants avec des programmes
+  externes (I4).
+- ✅ Glisser depuis l'Explorateur, coller des fichiers locaux, navigation des deux côtés
+  (`Maj`+signet, `Maj`+double-clic) (I5).
 
 ### J — Interface
 - ⬜ Journaux FTP / transferts / système séparés, journal sur disque, noms des sites dans

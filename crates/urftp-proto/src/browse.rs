@@ -5,6 +5,7 @@
 //! the connection is lost, or a server reply matches the reconnection masks, it connects
 //! again and goes back to the folder it was in.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -31,6 +32,27 @@ pub enum BrowseCmd {
     Rename(String, String),
     /// Raw FTP command (`RushApp.FTP.RAW`); the reply arrives as [`BrowseEvent::RawReply`].
     Raw(String),
+    /// Renames or moves several items (absolute path, new name or absolute path), then
+    /// refreshes.
+    RenameMany(Vec<(String, String)>),
+    /// Changes the permissions of items (absolute path, folder?); `recursive`: the
+    /// contents of the folders too. Then refreshes.
+    Chmod {
+        items: Vec<(String, bool)>,
+        mode: u32,
+        recursive: bool,
+    },
+    /// Changes the date of items (absolute paths, seconds since 1970), then refreshes.
+    SetDate {
+        paths: Vec<String>,
+        epoch: i64,
+    },
+    /// Listing of the current folder as sent by the server ([`BrowseEvent::RawListing`]).
+    RawList,
+    /// Forgets the cached listings of these folders (absolute paths).
+    Invalidate(Vec<String>),
+    /// Forgets every cached listing.
+    ClearCache,
 }
 
 /// Kind of trust to grant after a refusal.
@@ -46,6 +68,13 @@ pub enum BrowseEvent {
     Listing {
         dir: String,
         entries: Vec<RemoteEntry>,
+        /// Shown from the directory cache, not listed again.
+        cached: bool,
+    },
+    /// Unparsed listing of a folder.
+    RawListing {
+        dir: String,
+        text: String,
     },
     Log(LogLine),
     Error(String),
@@ -98,7 +127,7 @@ impl BrowseHandle {
 pub fn spawn(rt: &Handle, on_event: impl Fn(BrowseEvent) + Send + Sync + 'static) -> BrowseHandle {
     let (tx, rx) = unbounded_channel();
     let emit: Arc<dyn Fn(BrowseEvent) + Send + Sync> = Arc::new(on_event);
-    rt.spawn(Actor { session: None, profile: None, keep: None, last_sent: Instant::now(), dir: None, emit }.run(rx));
+    rt.spawn(Actor { session: None, profile: None, keep: None, last_sent: Instant::now(), dir: None, cache: HashMap::new(), emit }.run(rx));
     BrowseHandle { tx }
 }
 
@@ -110,6 +139,8 @@ struct Actor {
     last_sent: Instant,
     /// Folder to go back to after a reconnection.
     dir: Option<String>,
+    /// Listings of the folders visited ("Cache FTP directories").
+    cache: HashMap<String, Vec<RemoteEntry>>,
     emit: Arc<dyn Fn(BrowseEvent) + Send + Sync>,
 }
 
@@ -149,6 +180,7 @@ impl Actor {
             BrowseCmd::Connect(profile) => {
                 self.session = None;
                 self.dir = None;
+                self.cache.clear();
                 self.keep = profile.session.keep_alive.clone().map(|k| KeepAliveState::new(k, Instant::now()));
                 self.last_sent = Instant::now();
                 let log = self.log_sink();
@@ -177,7 +209,102 @@ impl Actor {
             BrowseCmd::Cwd(dir) => {
                 let Some(s) = self.session.as_mut() else { return self.emit(BrowseEvent::NotConnected) };
                 match s.cwd(&dir).await {
-                    Ok(()) => self.list().await,
+                    Ok(()) => {
+                        let here = s.current_dir().unwrap_or_else(|| "/".into());
+                        match self.cache.get(&here).filter(|_| self.caching()) {
+                            Some(entries) => {
+                                let entries = entries.clone();
+                                self.dir = Some(here.clone());
+                                self.emit(BrowseEvent::Listing { dir: here, entries, cached: true });
+                            }
+                            None => self.list().await,
+                        }
+                    }
+                    Err(e) => self.failed(e).await,
+                }
+            }
+            BrowseCmd::Invalidate(dirs) => {
+                for d in dirs {
+                    let key = d.trim_end_matches('/');
+                    self.cache.remove(if key.is_empty() { "/" } else { key });
+                }
+            }
+            BrowseCmd::ClearCache => self.cache.clear(),
+            BrowseCmd::RenameMany(items) => {
+                let Some(s) = self.session.as_mut() else { return };
+                let mut lost = None;
+                for (from, to) in items {
+                    if let Err(e) = s.rename(&from, &to).await {
+                        if is_connection_lost(&e) {
+                            lost = Some(e);
+                            break;
+                        }
+                        (self.emit)(BrowseEvent::Error(e.to_string()));
+                    }
+                }
+                self.after_batch(lost).await;
+            }
+            BrowseCmd::Chmod { items, mode, recursive } => {
+                let Some(s) = self.session.as_mut() else { return };
+                let mut lost = None;
+                let mut targets: Vec<String> = Vec::new();
+                for (p, is_dir) in &items {
+                    targets.push(p.clone());
+                    if *is_dir && recursive {
+                        let stop = std::sync::atomic::AtomicBool::new(false);
+                        let emit = self.emit.clone();
+                        let mut inner = Vec::new();
+                        let r = s
+                            .walk(
+                                p,
+                                0,
+                                &stop,
+                                |e| inner.push(crate::ftp::path::join(p, &e.path)),
+                                |dir, e| emit(BrowseEvent::Error(format!("{dir}: {e}"))),
+                            )
+                            .await;
+                        if let Err(e) = r {
+                            if is_connection_lost(&e) {
+                                lost = Some(e);
+                                break;
+                            }
+                            (self.emit)(BrowseEvent::Error(e.to_string()));
+                        }
+                        targets.extend(inner);
+                    }
+                }
+                if lost.is_none() {
+                    for p in targets {
+                        if let Err(e) = s.chmod(&p, mode).await {
+                            if is_connection_lost(&e) {
+                                lost = Some(e);
+                                break;
+                            }
+                            (self.emit)(BrowseEvent::Error(e.to_string()));
+                        }
+                    }
+                }
+                self.after_batch(lost).await;
+            }
+            BrowseCmd::SetDate { paths, epoch } => {
+                let Some(s) = self.session.as_mut() else { return };
+                let mut lost = None;
+                for p in paths {
+                    if let Err(e) = s.set_modified(&p, epoch).await {
+                        if is_connection_lost(&e) {
+                            lost = Some(e);
+                            break;
+                        }
+                        (self.emit)(BrowseEvent::Error(e.to_string()));
+                    }
+                }
+                self.after_batch(lost).await;
+            }
+            BrowseCmd::RawList => {
+                let Some(s) = self.session.as_mut() else { return self.emit(BrowseEvent::NotConnected) };
+                let dir = s.current_dir().unwrap_or_else(|| "/".into());
+                match s.raw_listing(&dir).await {
+                    Ok(text) => self.emit(BrowseEvent::RawListing { dir, text }),
                     Err(e) => self.failed(e).await,
                 }
             }
@@ -201,10 +328,7 @@ impl Actor {
                         (self.emit)(BrowseEvent::Error(e.to_string()));
                     }
                 }
-                match lost {
-                    Some(e) => self.failed(e).await,
-                    None => self.list().await,
-                }
+                self.after_batch(lost).await;
             }
             BrowseCmd::Rename(from, to) => {
                 let Some(s) = self.session.as_mut() else { return };
@@ -226,6 +350,26 @@ impl Actor {
         }
     }
 
+    fn caching(&self) -> bool {
+        self.profile.as_ref().is_some_and(|p| p.session.dir_cache)
+    }
+
+    /// End of a series of operations: the connection was lost, or the panel goes back to
+    /// its folder (walking the contents of a folder changes the FTP current folder) and
+    /// lists it again. When that folder is gone (deleted), the parent is listed.
+    async fn after_batch(&mut self, lost: Option<SessionError>) {
+        if let Some(e) = lost {
+            return self.failed(e).await;
+        }
+        if let (Some(s), Some(dir)) = (self.session.as_mut(), self.dir.clone()) {
+            let back = s.cwd(&dir).await;
+            if back.is_err() && s.cwd(crate::ftp::path::split(&dir).0.unwrap_or("/")).await.is_err() {
+                let _ = s.cwd("/").await;
+            }
+        }
+        self.list().await;
+    }
+
     /// Lists the current folder; a failure goes through [`Actor::failed`].
     async fn list(&mut self) {
         if let Err(e) = self.try_list().await {
@@ -239,7 +383,10 @@ impl Actor {
         entries.sort_by(|a, b| b.is_dir().cmp(&a.is_dir()).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
         let dir = s.current_dir().unwrap_or_else(|| "/".into());
         self.dir = Some(dir.clone());
-        self.emit(BrowseEvent::Listing { dir, entries });
+        if self.profile.as_ref().is_some_and(|p| p.session.dir_cache) {
+            self.cache.insert(dir.clone(), entries.clone());
+        }
+        self.emit(BrowseEvent::Listing { dir, entries, cached: false });
         Ok(())
     }
 

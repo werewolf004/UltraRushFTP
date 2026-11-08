@@ -73,6 +73,9 @@ pub struct SessionPolicy {
     /// `None`: no anti-idle command.
     pub keep_alive: Option<KeepAlive>,
     pub reconnect: Reconnect,
+    /// Folders already visited are shown from memory instead of being listed again
+    /// ("Cache FTP directories"); a refresh always asks the server.
+    pub dir_cache: bool,
 }
 
 /// Is the connection gone (closed, network error, timeout, `421`)?

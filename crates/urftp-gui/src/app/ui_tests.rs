@@ -964,3 +964,196 @@ fn a_new_folder_is_entered_when_asked() {
     assert_eq!(ui.left_path(), made, "the panel is now in the new folder");
     std::fs::remove_dir(&made).unwrap();
 }
+
+// ---------------------------------------------------------------- block I
+
+/// Puts panel `side` of the first tab in a new scratch folder holding `files` (name, size).
+fn panel_in(ui: &mut Ui, side: usize, dir: &str, files: &[(&str, usize)]) -> PathBuf {
+    let path = scratch().join(dir);
+    let _ = std::fs::remove_dir_all(&path);
+    std::fs::create_dir_all(&path).unwrap();
+    for (name, len) in files {
+        if let Some(sub) = name.strip_suffix('/') {
+            std::fs::create_dir_all(path.join(sub)).unwrap();
+        } else {
+            std::fs::write(path.join(name), vec![b'x'; *len]).unwrap();
+        }
+    }
+    if let Side::Local(l) = &mut ui.app().tabs[0].sides[side] {
+        l.path = path.clone();
+        l.reload();
+    }
+    ui.run();
+    path
+}
+
+fn names(dir: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    v.sort();
+    v
+}
+
+fn op(ui: &mut Ui, side: usize, op: super::Op) {
+    act(ui, super::Action::Op(side, op));
+    ui.run();
+}
+
+#[test]
+fn quick_filter_keeps_matching_names_and_f5_brings_everything_back() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.key_with(Modifiers::COMMAND, Key::F);
+    assert!(ui.app().tabs[0].sides[0].list().filter_open, "the filter bar is open");
+    assert!(ui.has_label(&t!("ops.filter")), "and named");
+    ui.harness.event(egui::Event::Text("a -bin".into()));
+    ui.run();
+    assert_eq!(ui.left_rows(), ["alpha.txt", "gamma.log"], "words kept, -word left out, folders filtered too");
+    ui.key(Key::Escape);
+    assert_eq!(ui.left_rows().len(), 4, "Escape closes the filter");
+
+    ui.key_with(Modifiers::COMMAND, Key::F);
+    ui.harness.event(egui::Event::Text("*.log".into()));
+    ui.run();
+    assert_eq!(ui.left_rows(), ["gamma.log"]);
+    // Back to the list, then F5.
+    ui.harness.ctx.memory_mut(|m| m.stop_text_input());
+    ui.harness.ctx.memory_mut(|m| {
+        if let Some(id) = m.focused() {
+            m.surrender_focus(id);
+        }
+    });
+    ui.run();
+    ui.key(Key::F5);
+    assert_eq!(ui.left_rows().len(), 4);
+    assert!(!ui.app().tabs[0].sides[0].list().filter_open);
+}
+
+#[test]
+fn marks_select_by_mask_and_copy_names() {
+    let mut ui = Ui::start(Lang::Fr, false);
+    ui.key(Key::Home);
+    ui.key_with(Modifiers::COMMAND, Key::M);
+    let first = ui.left_rows()[0].clone();
+    assert!(ui.app().tabs[0].sides[0].list().marks.contains(&first), "the row under the cursor is marked");
+    ui.key(Key::End);
+    op(&mut ui, 0, super::Op::SelectMarked);
+    assert_eq!(ui.left_selection(), std::slice::from_ref(&first));
+
+    ui.key(Key::Plus);
+    assert!(matches!(ui.app().tabs[0].tools.dialog, Some(super::fileops::Dialog::Mask { select: true, .. })));
+    if let Some(super::fileops::Dialog::Mask { masks, .. }) = &mut ui.app().tabs[0].tools.dialog {
+        *masks = "*.log; *.bin".into();
+    }
+    ui.run();
+    ui.harness.get_by_label(&t!("common.validate")).click();
+    ui.run();
+    let mut sel = ui.left_selection();
+    sel.sort();
+    assert_eq!(sel, ["beta.bin", "docs", "gamma.log"]);
+
+    op(&mut ui, 0, super::Op::UnmarkAll);
+    assert!(ui.app().tabs[0].sides[0].list().marks.is_empty());
+}
+
+#[test]
+fn several_local_files_are_renamed_with_a_counter() {
+    let mut ui = Ui::start(Lang::En, true);
+    let dir = panel_in(&mut ui, 0, "rename", &[("a.TXT", 1), ("b.txt", 1)]);
+    ui.key_with(Modifiers::COMMAND, Key::A);
+    op(&mut ui, 0, super::Op::RenameMany);
+    if let Some(super::fileops::Dialog::Rename { form, .. }) = &mut ui.app().tabs[0].tools.dialog {
+        form.template = "%c-%n.%e".into();
+        form.case = urftp_core::NameCase::Lower;
+    } else {
+        panic!("no rename dialog");
+    }
+    ui.run();
+    assert!(ui.has_label("01-a.txt"), "the preview shows the new names");
+    ui.harness.get_by_label(&t!("common.validate")).click();
+    ui.run();
+    assert_eq!(names(&dir), ["01-a.txt", "02-b.txt"]);
+}
+
+#[test]
+fn local_items_are_moved_into_a_folder() {
+    let mut ui = Ui::start(Lang::En, true);
+    let dir = panel_in(&mut ui, 0, "move", &[("x.bin", 3), ("y.bin", 3), ("into/", 0)]);
+    let rows = ui.left_rows();
+    for (i, n) in rows.iter().enumerate() {
+        if n.ends_with(".bin") {
+            ui.app().tabs[0].sides[0].selected_mut().insert(i);
+        }
+    }
+    op(&mut ui, 0, super::Op::MoveTo);
+    if let Some(super::fileops::Dialog::Move { target, .. }) = &mut ui.app().tabs[0].tools.dialog {
+        *target = "into".into();
+    }
+    ui.run();
+    ui.harness.get_by_label(&t!("common.validate")).click();
+    ui.run();
+    assert_eq!(names(&dir), ["into"]);
+    assert_eq!(names(&dir.join("into")), ["x.bin", "y.bin"]);
+}
+
+#[test]
+fn comparison_hides_the_same_items_and_selects_the_others() {
+    let mut ui = Ui::start(Lang::En, true);
+    panel_in(&mut ui, 0, "cmp-l", &[("same.bin", 5), ("size.bin", 5), ("only-left.txt", 1)]);
+    panel_in(&mut ui, 1, "cmp-r", &[("same.bin", 5), ("size.bin", 9), ("only-right.txt", 1)]);
+    ui.app().tabs[0].tools.compare =
+        super::fileops::CompareForm { by: urftp_core::browsing::CompareBy::NameSize, partial: false, hide_same: true, select: true };
+    op(&mut ui, 0, super::Op::Compare);
+    let right: Vec<String> = ui.app().tabs[0].sides[1].rows().iter().map(|r| r.name.clone()).collect();
+    assert_eq!(ui.left_rows(), ["only-left.txt", "size.bin"], "same.bin hidden");
+    assert_eq!(right, ["only-right.txt", "size.bin"]);
+    let mut sel = ui.left_selection();
+    sel.sort();
+    assert_eq!(sel, ["only-left.txt", "size.bin"], "what differs is selected");
+    ui.key(Key::F5);
+    assert_eq!(ui.left_rows().len(), 3, "F5 shows everything again");
+}
+
+#[test]
+fn shift_double_click_opens_the_folder_in_both_panels() {
+    let mut ui = Ui::start(Lang::En, true);
+    let home = scratch().join("home");
+    op(&mut ui, 0, super::Op::OpenBoth("docs".into()));
+    let right = match &ui.app().tabs[0].sides[1] {
+        Side::Local(l) => l.path.clone(),
+        Side::Remote(_) => PathBuf::new(),
+    };
+    assert_eq!(ui.left_path(), home.join("docs"));
+    assert_eq!(right, home.join("docs"));
+}
+
+/// Waits for the walk windows of the first tab to finish.
+fn wait_walks(ui: &mut Ui) {
+    for _ in 0..200 {
+        ui.run();
+        if ui.app().tabs[0].tools.walks_done() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("the walk never finished");
+}
+
+#[test]
+fn space_used_and_directory_tree_of_a_local_folder() {
+    let mut ui = Ui::start(Lang::En, true);
+    let dir = panel_in(&mut ui, 0, "walk", &[("a/", 0), ("top.bin", 100)]);
+    std::fs::write(dir.join("a").join("in.bin"), vec![0u8; 50]).unwrap();
+    op(&mut ui, 0, super::Op::SpaceUsed);
+    ui.harness.get_by_label(&t!("common.validate")).click();
+    wait_walks(&mut ui);
+    assert!(ui.has_label(&t!("ops.space_total", files = 2, folders = 1, size = crate::theme::human_size(150))), "totals shown");
+
+    op(&mut ui, 0, super::Op::ExportTree);
+    if let Some(super::fileops::Dialog::Walk { tree_opts, .. }) = &mut ui.app().tabs[0].tools.dialog {
+        tree_opts.indent = "-".into();
+    }
+    ui.run();
+    ui.harness.get_by_label(&t!("common.validate")).click();
+    wait_walks(&mut ui);
+    let text = ui.app().tabs[0].tools.last_tree_text();
+    assert!(text.ends_with("-a/\n--in.bin\n-top.bin\n"), "{text}");
+}

@@ -43,11 +43,12 @@ pub fn global_proxy(g: &GlobalProxy) -> Option<ProxyConfig> {
 /// Keep alive and reconnection from the options (retries and delay of the transfers are
 /// reused for the reconnection attempts).
 pub fn session_policy(s: &Settings) -> SessionPolicy {
-    policy(&s.keep_alive, s.transfer.retries, s.transfer.retry_delay_secs)
+    policy(&s.keep_alive, s.transfer.retries, s.transfer.retry_delay_secs, s.browse.dir_cache)
 }
 
-fn policy(k: &KeepAliveSettings, retries: u32, retry_delay_secs: u32) -> SessionPolicy {
+fn policy(k: &KeepAliveSettings, retries: u32, retry_delay_secs: u32, dir_cache: bool) -> SessionPolicy {
     SessionPolicy {
+        dir_cache,
         keep_alive: k.enabled.then(|| KeepAlive {
             interval: Duration::from_secs(u64::from(k.interval_secs.max(5))),
             commands: split_list(&k.commands),
@@ -189,7 +190,12 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
         password: if site.anonymous { settings.anonymous_password().to_string() } else { site.password.clone() },
         protocol,
         limits: site.limits(),
-        session: policy(own.keep_alive.as_ref().unwrap_or(&settings.keep_alive), retries, retry_delay_secs),
+        session: policy(
+            own.keep_alive.as_ref().unwrap_or(&settings.keep_alive),
+            retries,
+            retry_delay_secs,
+            own.dir_cache.unwrap_or(settings.browse.dir_cache),
+        ),
         hosts: HostList::new(site.alt_hosts.iter().filter_map(|a| parse_address(a, site.port)).collect()),
         rules: SiteRules {
             retries: own.retries,

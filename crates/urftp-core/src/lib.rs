@@ -12,6 +12,7 @@
 //! [`localpath`] (paths longer than `MAX_PATH`). Tabs (FTPRush "containers") and
 //! statistics live in the interface crate.
 
+pub mod browsing;
 pub mod checksum;
 pub mod exists;
 pub mod import;

@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
+Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 
 ## Main window and menus
 
@@ -28,14 +28,14 @@ Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 
 | Topic | Status | Notes |
 |---|---|---|
-| Search (fast filter) | ⬜ | `Ctrl+F` filter of a panel, words, `-word`, regex |
+| Search (fast filter) | ✅ | `Ctrl+F`: words, `-word`, masks, regular expression; `F5` shows everything again |
 | Rename | ✅ | `F2` |
 | Delete | ✅ | `Del`, with confirmation |
 | Make directory | ✅ | `F7` |
-| Rename multiple files | ⬜ | |
-| Copy selected names | 🟡 | "Copy path" for one item; several names not yet |
-| Mark / unmark, unmark all, select marked, export marks | ⬜ | Marks distinct from the selection |
-| Select (by mask) | ⬜ | |
+| Rename multiple files | ✅ | Model (`%n`, `%e`, `%c`), replace (regular expression), case, preview |
+| Copy selected names | ✅ | `Ctrl+Shift+C`, one name per line |
+| Mark / unmark, unmark all, select marked, export marks | ✅ | `Ctrl+M`; marked rows bold and underlined |
+| Select (by mask) | ✅ | `+` / `-`, masks separated by `;` |
 | Select all | ✅ | `Ctrl+A` |
 
 ### View
@@ -48,25 +48,25 @@ Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | System log, transfer log, FTP log | 🟡 | One log per tab with command / reply / status / error colours |
 | Task window | ⬜ | Scheduled tasks |
 | Remote columns size / date | ✅ | |
-| Remote columns attributes / user / group | ⬜ | Parsed by the listing, not shown |
+| Remote columns attributes / user / group | ✅ | Remote panels; local panels show the Windows attributes |
 | Local columns size / date | ✅ | |
 | Window list columns | ⬜ | |
 | Grid lines | ➖ | Striped rows instead |
 | Columns auto size | 🟡 | Columns resizable, no automatic fit |
-| Current edit files | ⬜ | Comes with *File associations* |
+| Current edit files | ✅ | FTP menu → Files being edited |
 
 ### FTP
 
 | Topic | Status | Notes |
 |---|---|---|
 | Quick connect dialog | ✅ | Quick-connect bar |
-| Attributes (CHMOD) | ⬜ | `SITE CHMOD` |
-| Move to | ⬜ | Remote `RNFR`/`RNTO` to another folder |
-| Modify date of FTP files | ⬜ | `MFMT` / `SITE UTIME` |
-| Calculate FTP space used | ⬜ | Recursive size with a depth |
-| Export directory tree list | ⬜ | |
-| Find files at sites | ⬜ | Recursive search with filters |
-| Clean site cache / all caches | ⬜ | Comes with the directory cache |
+| Attributes (CHMOD) | ✅ | `SITE CHMOD` (FTP), `SETSTAT` (SFTP), contents of the folders too |
+| Move to | ✅ | Remote (`RNFR`/`RNTO`) and local |
+| Modify date of FTP files | ✅ | `MFMT`, otherwise `SITE UTIME`; `SETSTAT` in SFTP |
+| Calculate FTP space used | ✅ | Remote and local, with a depth |
+| Export directory tree list | ✅ | Indent, sizes, folders only; copy or save |
+| Find files at sites | ✅ | Words and masks, exclusions, kind, dates, sizes, depth; to the queue, copy the address |
+| Clean site cache / all caches | ✅ | |
 
 ### Tools → Queue
 
@@ -96,8 +96,8 @@ Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Command (predefined site commands) | ⬜ | Menu of `SITE` commands per server type |
 | Command designer | ⬜ | |
 | Send RAW command | 🟡 | `RushApp.FTP.RAW` from the script console; no dialog, no "send to all" |
-| Compare folder contents (name, size, partial, hide same) | ⬜ | |
-| View raw directory | ⬜ | Unparsed listing |
+| Compare folder contents (name, size, partial, hide same) | ✅ | FTP menu → Compare the panels |
+| View raw directory | ✅ | FTP: as sent by the server; SFTP: `ls -l` lines |
 | Script designer | 🟡 | Script console in each tab; no editor with files |
 | Languages | 🟡 | English and French |
 | Hotkey manager | ⬜ | Shortcuts are fixed (list: `F1`) |
@@ -141,11 +141,11 @@ Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Bookmark dialog | 🟡 | Name, remote and local paths; date tokens (`%yyyy%`, `%mm%`...) not yet |
 | Create CRC checksums | ✅ | SFV and MD5 files |
 | Condition transfer | ✅ | See *Conditional transfer* |
-| Calculate FTP space used | ⬜ | |
+| Calculate FTP space used | ✅ | |
 | Edit queue | ✅ | |
-| Export directory tree list | ⬜ | |
-| Fast search | ⬜ | |
-| Find files at sites | ⬜ | |
+| Export directory tree list | ✅ | |
+| Fast search | ✅ | See *Search (fast filter)* |
+| Find files at sites | ✅ | |
 | Hotkey manager | ⬜ | |
 | Send RAW dialog (`Ctrl+R`, several lines, all sites) | ⬜ | |
 | Manual download | ⬜ | |
@@ -200,7 +200,7 @@ Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | List mode: trim leading spaces | ✅ | Always done for `STAT` |
 | List mode: custom list command | ✅ | |
 | List mode: UPnP | ⬜ | |
-| Directory cache per site | ⬜ | |
+| Directory cache per site | ✅ | Global setting, or yes / no in the site record |
 | Directory charset (non-UTF-8 servers) | ✅ | Commands, replies and listings; 14 character sets |
 | Listing parser choice | ✅ | Automatic, Unix or DOS/IIS (`MLSD` is always read as such) |
 | SSL: `PBSZ 0` | ✅ | |
@@ -226,7 +226,7 @@ Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Default download path | ✅ | Local panels start there |
 | Data folder path | ✅ | `-f`, `URUSHFTP_DATA` |
 | Daily backup of the configuration | ⬜ | |
-| Cache FTP directories, update cache of transferring folder | ⬜ | |
+| Cache FTP directories, update cache of transferring folder | ✅ | Options › Browsing |
 | Check new version at startup | ➖ | No online update in this phase |
 | Single instance | ⬜ | |
 | Splash screen | ➖ | The window opens immediately |
@@ -339,10 +339,10 @@ Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | Topic | Status | Notes |
 |---|---|---|
 | Double-click actions (file, log, site, side indicator, tab, queue item) | 🟡 | Fixed: opens folders; no choice |
-| Drag from Explorer to a remote panel | ⬜ | Drag and drop works between the two panels |
-| Paste local files into a remote panel (`Ctrl+V`) | ⬜ | |
+| Drag from Explorer to a remote panel | ✅ | Into the folder of the remote panel under the pointer |
+| Paste local files into a remote panel (`Ctrl+V`) | ✅ | |
 | Explorer context menu in the local panel | ⬜ | |
-| File associations: view and edit remote files with external programs | ⬜ | |
+| File associations: view and edit remote files with external programs | ✅ | Options › Browsing; Notepad when no program matches; an edited file is sent back when saved |
 | Event notification: sounds, tray pop-ups, event list | ⬜ | |
 | Confirmations: delete local files | ✅ | Always asked |
 | Confirmations: exit, shut down, close a tab with connections or queue, delete queue items | ⬜ | |
@@ -388,8 +388,8 @@ Summary (284 topics): ✅ 152 · 🟡 32 · ⬜ 83 · ➖ 17.
 | FAQ: limit connections for a site | ✅ | |
 | Tip: `Shift` + connect = ghost login `!user` | ✅ | Site manager; `RS_GHOST` in scripts |
 | Tip: `Ctrl` + connect = `-password` | ✅ | Site manager; `RS_INVERT` in scripts |
-| Tip: `Shift` + bookmark = both sides | ⬜ | |
-| Tip: `Shift` + double-click folder = both sides | ⬜ | |
+| Tip: `Shift` + bookmark = both sides | ✅ | Bookmarks menu of the remote panel |
+| Tip: `Shift` + double-click folder = both sides | ✅ | |
 | Tip: `%F%` / `%D%` in skip and allow lists of `Transfer` | ✅ | |
 | mIRC DLL (`rushmirc.dll`, `Invoke`, `RushScript`...) | ✅ | 32 and 64-bit |
 
