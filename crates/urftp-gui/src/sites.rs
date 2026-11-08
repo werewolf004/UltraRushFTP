@@ -1286,8 +1286,8 @@ fn own_settings(ui: &mut egui::Ui, s: &mut Site, global: &Settings, show_passwor
             tri(ui, "site-xdupe", &t!("options.adv_xdupe"), &mut o.xdupe);
             tri(ui, "site-xdupe-refresh", &t!("options.adv_xdupe_refresh"), &mut o.xdupe_refresh);
             tri(ui, "site-noop", &t!("site.noop_during_transfer"), &mut o.noop_during_transfer);
-            buffer_choice(ui, &t!("site.send_buffer"), &mut o.send_buffer_kib, t.tcp_buffer_kib);
-            buffer_choice(ui, &t!("site.receive_buffer"), &mut o.receive_buffer_kib, t.tcp_buffer_kib);
+            buffer_choice(ui, &t!("site.send_buffer"), &mut o.send_buffer_kib, t.send_buffer_kib);
+            buffer_choice(ui, &t!("site.receive_buffer"), &mut o.receive_buffer_kib, t.receive_buffer_kib);
         });
     }
 

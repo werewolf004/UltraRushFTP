@@ -152,8 +152,12 @@ pub struct TransferSettings {
     pub no_resume_ascii: bool,
     /// Data connections in active mode (`PORT`) for every site.
     pub force_active: bool,
-    /// Buffer of the data connections in KiB (0: the system's).
-    pub tcp_buffer_kib: u32,
+    /// Send and receive buffers of the data connections in KiB (0: the system's).
+    pub send_buffer_kib: u32,
+    pub receive_buffer_kib: u32,
+    /// Single buffer of the files written before 0.8.0: read into both, never written.
+    #[serde(rename = "tcp_buffer_kib", skip_serializing)]
+    pub legacy_buffer_kib: Option<u32>,
     /// KiB cut from the end of a partial file before resuming a download.
     pub resume_rollback_kib: u32,
     /// MiB kept free on the local disk: a download that would go below fails.
@@ -266,7 +270,9 @@ impl Default for TransferSettings {
             ascii_masks: DEFAULT_ASCII_MASKS.into(),
             no_resume_ascii: true,
             force_active: false,
-            tcp_buffer_kib: 0,
+            send_buffer_kib: 0,
+            receive_buffer_kib: 0,
+            legacy_buffer_kib: None,
             resume_rollback_kib: 0,
             keep_free_mib: 0,
             unlimited_local: false,
@@ -1004,10 +1010,26 @@ impl Settings {
         crate::sitestore::data_dir().join(FILE_NAME)
     }
 
+    /// Settings of an earlier version moved to their new place.
+    pub fn upgrade(&mut self) {
+        let t = &mut self.transfer;
+        if let Some(kib) = t.legacy_buffer_kib.take()
+            && t.send_buffer_kib == 0
+            && t.receive_buffer_kib == 0
+        {
+            t.send_buffer_kib = kib;
+            t.receive_buffer_kib = kib;
+        }
+    }
+
     /// Loads the options; missing file = default values.
     pub fn load(path: &Path) -> io::Result<Self> {
         match std::fs::read_to_string(path) {
-            Ok(t) => serde_json::from_str(&t).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e)),
+            Ok(t) => {
+                let mut s: Self = serde_json::from_str(&t).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                s.upgrade();
+                Ok(s)
+            }
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e),
         }
@@ -1025,6 +1047,15 @@ impl Settings {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_single_buffer_of_earlier_versions_fills_both() {
+        let mut s: Settings = serde_json::from_str(r#"{"transfer": {"tcp_buffer_kib": 256}}"#).unwrap();
+        s.upgrade();
+        assert_eq!((s.transfer.send_buffer_kib, s.transfer.receive_buffer_kib, s.transfer.legacy_buffer_kib), (256, 256, None));
+        let written = serde_json::to_string(&s).unwrap();
+        assert!(!written.contains("tcp_buffer_kib") && written.contains("\"receive_buffer_kib\":256"));
+    }
 
     #[test]
     fn skip_rules_files() {

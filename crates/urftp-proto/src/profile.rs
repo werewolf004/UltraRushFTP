@@ -142,8 +142,8 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             // "Force active mode for transfers" of the options applies to every site.
             active_mode: site.transfer_mode == TransferMode::Active || settings.transfer.force_active,
             xdupe: own.xdupe.unwrap_or(settings.transfer.xdupe),
-            send_buffer: buffer(own.send_buffer_kib, settings.transfer.tcp_buffer_kib),
-            receive_buffer: buffer(own.receive_buffer_kib, settings.transfer.tcp_buffer_kib),
+            send_buffer: buffer(own.send_buffer_kib, settings.transfer.send_buffer_kib),
+            receive_buffer: buffer(own.receive_buffer_kib, settings.transfer.receive_buffer_kib),
             disabled_features: own.features.map(|f| f.disabled().into_iter().map(String::from).collect()).unwrap_or_default(),
             utf8_login: site.utf8_username,
             force_utf8: site.force_utf8,
@@ -349,7 +349,8 @@ mod tests {
     fn site_properties_reach_the_connection() {
         use urftp_core::site::{Account, FeatureSwitches, SiteListing};
         let mut settings = Settings::default();
-        settings.transfer.tcp_buffer_kib = 64;
+        settings.transfer.send_buffer_kib = 64;
+        settings.transfer.receive_buffer_kib = 128;
         settings.transfer.xdupe = true;
         let mut site = Site {
             port: 2121,
@@ -370,7 +371,9 @@ mod tests {
         let ProfileProtocol::Ftp(cfg) = &p.protocol else { panic!() };
         assert!(cfg.utf8_login && cfg.force_utf8 && cfg.pasv_use_server_ip && !cfg.send_pbsz && !cfg.xdupe);
         assert!(cfg.charset.is_none(), "forced UTF-8 replaces the character set");
-        assert_eq!((cfg.send_buffer, cfg.receive_buffer), (Some(64 * 1024), None));
+        assert_eq!((cfg.send_buffer, cfg.receive_buffer), (Some(64 * 1024), None), "the site sets the receive buffer to the system's");
+        let ProfileProtocol::Ftp(plain) = site_profile(&Site::default(), &settings).protocol else { panic!() };
+        assert_eq!((plain.send_buffer, plain.receive_buffer), (Some(64 * 1024), Some(128 * 1024)));
         assert_eq!(cfg.disabled_features, ["PRET", "CPSV"]);
         assert!(cfg.noop_during_transfer.is_some());
         assert_eq!(p.rules.fxp_tls, Some(false));

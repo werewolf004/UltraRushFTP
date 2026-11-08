@@ -213,7 +213,7 @@ Résumé (287 sujets) : ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 | Transfert : `NOOP` pendant les transferts | ✅ | Global ou par site |
 | Transfert : méthode FXP (pas de `PASV` côté source, `PASV` côté cible) | ✅ | Par site ; inversion automatique quand `PORT` est refusé |
 | Transfert : forcer le mode actif | ✅ | Mode de transfert de la fiche ; pour tous les sites dans Transfert avancé |
-| Transfert : taille du tampon TCP | ✅ | Global, ou tampons d'envoi et de réception par site |
+| Transfert : taille du tampon TCP | ✅ | Tampons d'envoi et de réception, en global et par site |
 | Liste d'exclusion, priorités, règles « fichier existant » par site | ✅ | Règles « fichier existant » par sens (envoi, réception, FXP), aussi en global |
 | Export / import de la liste d'exclusion | ✅ | JSON, ou fichier texte d'un masque par ligne |
 | Notification d'événements : surveiller des dossiers | ✅ | Dans la fiche du site ou Options › Notifications ; une connexion à part à chaque vérification |

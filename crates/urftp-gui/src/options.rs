@@ -1227,7 +1227,8 @@ fn advanced_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings
         let l = ui.label(t!("options.adv_mode_z_except"));
         ui.add_enabled(t.mode_z, theme::single_line(&mut t.mode_z_exceptions).desired_width(360.0)).labelled_by(l.id);
         ui.end_row();
-        theme::grid_row(ui, t!("options.adv_tcp_buffer"), egui::DragValue::new(&mut t.tcp_buffer_kib).range(0..=65_536).speed(8));
+        theme::grid_row(ui, t!("options.adv_send_buffer"), egui::DragValue::new(&mut t.send_buffer_kib).range(0..=65_536).speed(8));
+        theme::grid_row(ui, t!("options.adv_receive_buffer"), egui::DragValue::new(&mut t.receive_buffer_kib).range(0..=65_536).speed(8));
     });
     ui.add_space(8.0);
 

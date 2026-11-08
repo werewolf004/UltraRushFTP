@@ -213,7 +213,7 @@ Summary (287 topics): ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 | Transfer: `NOOP` during the transfers | ✅ | Global or per site |
 | Transfer: FXP method (no `PASV` as source, `PASV` as target) | ✅ | Per site; automatic reversal when `PORT` is refused |
 | Transfer: force active mode | ✅ | Transfer mode of the site record; for every site in Advanced transfer |
-| Transfer: TCP buffer size | ✅ | Global, or send and receive buffers per site |
+| Transfer: TCP buffer size | ✅ | Send and receive buffers, global and per site |
 | Skip list, priority, file-exists rules per site | ✅ | "Existing file" rules per direction (upload, download, FXP), also globally |
 | Skip list export / import | ✅ | JSON, or a text file with one mask per line |
 | Event notification: monitor folders for new items | ✅ | In the site record or Options › Notifications; a connection of its own at each check |

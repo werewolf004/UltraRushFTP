@@ -377,7 +377,7 @@ record). The host, the other addresses, the bookmarks and the trusted keys are a
 | XDUPE | off | `SITE XDUPE 3` after login; the dupes listed in a refused upload are skipped, and the next ones of the folder are not even tried |
 | List the folder again when XDUPE returns nothing | off | An upload refused without `X-DUPE` names: when the target exists after all (`SIZE`), the file is skipped as a dupe |
 | Compress the transfers (MODE Z) | off | When the server announces `MODE Z`; never for the masks of *Never compressed* (archives, video, pictures by default) |
-| TCP buffer of the data connections (KiB) | 0 (system) | Send and receive buffers |
+| Send buffer / receive buffer of the data connections (KiB) | 0 (system) | Set apart (the single buffer of an earlier version fills both); a site can replace each one |
 | Roll back before resuming a download (KiB) | 0 | The end of a partial file is cut off before resuming |
 | Keep free on the local disk (MiB) | 0 | A download that would leave less fails |
 | No speed limit for the local network | off | Sites on a private, loopback or link-local address |

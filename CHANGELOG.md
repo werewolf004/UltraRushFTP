@@ -27,6 +27,8 @@ Site properties as complete as those of FTPRush v2.
 - Name case in FXP and *List the folder again when XDUPE returns nothing* (Advanced
   transfer).
 - Skip list **Export… / Import…** (JSON, or one mask per line).
+- Send and receive buffers set apart in Advanced transfer (the single buffer of earlier
+  versions fills both).
 
 ### Changed
 

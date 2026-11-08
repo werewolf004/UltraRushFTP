@@ -29,6 +29,8 @@ Propriétés des sites aussi complètes que celles de FTPRush v2.
 - Casse des noms en FXP et *Relire le dossier quand XDUPE ne renvoie rien* (Transfert
   avancé).
 - **Exporter… / Importer…** de la liste d'exclusion (JSON, ou un masque par ligne).
+- Tampons d'envoi et de réception réglés à part dans Transfert avancé (le tampon unique
+  des versions précédentes remplit les deux).
 
 ### Modifié
 

@@ -385,7 +385,7 @@ les clés de confiance restent toujours vides. *Valeurs par défaut* remet le mo
 | XDUPE | désactivé | `SITE XDUPE 3` après la connexion ; les doublons listés dans un envoi refusé sont ignorés, et les suivants du dossier ne sont même pas essayés |
 | Relire le dossier quand XDUPE ne renvoie rien | désactivé | Un envoi refusé sans noms `X-DUPE` : si la cible existe malgré tout (`SIZE`), le fichier est ignoré comme doublon |
 | Compresser les transferts (MODE Z) | désactivé | Quand le serveur annonce `MODE Z` ; jamais pour les masques de *Jamais compressés* (archives, vidéo, images par défaut) |
-| Tampon TCP des connexions de données (Kio) | 0 (système) | Tampons d'envoi et de réception |
+| Tampon d'envoi / tampon de réception des connexions de données (Kio) | 0 (système) | Réglés à part (le tampon unique d'une version précédente remplit les deux) ; un site peut remplacer chacun |
 | Recul avant de reprendre un téléchargement (Kio) | 0 | La fin d'un fichier partiel est coupée avant la reprise |
 | Espace à garder libre sur le disque local (Mio) | 0 | Un téléchargement qui en laisserait moins échoue |
 | Pas de limite de vitesse pour le réseau local | désactivé | Sites à une adresse privée, de bouclage ou de lien local |
