@@ -36,7 +36,7 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `rustls` | 0.23 | Apache-2.0 / ISC / MIT | proto | TLS 1.2/1.3 pour FTPS (fournisseur ring, sans OpenSSL) |
 | `tokio-rustls` | 0.26 | MIT / Apache-2.0 | proto | rustls sur les flux tokio |
 | `rustls-native-certs` | 0.8 | Apache-2.0 / ISC / MIT | proto | Magasin de certificats de Windows |
-| `ring` | 0.17 | Apache-2.0 AND ISC | proto | Empreintes SHA-256, fournisseur cryptographique de rustls et russh |
+| `ring` | 0.17 | Apache-2.0 AND ISC | proto, core | Empreintes SHA-256, fournisseur cryptographique de rustls et russh ; PBKDF2 du mot de passe maître |
 | `russh` | 0.65 | Apache-2.0 | proto | Client SSH (transport de SFTP) |
 | `russh-sftp` | 3.0 | Apache-2.0 | proto | Protocole SFTP |
 | `encoding_rs` | 0.8 | (Apache-2.0 / MIT) AND BSD-3-Clause | proto | Jeux de caractères des serveurs non UTF-8 |
@@ -51,10 +51,10 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `regex` | 1.13 | MIT / Apache-2.0 | core | Masques en expressions régulières |
 | `roxmltree` | 0.21 | MIT / Apache-2.0 | core | Analyseur XML en lecture seule pour les imports |
 | `base64` | 0.23 | MIT / Apache-2.0 | core | Codage des secrets, imports |
-| `windows-sys` | 0.61 | MIT / Apache-2.0 | sys | API Win32 (fenêtres, mémoire partagée, DPAPI, alimentation, espace disque, fichiers du presse-papiers, état des touches) |
+| `windows-sys` | 0.61 | MIT / Apache-2.0 | sys | API Win32 (fenêtres, mémoire partagée, DPAPI, alimentation, espace disque, presse-papiers, état des touches, zone de notification, sons, heure locale) |
 | `eframe` | 0.36 | MIT / Apache-2.0 | gui | Fenêtre native et rendu pour egui |
 | `egui_extras` | 0.36 | MIT / Apache-2.0 | gui | Tableaux des panneaux de fichiers et de la file |
-| `egui_dock` | 0.21 | MIT | gui | Panneaux réorganisables dans chaque onglet |
+| `egui_dock` | 0.21 | MIT | gui | Panneaux réorganisables dans chaque onglet (fonctionnalité `serde` : dispositions enregistrées) |
 | `rfd` | 0.17 | MIT | gui | Dialogues de fichiers et boîtes de message natifs |
 | `sys-locale` | 0.3 | MIT / Apache-2.0 | i18n | Langue de l'interface de Windows |
 | `rand` | 0.10 | MIT / Apache-2.0 | proto (tests) | Données de test |

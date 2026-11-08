@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
+Summary (284 topics): ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17.
 
 ## Main window and menus
 
@@ -19,9 +19,9 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | New window | ✅ | New tab (`+`, `Ctrl+T`) |
 | New window of current | ⬜ | Duplicate a tab with its connections |
 | Close current window | ✅ | `✕`, `Ctrl+W` (disconnects) |
-| Minimize to system tray | ⬜ | Tray icon |
-| Lock to system tray | ⬜ | Needs a password on the site book (see *Security setting*) |
-| Backup / restore configuration | ⬜ | One archive with sites, options and statistics |
+| Minimize to system tray | ✅ | Options › Notifications; a click on the icon brings the window back |
+| Lock to system tray | ✅ | File › Lock, with the master password (Options › Security) |
+| Backup / restore configuration | ✅ | File › Back up / Restore: the files of the data folder in `backup/<date>` |
 | Exit | ✅ | |
 
 ### Edit and mark
@@ -45,7 +45,7 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Refresh | ✅ | `F5` |
 | Window list | 🟡 | Tab strip only; no list with connection and action columns |
 | Queue window | ✅ | Dock panel |
-| System log, transfer log, FTP log | 🟡 | One log per tab with command / reply / status / error colours |
+| System log, transfer log, FTP log | ✅ | FTP, transfer and system logs of each tab, with times |
 | Task window | ⬜ | Scheduled tasks |
 | Remote columns size / date | ✅ | |
 | Remote columns attributes / user / group | ✅ | Remote panels; local panels show the Windows attributes |
@@ -92,17 +92,17 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Topic | Status | Notes |
 |---|---|---|
 | Site manager | ✅ | |
-| Add to site manager | ⬜ | Save a quick connection as a site |
-| Command (predefined site commands) | ⬜ | Menu of `SITE` commands per server type |
-| Command designer | ⬜ | |
-| Send RAW command | 🟡 | `RushApp.FTP.RAW` from the script console; no dialog, no "send to all" |
+| Add to site manager | ✅ | `➕` next to Connect in the quick bar |
+| Command (predefined site commands) | ✅ | FTP › Site commands; `%1` asks for a parameter |
+| Command designer | ✅ | Options › Interface › Site commands |
+| Send RAW command | ✅ | FTP › Send RAW command (`Ctrl+R`) |
 | Compare folder contents (name, size, partial, hide same) | ✅ | FTP menu → Compare the panels |
 | View raw directory | ✅ | FTP: as sent by the server; SFTP: `ls -l` lines |
 | Script designer | 🟡 | Script console in each tab; no editor with files |
 | Languages | 🟡 | English and French |
-| Hotkey manager | ⬜ | Shortcuts are fixed (list: `F1`) |
-| Manual download from site, increment URL list | ⬜ | |
-| Monitor clipboard, auto transfer | ⬜ | |
+| Hotkey manager | ✅ | Options › Shortcuts |
+| Manual download from site, increment URL list | ✅ | File › Manual download; `[1-12]` / `[01-12]` lists |
+| Monitor clipboard, auto transfer | ✅ | Options › Interface › Clipboard |
 | Transfer mode auto / binary / ASCII | ✅ | Options › Advanced transfer, and per item (Edit) |
 | On transfer completed: disconnect / idle | ✅ | Options › Transfers |
 | On transfer completed: shut down / standby / hibernate | ✅ | With a countdown that can be cancelled |
@@ -119,15 +119,15 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Help index | 🟡 | `F1` lists the shortcuts; full documentation in `docs/` |
 | FTPRush wizard | ➖ | Interface customisation wizard of the Delphi toolkit |
 | Check new version | ➖ | No online update in this phase |
-| About | ⬜ | Version, licence, notices |
+| About | ✅ | Help › About |
 
 ### Main interface and getting started
 
 | Topic | Status | Notes |
 |---|---|---|
-| Main interface layout (panels, logs, queue, status bar) | 🟡 | Dock with panels, queue, log, script; one log, no task window |
+| Main interface layout (panels, logs, queue, status bar) | 🟡 | Dock with panels, queue, three logs, script; saved layouts; no task window |
 | Side indicator | 🟡 | `▸` on the active panel |
-| Connect to FTP from the favourites menu | ⬜ | Drop-down menu of sites in the toolbar |
+| Connect to FTP from the favourites menu | ✅ | `★ Favourites ▾` in the toolbar |
 | Disconnect from site | ✅ | |
 | Lock / unlock toolbar and dock | ➖ | The dock is rearranged by dragging; no toolbar to lock |
 | Quick connect to a site | ✅ | `Tab` between fields, `Enter` connects |
@@ -146,10 +146,10 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Export directory tree list | ✅ | |
 | Fast search | ✅ | See *Search (fast filter)* |
 | Find files at sites | ✅ | |
-| Hotkey manager | ⬜ | |
-| Send RAW dialog (`Ctrl+R`, several lines, all sites) | ⬜ | |
-| Manual download | ⬜ | |
-| Increment URL | ⬜ | |
+| Hotkey manager | ✅ | See *Hotkey manager* |
+| Send RAW dialog (`Ctrl+R`, several lines, all sites) | ✅ | |
+| Manual download | ✅ | |
+| Increment URL | ✅ | |
 
 ## Site manager
 
@@ -157,13 +157,13 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 |---|---|---|
 | Toolbar: properties, folder, new site, delete | ✅ | |
 | Tree mode | ✅ | |
-| List mode, column auto width | ⬜ | |
-| Import plain text (one URL per line) | ⬜ | |
-| Import UltraFXP sites and settings | ⬜ | |
+| List mode, column auto width | 🟡 | List mode, sortable; no automatic column width |
+| Import plain text (one URL per line) | ✅ | Detected by the import |
+| Import UltraFXP sites and settings | ⬜ | Not done: no sample file of the format |
 | Import FTPRush XML | ✅ | Plus FTPRush v1/v3, FileZilla, FlashFXP; passwords are not imported |
-| Export plain text / CSV / HTML / FTPRush XML | ⬜ | Without passwords |
+| Export plain text / CSV / HTML / FTPRush XML | ✅ | Text, CSV, HTML, FTPRush v2 XML; never the passwords |
 | Default site setting | ✅ | Options › New site: protocol, login, mode, limits, folders, listing |
-| Security setting (password on the site book, show passwords) | 🟡 | Passwords protected by Windows DPAPI; no master password or lock |
+| Security setting (password on the site book, show passwords) | ✅ | Master password (salted hash) for the site manager, the options and the lock; passwords protected by DPAPI |
 | Test availability of sites | ✅ | One site or a whole folder, in parallel |
 
 ### Site properties
@@ -181,7 +181,7 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Description (short text for menus, notes) | ✅ | Shown next to the name in the site tree |
 | Bookmarks | ✅ | |
 | HTTP URL mapping, copy HTTP URL | ✅ | Remote panel: right-click → Copy HTTP address |
-| Display: site name instead of [1]/[2] in the log | ⬜ | The log shows Left / Right |
+| Display: site name instead of [1]/[2] in the log | ✅ | Options › Interface |
 | Connection: global or custom retries and timeouts | ✅ | |
 | Resume support: auto / yes / no | ✅ | On (the server's refusal is detected) or off per site |
 | Keep alive per site | ✅ | |
@@ -213,7 +213,7 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Transfer: force active mode | ✅ | Transfer mode of the site record; for every site in Advanced transfer |
 | Transfer: TCP buffer size | 🟡 | Global setting (Advanced transfer), not per site |
 | Skip list, priority, file-exists rules per site | ✅ | |
-| Event notification: monitor folders for new items | ⬜ | Needs keep alive |
+| Event notification: monitor folders for new items | ✅ | Options › Notifications; a connection of its own at each check |
 | Statistics of this server | ⬜ | Global and session statistics exist |
 
 ## Options
@@ -225,13 +225,13 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | E-mail address for anonymous login | ✅ | |
 | Default download path | ✅ | Local panels start there |
 | Data folder path | ✅ | `-f`, `URUSHFTP_DATA` |
-| Daily backup of the configuration | ⬜ | |
+| Daily backup of the configuration | ✅ | Options › Security; 4 kept |
 | Cache FTP directories, update cache of transferring folder | ✅ | Options › Browsing |
 | Check new version at startup | ➖ | No online update in this phase |
-| Single instance | ⬜ | |
+| Single instance | ✅ | Options › Security |
 | Splash screen | ➖ | The window opens immediately |
-| Log buffer size | 🟡 | Fixed at 5 000 lines |
-| Log to disk | ⬜ | |
+| Log buffer size | ✅ | Options › Interface |
+| Log to disk | ✅ | One file per day and per log |
 | Batched log updates | ➖ | The interface already redraws at most once per frame |
 | Thread pool | ➖ | Asynchronous runtime (tokio); nothing to tune |
 | UPnP | ⬜ | |
@@ -313,39 +313,39 @@ Summary (284 topics): ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 
 | Topic | Status | Notes |
 |---|---|---|
-| System tray: minimize, flash while transferring, always show | ⬜ | |
+| System tray: minimize, flash while transferring, always show | 🟡 | Minimize and always show; the button flashes when a queue ends, not during the transfers |
 | Local window: full path in the address bar | ✅ | |
 | Local window: show hidden files | ⬜ | Hidden files are listed today |
 | File size display: bytes / KB / dynamic | 🟡 | Dynamic only |
-| Flash the window when transfers end | ⬜ | |
+| Flash the window when transfers end | ✅ | When the window is in the background |
 | Refresh the size of a file being downloaded | ⬜ | |
-| Favourites menu: split, history, quick connect entry, recent sites | ⬜ | |
+| Favourites menu: split, history, quick connect entry, recent sites | 🟡 | Recent sites and every site; no split menu, no history of quick connections |
 | Gradient side indicator, hide selection without focus, name separator | ➖ | Cosmetic options of the Delphi interface |
 | Language | 🟡 | English and French |
 | Sort: remote and local modes | ✅ | Click on a column |
-| Sort: links apart, descending by default for date and size | ⬜ | |
-| Highlights (coloured masks) | ⬜ | |
-| Fonts (application, lists, log) | ⬜ | |
-| Colours (rows, log, progress bar), colour themes | 🟡 | Dark and light themes checked for contrast; no custom colours |
-| Layout: tabs, several lines, tabs at the bottom, width | 🟡 | Tabs on one line at the top |
+| Sort: links apart, descending by default for date and size | 🟡 | Largest / newest first, folders first or not; links are not apart |
+| Highlights (coloured masks) | ✅ | A colour per theme, contrast shown |
+| Fonts (application, lists, log) | 🟡 | Size of the whole interface and of the logs; no choice of font |
+| Colours (rows, log, progress bar), colour themes | 🟡 | Themes checked for contrast; own log and highlight colours with their contrast; no progress bar colour |
+| Layout: tabs, several lines, tabs at the bottom, width | 🟡 | Tabs above or below; one line |
 | Layout: caption areas of dock panels | ➖ | egui_dock tabs |
 | Layout: tab switching for remote/local, large icons | ⬜ | |
 | Layout: performance options | ➖ | Not relevant with the GPU renderer |
 | Style (XP theme, flat, Office 2003...) | ➖ | Delphi toolkit styles |
-| Status bar: queue times, progress bar format (`%p`, `%s`, `%e`, `%c`) | 🟡 | Tabs, connections and active queues; no times or progress text |
+| Status bar: queue times, progress bar format (`%p`, `%s`, `%e`, `%c`) | ✅ | `%p` `%b` `%s` `%e` `%c` |
 
 ### Mouse action, associations, events, confirmations
 
 | Topic | Status | Notes |
 |---|---|---|
-| Double-click actions (file, log, site, side indicator, tab, queue item) | 🟡 | Fixed: opens folders; no choice |
+| Double-click actions (file, log, site, side indicator, tab, queue item) | 🟡 | Double-click on a file: transfer, view or nothing; the others are fixed |
 | Drag from Explorer to a remote panel | ✅ | Into the folder of the remote panel under the pointer |
 | Paste local files into a remote panel (`Ctrl+V`) | ✅ | |
 | Explorer context menu in the local panel | ⬜ | |
 | File associations: view and edit remote files with external programs | ✅ | Options › Browsing; Notepad when no program matches; an edited file is sent back when saved |
-| Event notification: sounds, tray pop-ups, event list | ⬜ | |
+| Event notification: sounds, tray pop-ups, event list | ✅ | Options › Notifications |
 | Confirmations: delete local files | ✅ | Always asked |
-| Confirmations: exit, shut down, close a tab with connections or queue, delete queue items | ⬜ | |
+| Confirmations: exit, shut down, close a tab with connections or queue, delete queue items | ✅ | Exit, close a busy tab, remove queue items; shut down has its countdown |
 
 ## Scripting
 

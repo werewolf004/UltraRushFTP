@@ -2514,7 +2514,18 @@ impl UltraRushApp {
                 ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).weak());
                 // Progress of the queue of the tab shown.
                 let tab = &self.tabs[self.active];
-                let st = tab.queue.lock().stats();
+                let mut st = tab.queue.lock().stats();
+                // The running items count with what they already transferred.
+                let partial: u64 = tab
+                    .queue
+                    .lock()
+                    .items()
+                    .iter()
+                    .filter(|i| i.state == ItemState::Running)
+                    .filter_map(|i| tab.progress.get(&i.id).map(|(b, _)| *b))
+                    .sum();
+                st.done_bytes = (st.done_bytes + partial).min(st.total_bytes);
+                st.left_bytes = st.left_bytes.saturating_sub(partial);
                 if tab.engine.is_some() && st.total_bytes > 0 {
                     let (down, up) = self.stats.bandwidth();
                     let rate = ((down + up) * 1024.0) as u64;

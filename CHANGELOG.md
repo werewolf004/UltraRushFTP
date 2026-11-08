@@ -9,6 +9,39 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Interface (block J).
+
+### Added
+
+- **Logs**: FTP, transfer and system logs in each tab, with times and site names, a number
+  of lines of their own, and daily files on disk (option); the status bar shows the
+  progress of the queue with a text of your choice (`%p`, `%b`, `%s`, `%e`, `%c`).
+- **RAW commands** (`Ctrl+R`): several lines, to the active panel, both panels or every
+  connected site, replies listed; predefined **site commands** in the FTP menu, edited in
+  the options (`%1` asks for a parameter).
+- **Favourites** in the toolbar (recent sites, every site), `➕` saves a quick connection
+  as a site; **Manual download** of addresses with incremented lists (`[01-12]`); the
+  clipboard watch opens it (or queues at once).
+- **Shortcut manager** (Options › Shortcuts, `F1` shows the keys in use); double-click on
+  a file: transfer, view or nothing; **confirmations** before quitting with items left,
+  closing a busy tab, removing queue items.
+- **Notifications**: icon in the notification area (minimize to it), sounds and pop-ups of
+  the events (connected, disconnected, queue finished, transfer failed, new items),
+  flashing taskbar button at the end of a queue, **monitored folders**.
+- **Display**: size of the interface and of the logs, highlighted names and own log
+  colours with their contrast shown, folders first or not, largest / newest first, tabs
+  below the panels, **saved layouts** (View → Layouts, layout of the new tabs).
+- **Site manager**: list mode, import of a text file of addresses, export as text, CSV,
+  HTML or FTPRush v2 XML (never the passwords).
+- **Security**: optional master password (site manager, options, *File → Lock*), only a
+  salted PBKDF2 hash kept; configuration **backups** (now, or each day, 4 kept) and
+  restore; **single instance**.
+
+### Fixed
+
+- A test of the availability of a site failed now and then: its result is drawn before
+  being checked.
+
 ## [0.5.0] - 2026-11-08
 
 Browsing and file operations (block I).

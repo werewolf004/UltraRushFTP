@@ -4,7 +4,6 @@
 use std::io::Write;
 
 use parking_lot::{Mutex, RwLock};
-use urftp_core::browsing::format_size;
 use urftp_core::queue::QueueStats;
 use urftp_core::settings::InterfaceSettings;
 
@@ -158,8 +157,8 @@ pub(super) fn status_text(format: &str, st: &QueueStats, rate: u64) -> String {
         }
         match chars.next() {
             Some('p') => out.push_str(&format!("{percent}%")),
-            Some('b') => out.push_str(&format!("{} / {}", format_size(st.done_bytes), format_size(st.total_bytes))),
-            Some('s') => out.push_str(&format!("{}/s", format_size(rate))),
+            Some('b') => out.push_str(&format!("{} / {}", human_size(st.done_bytes), human_size(st.total_bytes))),
+            Some('s') => out.push_str(&format!("{}/s", human_size(rate))),
             Some('e') => out.push_str(&eta),
             Some('c') => out.push_str(&format!("{finished}/{}", st.items())),
             Some('%') => out.push('%'),
@@ -181,7 +180,11 @@ mod tests {
     fn status_tokens() {
         let st =
             QueueStats { files: 4, done: 1, skipped: 1, total_bytes: 4096, done_bytes: 1024, left_bytes: 3072, ..QueueStats::default() };
-        assert_eq!(status_text("%p · %b · %s · %e · %c · 100%%", &st, 1024), "25% · 1.0 KiB / 4.0 KiB · 1.0 KiB/s · 0:03 · 2/4 · 100%");
+        let kb = |n| human_size(n);
+        assert_eq!(
+            status_text("%p · %b · %s · %e · %c · 100%%", &st, 1024),
+            format!("25% · {} / {} · {}/s · 0:03 · 2/4 · 100%", kb(1024), kb(4096), kb(1024))
+        );
         assert_eq!(status_text("%e %x", &st, 0), "— %x");
     }
 

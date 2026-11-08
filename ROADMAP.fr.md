@@ -54,7 +54,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (284 sujets : ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
@@ -117,21 +117,21 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
   (`Maj`+signet, `Maj`+double-clic) (I5).
 
 ### J — Interface
-- ⬜ Journaux FTP / transferts / système séparés, journal sur disque, noms des sites dans
-  le journal ; barre d'état avec durées de la file et texte de progression.
-- ⬜ Boîte RAW (plusieurs lignes, tous les sites), commandes de site prédéfinies,
-  concepteur de commandes.
-- ⬜ Menu des favoris (sites, sites récents), ajout d'une connexion rapide au gestionnaire
-  de sites, téléchargement manuel et URL incrémentées, surveillance du presse-papiers.
-- ⬜ Gestionnaire de raccourcis, actions de souris réglables, confirmations (quitter,
-  fermer un onglet occupé).
-- ⬜ Icône de notification, verrouillage, notifications (sons, bulles, surveillance de
-  dossiers), clignotement de la fenêtre.
-- ⬜ Surlignage, polices, couleurs personnalisées (avec le test de contraste), options de
-  tri, options d'onglets, dispositions enregistrées.
-- ⬜ Gestionnaire de sites : mode liste, import texte brut et UltraFXP, export texte / CSV
+- ✅ Journaux FTP / transferts / système séparés, journal sur disque, noms des sites dans
+  le journal ; barre d'état avec durées de la file et texte de progression (J1).
+- ✅ Boîte RAW (plusieurs lignes, tous les sites), commandes de site prédéfinies,
+  concepteur de commandes (J2).
+- ✅ Menu des favoris (sites, sites récents), ajout d'une connexion rapide au gestionnaire
+  de sites, téléchargement manuel et URL incrémentées, surveillance du presse-papiers (J3).
+- ✅ Gestionnaire de raccourcis, actions de souris réglables, confirmations (quitter,
+  fermer un onglet occupé) (J4).
+- ✅ Icône de notification, verrouillage, notifications (sons, bulles, surveillance de
+  dossiers), clignotement de la fenêtre (J5).
+- 🟡 Surlignage, polices, couleurs personnalisées (avec le test de contraste), options de
+  tri, options d'onglets, dispositions enregistrées (J6 ; pas de choix de police, onglets sur une ligne).
+- 🟡 Gestionnaire de sites : mode liste, import texte brut et UltraFXP, export texte / CSV
   / HTML / XML (sans mots de passe), mot de passe maître facultatif ; sauvegarde et
-  restauration de la configuration, instance unique ; fenêtre À propos.
+  restauration de la configuration, instance unique ; fenêtre À propos (J7 ; import UltraFXP pas fait : aucun fichier d'exemple).
 
 ### K — Scripts
 - ⬜ Tableaux, index, `case`, procédures et fonctions de l'utilisateur.

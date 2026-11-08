@@ -10,6 +10,45 @@ la traduction.
 
 ## [Non publié]
 
+Interface (bloc J).
+
+### Ajouté
+
+- **Journaux** : journaux FTP, transferts et système dans chaque onglet, avec l'heure et
+  le nom des sites, un nombre de lignes propre, et des fichiers quotidiens sur disque
+  (option) ; la barre d'état montre la progression de la file avec un texte au choix
+  (`%p`, `%b`, `%s`, `%e`, `%c`).
+- **Commandes RAW** (`Ctrl+R`) : plusieurs lignes, vers le panneau actif, les deux
+  panneaux ou tous les sites connectés, réponses listées ; **commandes de site**
+  prédéfinies dans le menu FTP, modifiées dans les options (`%1` demande un paramètre).
+- **Favoris** dans la barre d'outils (sites récents, tous les sites), `➕` enregistre une
+  connexion rapide comme site ; **Téléchargement manuel** d'adresses avec listes
+  incrémentées (`[01-12]`) ; la surveillance du presse-papiers l'ouvre (ou met en file
+  aussitôt).
+- **Gestionnaire de raccourcis** (Options › Raccourcis, `F1` montre les touches en
+  vigueur) ; double-clic sur un fichier : transférer, afficher ou rien ;
+  **confirmations** avant de quitter avec des éléments restants, de fermer un onglet
+  occupé, de retirer des éléments de la file.
+- **Notifications** : icône dans la zone de notification (réduire dedans), sons et bulles
+  des événements (connecté, déconnecté, file terminée, échec d'un transfert,
+  nouveautés), bouton de la barre des tâches qui clignote à la fin d'une file,
+  **dossiers surveillés**.
+- **Affichage** : taille de l'interface et des journaux, noms surlignés et couleurs des
+  journaux au choix avec leur contraste affiché, dossiers d'abord ou non, plus grand /
+  plus récent d'abord, onglets sous les panneaux, **dispositions enregistrées**
+  (Affichage → Dispositions, disposition des nouveaux onglets).
+- **Gestionnaire de sites** : mode liste, import d'un fichier texte d'adresses, export en
+  texte, CSV, HTML ou XML FTPRush v2 (jamais les mots de passe).
+- **Sécurité** : mot de passe maître facultatif (gestionnaire de sites, options,
+  *Fichier → Verrouiller*), seule une empreinte PBKDF2 salée est gardée ; **sauvegardes**
+  de la configuration (maintenant, ou chaque jour, 4 gardées) et restauration ;
+  **instance unique**.
+
+### Corrigé
+
+- Le test de disponibilité d'un site échouait de temps en temps : son résultat est
+  dessiné avant d'être vérifié.
+
 ## [0.5.0] - 2026-11-08
 
 Navigation et opérations sur les fichiers (bloc I).

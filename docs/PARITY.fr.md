@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
+Résumé (284 sujets) : ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17.
 
 ## Fenêtre principale et menus
 
@@ -19,9 +19,9 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Nouvelle fenêtre | ✅ | Nouvel onglet (`+`, `Ctrl+T`) |
 | Nouvelle fenêtre à partir de l'actuelle | ⬜ | Dupliquer un onglet avec ses connexions |
 | Fermer la fenêtre courante | ✅ | `✕`, `Ctrl+W` (déconnecte) |
-| Réduire dans la zone de notification | ⬜ | Icône de notification |
-| Verrouiller dans la zone de notification | ⬜ | Demande un mot de passe sur le carnet de sites (voir *Réglages de sécurité*) |
-| Sauvegarder / restaurer la configuration | ⬜ | Une archive avec sites, options et statistiques |
+| Réduire dans la zone de notification | ✅ | Options › Notifications ; un clic sur l'icône ramène la fenêtre |
+| Verrouiller dans la zone de notification | ✅ | Fichier › Verrouiller, avec le mot de passe maître (Options › Sécurité) |
+| Sauvegarder / restaurer la configuration | ✅ | Fichier › Sauvegarder / Restaurer : les fichiers du dossier de données dans `backup/<date>` |
 | Quitter | ✅ | |
 
 ### Édition et marquage
@@ -45,7 +45,7 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Actualiser | ✅ | `F5` |
 | Liste des fenêtres | 🟡 | Barre d'onglets seulement ; pas de liste avec colonnes connexion et action |
 | Fenêtre de file d'attente | ✅ | Panneau du dock |
-| Journal système, journal des transferts, journal FTP | 🟡 | Un journal par onglet, couleurs commande / réponse / état / erreur |
+| Journal système, journal des transferts, journal FTP | ✅ | Journaux FTP, transferts et système de chaque onglet, avec l'heure |
 | Fenêtre des tâches | ⬜ | Tâches planifiées |
 | Colonnes distantes taille / date | ✅ | |
 | Colonnes distantes attributs / utilisateur / groupe | ✅ | Panneaux distants ; les panneaux locaux montrent les attributs Windows |
@@ -92,17 +92,17 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Sujet | État | Remarques |
 |---|---|---|
 | Gestionnaire de sites | ✅ | |
-| Ajouter au gestionnaire de sites | ⬜ | Enregistrer une connexion rapide comme site |
-| Commandes (commandes de site prédéfinies) | ⬜ | Menu de commandes `SITE` selon le type de serveur |
-| Concepteur de commandes | ⬜ | |
-| Envoyer une commande RAW | 🟡 | `RushApp.FTP.RAW` depuis la console de script ; pas de boîte de dialogue ni « envoyer à tous » |
+| Ajouter au gestionnaire de sites | ✅ | `➕` à côté de Connexion dans la barre rapide |
+| Commandes (commandes de site prédéfinies) | ✅ | FTP › Commandes de site ; `%1` demande un paramètre |
+| Concepteur de commandes | ✅ | Options › Interface › Commandes de site |
+| Envoyer une commande RAW | ✅ | FTP › Envoyer une commande RAW (`Ctrl+R`) |
 | Comparer le contenu des dossiers (nom, taille, partiel, masquer les identiques) | ✅ | Menu FTP → Comparer les panneaux |
 | Voir le listing brut | ✅ | FTP : tel qu'envoyé par le serveur ; SFTP : lignes `ls -l` |
 | Concepteur de scripts | 🟡 | Console de script dans chaque onglet ; pas d'éditeur avec fichiers |
 | Langues | 🟡 | Anglais et français |
-| Gestionnaire de raccourcis | ⬜ | Raccourcis fixes (liste : `F1`) |
-| Téléchargement manuel depuis un site, liste d'URL incrémentées | ⬜ | |
-| Surveiller le presse-papiers, transfert automatique | ⬜ | |
+| Gestionnaire de raccourcis | ✅ | Options › Raccourcis |
+| Téléchargement manuel depuis un site, liste d'URL incrémentées | ✅ | Fichier › Téléchargement manuel ; listes `[1-12]` / `[01-12]` |
+| Surveiller le presse-papiers, transfert automatique | ✅ | Options › Interface › Presse-papiers |
 | Mode de transfert auto / binaire / ASCII | ✅ | Options › Transfert avancé, et par élément (Modifier) |
 | À la fin des transferts : déconnecter / rester connecté | ✅ | Options › Transferts |
 | À la fin des transferts : éteindre / veille / veille prolongée | ✅ | Avec un compte à rebours annulable |
@@ -119,15 +119,15 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Index de l'aide | 🟡 | `F1` liste les raccourcis ; documentation complète dans `docs/` |
 | Assistant FTPRush | ➖ | Assistant de personnalisation propre à la boîte à outils Delphi |
 | Vérifier les nouvelles versions | ➖ | Pas de mise à jour en ligne dans cette phase |
-| À propos | ⬜ | Version, licence, mentions |
+| À propos | ✅ | Aide › À propos |
 
 ### Interface principale et prise en main
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Disposition principale (panneaux, journaux, file, barre d'état) | 🟡 | Dock avec panneaux, file, journal, script ; un seul journal, pas de fenêtre des tâches |
+| Disposition principale (panneaux, journaux, file, barre d'état) | 🟡 | Dock avec panneaux, file, trois journaux, script ; dispositions enregistrées ; pas de fenêtre des tâches |
 | Indicateur de côté | 🟡 | `▸` sur le panneau actif |
-| Se connecter depuis le menu des favoris | ⬜ | Menu déroulant des sites dans la barre d'outils |
+| Se connecter depuis le menu des favoris | ✅ | `★ Favoris ▾` dans la barre d'outils |
 | Se déconnecter d'un site | ✅ | |
 | Verrouiller / déverrouiller barre d'outils et dock | ➖ | Le dock se réorganise par glisser ; pas de barre d'outils à verrouiller |
 | Connexion rapide à un site | ✅ | `Tab` entre les champs, `Entrée` connecte |
@@ -146,10 +146,10 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Exporter l'arborescence | ✅ | |
 | Recherche rapide | ✅ | Voir *Recherche (filtre rapide)* |
 | Chercher des fichiers sur les sites | ✅ | |
-| Gestionnaire de raccourcis | ⬜ | |
-| Boîte RAW (`Ctrl+R`, plusieurs lignes, tous les sites) | ⬜ | |
-| Téléchargement manuel | ⬜ | |
-| URL incrémentées | ⬜ | |
+| Gestionnaire de raccourcis | ✅ | Voir *Gestionnaire de raccourcis* |
+| Boîte RAW (`Ctrl+R`, plusieurs lignes, tous les sites) | ✅ | |
+| Téléchargement manuel | ✅ | |
+| URL incrémentées | ✅ | |
 
 ## Gestionnaire de sites
 
@@ -157,13 +157,13 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 |---|---|---|
 | Barre d'outils : propriétés, dossier, nouveau site, supprimer | ✅ | |
 | Mode arborescence | ✅ | |
-| Mode liste, largeur automatique des colonnes | ⬜ | |
-| Import texte brut (une URL par ligne) | ⬜ | |
-| Import des sites et réglages UltraFXP | ⬜ | |
+| Mode liste, largeur automatique des colonnes | 🟡 | Mode liste, triable ; pas de largeur automatique des colonnes |
+| Import texte brut (une URL par ligne) | ✅ | Détecté par l'import |
+| Import des sites et réglages UltraFXP | ⬜ | Pas fait : aucun fichier d'exemple du format |
 | Import FTPRush XML | ✅ | Plus FTPRush v1/v3, FileZilla, FlashFXP ; les mots de passe ne sont pas importés |
-| Export texte brut / CSV / HTML / FTPRush XML | ⬜ | Sans les mots de passe |
+| Export texte brut / CSV / HTML / FTPRush XML | ✅ | Texte, CSV, HTML, XML FTPRush v2 ; jamais les mots de passe |
 | Réglages par défaut d'un site | ✅ | Options › Nouveau site : protocole, connexion, mode, limites, dossiers, listing |
-| Réglages de sécurité (mot de passe du carnet, afficher les mots de passe) | 🟡 | Mots de passe protégés par DPAPI de Windows ; pas de mot de passe maître ni de verrouillage |
+| Réglages de sécurité (mot de passe du carnet, afficher les mots de passe) | ✅ | Mot de passe maître (empreinte salée) pour le gestionnaire, les options et le verrouillage ; mots de passe protégés par DPAPI |
 | Tester la disponibilité des sites | ✅ | Un site ou tout un dossier, en parallèle |
 
 ### Propriétés d'un site
@@ -181,7 +181,7 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Description (texte court pour les menus, notes) | ✅ | Affichée à côté du nom dans l'arbre des sites |
 | Signets | ✅ | |
 | Correspondance d'URL HTTP, copier l'URL HTTP | ✅ | Panneau distant : clic droit → Copier l'adresse HTTP |
-| Affichage : nom du site au lieu de [1]/[2] dans le journal | ⬜ | Le journal affiche Gauche / Droite |
+| Affichage : nom du site au lieu de [1]/[2] dans le journal | ✅ | Options › Interface |
 | Connexion : essais et délais globaux ou propres au site | ✅ | |
 | Reprise : auto / oui / non | ✅ | Active (le refus du serveur est détecté) ou désactivée par site |
 | Maintien de connexion par site | ✅ | |
@@ -213,7 +213,7 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Transfert : forcer le mode actif | ✅ | Mode de transfert de la fiche ; pour tous les sites dans Transfert avancé |
 | Transfert : taille du tampon TCP | 🟡 | Réglage global (Transfert avancé), pas par site |
 | Liste d'exclusion, priorités, règles « fichier existant » par site | ✅ | |
-| Notification d'événements : surveiller des dossiers | ⬜ | Demande le maintien de connexion |
+| Notification d'événements : surveiller des dossiers | ✅ | Options › Notifications ; une connexion à part à chaque vérification |
 | Statistiques de ce serveur | ⬜ | Statistiques globales et de session disponibles |
 
 ## Options
@@ -225,13 +225,13 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 | Adresse e-mail pour la connexion anonyme | ✅ | |
 | Dossier de téléchargement par défaut | ✅ | Les panneaux locaux y démarrent |
 | Dossier des données | ✅ | `-f`, `URUSHFTP_DATA` |
-| Sauvegarde quotidienne de la configuration | ⬜ | |
+| Sauvegarde quotidienne de la configuration | ✅ | Options › Sécurité ; 4 gardées |
 | Cache des dossiers FTP, mise à jour du cache du dossier transféré | ✅ | Options › Navigation |
 | Vérifier les nouvelles versions au démarrage | ➖ | Pas de mise à jour en ligne dans cette phase |
-| Une seule instance | ⬜ | |
+| Une seule instance | ✅ | Options › Sécurité |
 | Écran de démarrage | ➖ | La fenêtre s'ouvre immédiatement |
-| Taille du tampon du journal | 🟡 | Fixée à 5 000 lignes |
-| Journal sur disque | ⬜ | |
+| Taille du tampon du journal | ✅ | Options › Interface |
+| Journal sur disque | ✅ | Un fichier par jour et par journal |
 | Mise à jour groupée du journal | ➖ | L'interface redessine déjà au plus une fois par image |
 | Réserve de threads | ➖ | Moteur asynchrone (tokio) ; rien à régler |
 | UPnP | ⬜ | |
@@ -313,39 +313,39 @@ Résumé (284 sujets) : ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17.
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Zone de notification : réduire, clignoter pendant les transferts, toujours afficher | ⬜ | |
+| Zone de notification : réduire, clignoter pendant les transferts, toujours afficher | 🟡 | Réduire et toujours afficher ; le bouton clignote à la fin d'une file, pas pendant les transferts |
 | Fenêtre locale : chemin complet dans la barre d'adresse | ✅ | |
 | Fenêtre locale : afficher les fichiers cachés | ⬜ | Les fichiers cachés sont listés aujourd'hui |
 | Affichage des tailles : octets / Ko / dynamique | 🟡 | Dynamique seulement |
-| Faire clignoter la fenêtre à la fin des transferts | ⬜ | |
+| Faire clignoter la fenêtre à la fin des transferts | ✅ | Quand la fenêtre est en arrière-plan |
 | Actualiser la taille d'un fichier en cours de téléchargement | ⬜ | |
-| Menu des favoris : découpage, historique, entrée connexion rapide, sites récents | ⬜ | |
+| Menu des favoris : découpage, historique, entrée connexion rapide, sites récents | 🟡 | Sites récents et tous les sites ; pas de menu scindé, pas d'historique des connexions rapides |
 | Indicateur de côté en dégradé, masquer la sélection sans focus, séparateur de noms | ➖ | Options cosmétiques de l'interface Delphi |
 | Langue | 🟡 | Anglais et français |
 | Tri : modes distant et local | ✅ | Clic sur une colonne |
-| Tri : liens à part, décroissant par défaut pour date et taille | ⬜ | |
-| Surlignage (masques colorés) | ⬜ | |
-| Polices (application, listes, journal) | ⬜ | |
-| Couleurs (lignes, journal, barre de progression), thèmes de couleurs | 🟡 | Thèmes sombre et clair contrôlés pour le contraste ; pas de couleurs personnalisées |
-| Disposition : onglets, plusieurs lignes, onglets en bas, largeur | 🟡 | Onglets sur une ligne en haut |
+| Tri : liens à part, décroissant par défaut pour date et taille | 🟡 | Plus grand / plus récent d'abord, dossiers d'abord ou non ; les liens ne sont pas à part |
+| Surlignage (masques colorés) | ✅ | Une couleur par thème, contraste affiché |
+| Polices (application, listes, journal) | 🟡 | Taille de toute l'interface et des journaux ; pas de choix de police |
+| Couleurs (lignes, journal, barre de progression), thèmes de couleurs | 🟡 | Thèmes vérifiés pour le contraste ; couleurs des journaux et du surlignage avec leur contraste ; pas de couleur de la barre de progression |
+| Disposition : onglets, plusieurs lignes, onglets en bas, largeur | 🟡 | Onglets en haut ou en bas ; une ligne |
 | Disposition : barres de titre des panneaux du dock | ➖ | Onglets egui_dock |
 | Disposition : bascule par onglets distant/local, grandes icônes | ⬜ | |
 | Disposition : options de performance | ➖ | Sans objet avec le rendu GPU |
 | Style (thème XP, plat, Office 2003…) | ➖ | Styles de la boîte à outils Delphi |
-| Barre d'état : durées de la file, format de la barre de progression (`%p`, `%s`, `%e`, `%c`) | 🟡 | Onglets, connexions et files actives ; pas de durées ni de texte de progression |
+| Barre d'état : durées de la file, format de la barre de progression (`%p`, `%s`, `%e`, `%c`) | ✅ | `%p` `%b` `%s` `%e` `%c` |
 
 ### Souris, associations, événements, confirmations
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Actions du double-clic (fichier, journal, site, indicateur de côté, onglet, élément de file) | 🟡 | Fixe : ouvre les dossiers ; pas de choix |
+| Actions du double-clic (fichier, journal, site, indicateur de côté, onglet, élément de file) | 🟡 | Double-clic sur un fichier : transférer, afficher ou rien ; les autres sont fixes |
 | Glisser depuis l'Explorateur vers un panneau distant | ✅ | Dans le dossier du panneau distant sous le pointeur |
 | Coller des fichiers locaux dans un panneau distant (`Ctrl+V`) | ✅ | |
 | Menu contextuel de l'Explorateur dans le panneau local | ⬜ | |
 | Associations de fichiers : voir et modifier les fichiers distants avec des programmes externes | ✅ | Options › Navigation ; Bloc-notes quand aucun programme ne correspond ; un fichier modifié est renvoyé à l'enregistrement |
-| Notification d'événements : sons, bulles de notification, liste d'événements | ⬜ | |
+| Notification d'événements : sons, bulles de notification, liste d'événements | ✅ | Options › Notifications |
 | Confirmations : supprimer des fichiers locaux | ✅ | Toujours demandée |
-| Confirmations : quitter, éteindre, fermer un onglet connecté ou avec une file, supprimer des éléments de file | ⬜ | |
+| Confirmations : quitter, éteindre, fermer un onglet connecté ou avec une file, supprimer des éléments de file | ✅ | Quitter, fermer un onglet occupé, retirer des éléments de la file ; l'arrêt a son compte à rebours |
 
 ## Scripts
 

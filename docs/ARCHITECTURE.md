@@ -9,11 +9,11 @@ Goal: every feature of FTPRush v2, modernised, with **tabbed** site containers a
 
 | Crate | Role | `unsafe` |
 |---|---|---|
-| `urftp-core` | Data model: sites and bookmarks, site book storage, options, queue and queue files, item options of scripts and conditional transfers (`itemopts`), skip list, priorities, "existing file" rules, SFV / MD5 checksums, panel helpers (`browsing`: quick filter, masks, renaming several items, folder comparison, local walks, space used, directory tree, CHMOD modes, dates), imports, DPAPI-protected secrets | forbidden |
+| `urftp-core` | Data model: sites and bookmarks, site book storage, options, queue and queue files, item options of scripts and conditional transfers (`itemopts`), skip list, priorities, "existing file" rules, SFV / MD5 checksums, panel helpers (`browsing`: quick filter, masks, renaming several items, folder comparison, local walks, space used, directory tree, CHMOD modes, dates), addresses and incremented lists (`urls`), imports and exports, master password hash (`master`, PBKDF2 of `ring`), configuration backups (`backup`), DPAPI-protected secrets | forbidden |
 | `urftp-proto` | FTP client, explicit/implicit FTPS, SFTP, FXP, proxies, Ident server, queue engine, speed limiting, site → connection profile conversion | forbidden |
 | `urftp-script` | Interpreter of the FTPRush Pascal Script subset (`RushApp.*`, `RS_*` flags) | forbidden |
 | `urftp-i18n` | English and French catalogs (`locales/*.json`), `t!` macro, Windows language detection | forbidden |
-| `urftp-sys` | **The only crate allowed to contain `unsafe`**: mIRC link window (`TfmUltraRush`, or `TfmRush` in compatibility mode) and shared memory (application side of the mIRC protocol), DPAPI, sleep / hibernate / shut down (`power`), free disk space, files copied in Explorer (`CF_HDROP`) and the `Ctrl+V` key state, `rushmirc.dll` exports (`mirc-dll` feature) | allowed, audited |
+| `urftp-sys` | **The only crate allowed to contain `unsafe`**: mIRC link window (`TfmUltraRush`, or `TfmRush` in compatibility mode) and shared memory (application side of the mIRC protocol), DPAPI, sleep / hibernate / shut down (`power`), free disk space, files copied in Explorer (`CF_HDROP`), clipboard text, the `Ctrl+V` key state, local time, the notification area icon, window flashing and event sounds (`tray`), single instance (`WM_SHOW_APP`), `rushmirc.dll` exports (`mirc-dll` feature) | allowed, audited |
 | `rushmirc` | mIRC DLL (`cdylib`): re-exports `urftp_sys::mirc`, no code of its own | forbidden |
 | `urftp-cli` | `urftp` command-line tool | forbidden |
 | `urftp-gui` | `UltraRushFTP.exe` interface (egui / eframe, egui_dock) | forbidden |

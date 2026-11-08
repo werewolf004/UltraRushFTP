@@ -110,7 +110,7 @@ impl OptionsWindow {
             Ok(s) => (s, None),
             Err(e) => (Settings::default(), Some(t!("options.unreadable", error = e))),
         };
-        // Development: `URUSHFTP_OPEN_OPTIONS=<page>` (0 to 10) opens the window on that page.
+        // Development: `URUSHFTP_OPEN_OPTIONS=<page>` (0 to 16) opens the window on that page.
         let open_on = std::env::var("URUSHFTP_OPEN_OPTIONS").ok().and_then(|v| v.parse::<usize>().ok());
         let page = open_on.and_then(|i| Page::ALL.get(i).copied()).unwrap_or(Page::General);
         Self {

@@ -17,6 +17,9 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | Fichier → Gestionnaire de sites | Ouvre le gestionnaire de sites |
 | Fichier → Nouvel onglet | Nouvel onglet vide (aussi `+` à côté des onglets) |
 | Fichier → Options… | Ouvre la fenêtre Options (aussi `⚙`) |
+| Fichier → Téléchargement manuel… | Voir *Téléchargement manuel* |
+| Fichier → Sauvegarder la configuration / Restaurer une sauvegarde | Voir *Sauvegardes* |
+| Fichier → Verrouiller | Verrouille la fenêtre jusqu'au mot de passe maître (Options › Sécurité) |
 | Fichier → Quitter | Quitte |
 | Connexion → *site* | Connecte le panneau actif (marqué `▸`) à un site du gestionnaire ; les dossiers sont des sous-menus ; `Maj` : connexion fantôme, `Ctrl` : `-password` |
 | Connexion → Gestionnaire de sites | Ouvre le gestionnaire de sites |
@@ -26,9 +29,13 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | FTP → Droits, Modifier la date, Voir le listing brut | Agissent sur le panneau distant actif |
 | FTP → Espace utilisé, Exporter l'arborescence, Chercher sur les sites, Comparer les panneaux | Voir *Outils de dossier* |
 | FTP → Vider le cache de ce site / tous les caches, Fichiers en cours de modification | Voir *Outils de dossier* |
+| FTP → Envoyer une commande RAW (`Ctrl+R`), Commandes de site | Voir *Commandes RAW* |
+| Affichage → Dispositions | Appliquer, enregistrer ou supprimer une disposition des panneaux ; revenir à celle par défaut |
 | Affichage → Thème clair / Thème sombre | Change le thème (enregistré aussi dans les options) |
 | Aide → Raccourcis clavier | Liste les raccourcis ci-dessous (aussi `F1`) |
 | Aide → À propos d'UltraRushFTP | Version, compilation et licence |
+| `★ Favoris ▾` | Sites récents (10), tous les sites du gestionnaire, *Téléchargement manuel* : connecte le panneau actif |
+| `➕` après Connexion | Enregistre la connexion rapide comme site du gestionnaire (avec son mot de passe) |
 | Connexion rapide | Protocole (FTP, FTPS explicite, FTPS implicite, SFTP), hôte, port, utilisateur, mot de passe, **Connexion** : ouvre le site dans le panneau droit de l'onglet courant (ou dans un nouvel onglet, voir *Général*) |
 | Onglets | Un onglet par conteneur de sites ; `✕` le ferme, le titre est l'hôte ou « Onglet n » ; `Ctrl+T` nouveau, `Ctrl+W` fermer, `Ctrl+Tab` / `Ctrl+Maj+Tab` suivant / précédent |
 
@@ -102,6 +109,37 @@ sont écrits, en arrière-plan ; le journal indique quand ils sont prêts.
 
 Les parcours et les recherches ont leur propre connexion : le panneau reste libre pendant ce
 temps.
+
+### Journaux et barre d'état
+
+Chaque onglet a trois journaux : **FTP** (commandes, réponses, connexions des panneaux),
+**Transferts** (file, éléments, contrôles CRC) et **Système** (fichiers écrits,
+opérations locales, scripts, notifications). Les lignes montrent leur heure et le site
+(ou Gauche / Droite), voir *Interface*. Avec *Écrire aussi les journaux dans des
+fichiers*, chaque journal va dans `<dossier>\<date>-ftp.log`, `-transfer.log`,
+`-system.log`.
+
+Pendant une file, la barre d'état montre sa barre de progression avec le texte de
+l'option *Interface* (`%p` pourcentage, `%b` octets, `%s` vitesse, `%e` temps restant,
+`%c` éléments).
+
+### Commandes RAW
+
+**FTP → Envoyer une commande RAW** (`Ctrl+R`) : plusieurs commandes, une par ligne,
+envoyées au panneau actif, aux deux panneaux ou à tous les sites connectés ;
+`Ctrl+Entrée` envoie. Les réponses sont listées sous les commandes et dans le journal FTP.
+
+**FTP → Commandes de site** : les commandes d'*Options › Interface* (`SITE WHO`,
+`SITE NEW`…). Une commande avec `%1` s'ouvre dans la boîte RAW pour être complétée.
+
+### Téléchargement manuel
+
+**Fichier → Téléchargement manuel** (aussi dans les favoris) : des adresses, une par
+ligne — `ftp://utilisateur:motdepasse@hôte:port/chemin`, `ftps://` (explicite),
+`ftpsi://` (implicite), `sftp://` ; un chemin terminé par `/` est un dossier. `[1-12]` ou
+`[01-12]` fait une liste (`fichier[01-12].rar`). Les éléments vont dans la file de
+l'onglet, vers le dossier choisi. Avec la surveillance du presse-papiers (*Interface*),
+les adresses copiées n'importe où ouvrent cette fenêtre, ou sont mises en file aussitôt.
 
 ### Transfert conditionnel
 
@@ -370,6 +408,70 @@ Le fichier est téléchargé dans `%TEMP%\UltraRushFTP\files`. Sans ligne corres
 s'ouvre dans le Bloc-notes : jamais avec le programme que Windows associe à son type, qui
 pourrait lancer un programme téléchargé.
 
+### Interface
+
+![Interface](images/options-interface.fr.png)
+
+| Option | Défaut | Effet |
+|---|---|---|
+| Nommer le site au lieu de Gauche / Droite | activé | Dans les journaux FTP et transferts |
+| Heure de chaque ligne | activé | |
+| Lignes gardées par journal | 5000 | |
+| Écrire aussi les journaux dans des fichiers | désactivé | Un fichier par jour et par journal ; dossier : `logs` du dossier de données s'il est vide |
+| Texte de la barre de progression | `%p · %b · %s · %e` | Voir *Journaux et barre d'état* |
+| Presse-papiers : les adresses ouvrent le Téléchargement manuel / mise en file aussitôt | désactivé | |
+| Taille de l'interface | 100 % | Tout, texte et contrôles |
+| Taille du texte des journaux | 0 (thème) | |
+| Disposition des nouveaux onglets | — | Nom d'une disposition enregistrée (Affichage → Dispositions) |
+| Onglets sous les panneaux | désactivé | |
+| Dossiers avant les fichiers | activé | |
+| Taille et date : plus grand / plus récent d'abord | désactivé | Premier clic sur ces colonnes |
+| Noms surlignés | — | Masques et une couleur par thème ; le contraste contre les fonds des listes est affiché (4,5:1 au moins est conseillé) |
+| Mes propres couleurs pour les lignes des journaux | désactivé | Commande, réponse, état, erreur, par thème, avec leur contraste |
+| Double-clic sur un fichier | Le transférer | Ou l'afficher (fichiers distants), ou rien |
+| Confirmations | quitter, fermer un onglet occupé : activé ; retirer de la file : désactivé | Quitter quand des éléments restent à transférer ; fermer un onglet avec des connexions ou une file ; retirer des éléments de la file |
+| Commandes de site | `SITE HELP`, `SITE WHO`, `SITE NEW`, `SITE SEARCH %1`, `SITE STAT`, `SYST` + `FEAT` | Nom et commandes (une par ligne) du menu FTP › Commandes de site |
+
+### Raccourcis
+
+![Raccourcis](images/options-shortcuts.fr.png)
+
+Touches de chaque commande, plusieurs séparées par des virgules (`Ctrl+Maj+F, F9`,
+`Alt+Suppr`, `Plus`, `Minus`, `Espace`, `Inser`). Une touche non comprise garde les
+touches par défaut ; les touches données à plusieurs commandes sont signalées. `F1`
+montre les touches en vigueur. Les flèches, `Entrée`, `Échap`, `Tab`, `Ctrl+Tab` et
+`Ctrl+V` ne se changent pas.
+
+### Notifications
+
+![Notifications](images/options-notifications.fr.png)
+
+| Option | Défaut | Effet |
+|---|---|---|
+| Toujours afficher l'icône | désactivé | Icône dans la zone de notification ; un clic affiche la fenêtre |
+| Réduire y cache la fenêtre | désactivé | |
+| Faire clignoter le bouton de la barre des tâches à la fin d'une file en arrière-plan | activé | |
+| Événements : son, bulle | file terminée et nouveautés : son Windows et bulle ; échec d'un transfert : bulle | Son : vide, `system` ou un fichier `.wav` (`▶` l'écoute) ; bulles au-dessus de l'icône, ou dans un coin de la fenêtre sans elle ; chaque événement va aussi dans le journal système |
+| Dossiers surveillés | — | Site (nom du gestionnaire), dossier, intervalle ; chaque vérification liste le dossier sur sa propre connexion et les nouveaux noms sont signalés (la première lecture ne fait que noter) |
+
+### Sécurité
+
+![Sécurité](images/options-security.fr.png)
+
+| Option | Défaut | Effet |
+|---|---|---|
+| Mot de passe maître | aucun | Demandé avant le gestionnaire de sites et les options (une fois par session) et pour déverrouiller *Fichier → Verrouiller*. Seule une empreinte salée PBKDF2-SHA256 est gardée ; les mots de passe des sites restent protégés par Windows (DPAPI). Un mot de passe maître oublié ne se retrouve pas : retirer `master_hash` de `settings.json` |
+| Un seul UltraRushFTP | désactivé | Un second lancement affiche la fenêtre déjà ouverte (pas dans le mode compatibilité FTPRush de la liaison mIRC) |
+| Sauvegarder la configuration chaque jour | désactivé | Au premier lancement du jour, dans `backup` du dossier de données ; 4 gardées |
+
+### Sauvegardes
+
+**Fichier → Sauvegarder la configuration** copie les fichiers du dossier de données
+(sites, options, statistiques, dispositions, file non terminée) dans
+`backup\<date>_<heure>`. **Fichier → Restaurer une sauvegarde** remet ses fichiers et
+ferme UltraRushFTP, qu'il faut relancer. Les mots de passe d'une sauvegarde ne marchent
+que pour le même compte Windows.
+
 ## Fiche de site
 
 ![Gestionnaire de sites](images/site-manager.fr.png)
@@ -439,7 +541,14 @@ site indique l'adresse qui a répondu ou l'erreur.
 **Import** (barre du gestionnaire de sites) : FileZilla (`sitemanager.xml` ou export),
 FTPRush v3 (`site.json`), FTPRush v1/v2 (`RushSite.xml`), FlashFXP (`.ftp`). Le format est
 détecté automatiquement ; les fichiers trouvés sur cet ordinateur sont proposés
-directement. Les mots de passe ne sont pas importés depuis FTPRush v1/v2 et FlashFXP.
+directement. Les mots de passe ne sont pas importés depuis FTPRush v1/v2 et FlashFXP. Un
+fichier texte d'une adresse par ligne (`ftp://utilisateur:motdepasse@hôte:port/dossier`)
+s'importe aussi, un site par adresse.
+
+**Exporter ▾** : les sites du dossier sélectionné (ou tous les sites) en adresses
+(texte), en tableau (CSV), en page web (HTML) ou en `RushSite.xml` de FTPRush v2. Les
+mots de passe ne sont jamais exportés. **☰ Liste** montre tous les sites dans une liste
+triable par nom, hôte, type ou dossier (**📁 Dossiers** revient à l'arborescence).
 
 ## Ligne de commande
 
@@ -564,7 +673,7 @@ UltraRushFTP n'en crée pas une seconde et le signale dans le journal.
 | `URUSHFTP_IPC_CLASS` | Classe de fenêtre de la liaison mIRC à la place de `TfmUltraRush` / `TfmRush`, pour l'application et pour la DLL (tests) |
 | `URUSHFTP_OPEN_SITES` | Développement : ouvre le gestionnaire de sites sur ce numéro de site |
 | `URUSHFTP_SITE_SETTINGS` | Développement : garde la fiche du site défilée sur les réglages du site |
-| `URUSHFTP_OPEN_OPTIONS` | Développement : ouvre la fenêtre Options sur cette page (0 à 8) |
+| `URUSHFTP_OPEN_OPTIONS` | Développement : ouvre la fenêtre Options sur cette page (0 à 16) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Développement : ouvre la fenêtre des raccourcis clavier |
 | `URUSHFTP_OPEN_ABOUT` | Développement : ouvre la fenêtre À propos |
 
@@ -579,3 +688,6 @@ Dans le dossier des données (`%APPDATA%\UltraRushFTP` par défaut) :
 | `stats.json` | Totaux des transferts et date de première utilisation (`RushApp.Total*`, `StartDate`) |
 | `queue.json` | File non terminée de chaque onglet (supprimé quand il ne reste rien à faire) |
 | `*.urq` | Fichiers de file enregistrés à la main (n'importe où), même format que `queue.json` |
+| `layouts.json` | Dispositions des panneaux enregistrées |
+| `logs\` | Fichiers journaux (quand ils sont écrits sur disque) |
+| `backup\` | Sauvegardes de la configuration |

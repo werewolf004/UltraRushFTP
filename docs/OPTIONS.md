@@ -17,6 +17,9 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | File → Site manager | Opens the site manager |
 | File → New tab | New empty tab (also `+` next to the tabs) |
 | File → Options… | Opens the Options window (also `⚙`) |
+| File → Manual download… | See *Manual download* |
+| File → Back up the configuration / Restore a backup | See *Backups* |
+| File → Lock | Locks the window until the master password is given (Options › Security) |
 | File → Quit | Quits |
 | Connection → *site* | Connects the active panel (marked `▸`) to a site of the site manager; groups are sub-menus; `Shift`: ghost login, `Ctrl`: `-password` |
 | Connection → Site manager | Opens the site manager |
@@ -26,9 +29,13 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | FTP → Permissions, Change the date, View the raw listing | Act on the active remote panel |
 | FTP → Space used, Export the directory tree, Find files at sites, Compare the panels | See *Folder tools* |
 | FTP → Clear the cache of this site / every cache, Files being edited | See *Folder tools* |
+| FTP → Send RAW command (`Ctrl+R`), Site commands | See *RAW commands* |
+| View → Layouts | Apply, save or delete a layout of the panels; back to the default layout |
 | View → Light theme / Dark theme | Switches the theme (also stored in the options) |
 | Help → Keyboard shortcuts | Lists the shortcuts below (also `F1`) |
 | Help → About UltraRushFTP | Version, build and licence |
+| `★ Favourites ▾` | Recent sites (10), every site of the site manager, *Manual download*: connects the active panel |
+| `➕` after Connect | Saves the quick connection as a site of the site manager (with its password) |
 | Quick connect | Protocol (FTP, FTPS explicit, FTPS implicit, SFTP), host, port, user, password, **Connect**: opens the site in the right panel of the current tab (or in a new tab, see *General*) |
 | Tabs | One tab per site container; `✕` closes it, the title is the host or "Tab n"; `Ctrl+T` new, `Ctrl+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` next / previous |
 
@@ -101,6 +108,35 @@ in it, in the background; the log says when they are ready.
 | Files being edited | Remote files opened with a program: state, *Send back now*, *Stop watching* |
 
 The walks and searches use a connection of their own: the panel stays free meanwhile.
+
+### Logs and status bar
+
+Each tab has three logs: **FTP** (commands, replies, connections of the panels),
+**Transfers** (queue, items, CRC checks) and **System** (files written, local
+operations, scripts, notifications). Lines show their time and the site (or Left / Right),
+see *Interface*. With *Write the logs to files*, each log goes to
+`<folder>\<date>-ftp.log`, `-transfer.log`, `-system.log`.
+
+While a queue runs, the status bar shows its progress bar with the text of the
+*Interface* option (`%p` percent, `%b` bytes, `%s` speed, `%e` time left, `%c` items).
+
+### RAW commands
+
+**FTP → Send RAW command** (`Ctrl+R`): several commands, one per line, sent to the
+active panel, to both panels or to every connected site; `Ctrl+Enter` sends. The replies
+are listed below the commands and in the FTP log.
+
+**FTP → Site commands**: the commands of *Options › Interface* (`SITE WHO`, `SITE NEW`...).
+A command with `%1` opens in the RAW dialog to be completed first.
+
+### Manual download
+
+**File → Manual download** (also in the favourites): addresses, one per line —
+`ftp://user:password@host:port/path`, `ftps://` (explicit), `ftpsi://` (implicit),
+`sftp://`; a path ending with `/` is a folder. `[1-12]` or `[01-12]` makes a list
+(`file[01-12].rar`). The items go to the queue of the tab, into the chosen folder. With
+the clipboard watch (*Interface*), addresses copied anywhere open this window, or are
+queued at once.
 
 ### Conditional transfer
 
@@ -364,6 +400,68 @@ The file is downloaded to `%TEMP%\UltraRushFTP\files`. Without a matching line i
 Notepad: never with the program Windows associates with its type, which could run a
 downloaded program.
 
+### Interface
+
+![Interface](images/options-interface.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Name the site instead of Left / Right | on | In the FTP and transfer logs |
+| Time of each line | on | |
+| Lines kept by each log | 5000 | |
+| Also write the logs to files | off | One file per day and per log; folder: `logs` of the data folder when empty |
+| Text of the progress bar | `%p · %b · %s · %e` | See *Logs and status bar* |
+| Clipboard: addresses open Manual download / queue them at once | off | |
+| Size of the interface | 100 % | Everything, text and controls |
+| Text size of the logs | 0 (theme) | |
+| Layout of the new tabs | — | Name of a saved layout (View → Layouts) |
+| Tabs below the panels | off | |
+| Folders before the files | on | |
+| Size and date: largest / newest first | off | First click on these columns |
+| Highlighted names | — | Masks and a colour per theme; the contrast against the list backgrounds is shown (4.5:1 at least is advised) |
+| My own colours for the log lines | off | Command, reply, status, error, per theme, with their contrast |
+| Double-click on a file | Transfer | Or view it (remote files), or nothing |
+| Confirmations | exit, close a busy tab: on; remove queue items: off | Quitting while items are still to transfer; closing a tab with connections or a queue; removing queue items |
+| Site commands | `SITE HELP`, `SITE WHO`, `SITE NEW`, `SITE SEARCH %1`, `SITE STAT`, `SYST` + `FEAT` | Name and commands (one per line) of the FTP › Site commands menu |
+
+### Shortcuts
+
+![Shortcuts](images/options-shortcuts.en.png)
+
+Keys of each command, several separated by commas (`Ctrl+Shift+F, F9`, `Alt+Delete`,
+`Plus`, `Minus`, `Space`, `Insert`). A key not understood keeps the default keys; keys
+given to several commands are listed. `F1` shows the keys in use. The arrows, `Enter`,
+`Esc`, `Tab`, `Ctrl+Tab` and `Ctrl+V` cannot be changed.
+
+### Notifications
+
+![Notifications](images/options-notifications.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Always show the icon | off | Icon in the notification area; a click shows the window |
+| Minimizing hides the window there | off | |
+| Flash the taskbar button when a queue ends in the background | on | |
+| Events: sound, pop-up | queue finished and new items: Windows sound and pop-up; transfer failed: pop-up | Sound: empty, `system` or a `.wav` file (`▶` plays it); pop-ups above the icon, or in a corner of the window without it; every event also goes to the system log |
+| Monitored folders | — | Site (name in the site manager), folder, interval; each check lists the folder on a connection of its own and the new names are notified (the first listing only takes note) |
+
+### Security
+
+![Security](images/options-security.en.png)
+
+| Option | Default | Effect |
+|---|---|---|
+| Master password | none | Asked before the site manager and the options (once per session) and to unlock *File → Lock*. Only a salted PBKDF2-SHA256 hash is kept; the site passwords stay protected by Windows (DPAPI). A forgotten master password cannot be recovered: remove `master_hash` from `settings.json` |
+| Only one UltraRushFTP | off | A second start shows the window already open (not in the FTPRush compatibility mode of the mIRC link) |
+| Back up the configuration each day | off | At the first start of the day, into `backup` of the data folder; 4 kept |
+
+### Backups
+
+**File → Back up the configuration** copies the files of the data folder (sites,
+options, statistics, layouts, unfinished queue) into `backup\<date>_<time>`.
+**File → Restore a backup** puts the files of one back and closes UltraRushFTP, which
+must be started again. The passwords of a backup only work for the same Windows account.
+
 ## Site record
 
 ![Site manager](images/site-manager.en.png)
@@ -433,7 +531,13 @@ error.
 **Import** (site manager toolbar): FileZilla (`sitemanager.xml` or export), FTPRush v3
 (`site.json`), FTPRush v1/v2 (`RushSite.xml`), FlashFXP (`.ftp`). The format is detected
 automatically; files found on this computer are offered directly. Passwords are not
-imported from FTPRush v1/v2 and FlashFXP.
+imported from FTPRush v1/v2 and FlashFXP. A text file with one address per line
+(`ftp://user:password@host:port/folder`) is imported too, one site per address.
+
+**Export ▾**: the sites of the selected folder (or every site) as addresses (text), a
+table (CSV), a web page (HTML) or an FTPRush v2 `RushSite.xml`. Passwords are never
+exported. **☰ List** shows every site in one list sortable by name, host, type or folder
+(**📁 Folders** goes back to the tree).
 
 ## Command line
 
@@ -553,7 +657,7 @@ does not create a second one and says so in the log.
 | `URUSHFTP_IPC_CLASS` | Window class used for the mIRC link instead of `TfmUltraRush` / `TfmRush`, by the application and by the DLL (tests) |
 | `URUSHFTP_OPEN_SITES` | Development: opens the site manager on this site id |
 | `URUSHFTP_SITE_SETTINGS` | Development: keeps the site form scrolled to the settings of the site |
-| `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 8) |
+| `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 16) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Development: opens the keyboard shortcuts window |
 | `URUSHFTP_OPEN_ABOUT` | Development: opens the About window |
 
@@ -568,3 +672,6 @@ In the data folder (`%APPDATA%\UltraRushFTP` by default):
 | `stats.json` | Transfer totals and first-use date (`RushApp.Total*`, `StartDate`) |
 | `queue.json` | Unfinished queue of every tab (removed when nothing is left to do) |
 | `*.urq` | Queue files saved by hand (anywhere), same format as `queue.json` |
+| `layouts.json` | Saved layouts of the panels |
+| `logs\` | Log files (when written to disk) |
+| `backup\` | Backups of the configuration |

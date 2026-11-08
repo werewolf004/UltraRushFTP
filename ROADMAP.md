@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 179 · 🟡 31 · ⬜ 57 · ➖ 17). The
+[docs/PARITY.md](docs/PARITY.md) (284 topics: ✅ 210 · 🟡 31 · ⬜ 26 · ➖ 17). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -105,18 +105,18 @@ planned work is grouped below into blocks, each ending with a release.
   `Shift`+double-click) (I5).
 
 ### J — Interface
-- ⬜ Separate FTP / transfer / system logs, log to disk, site names in the log; status bar
-  with queue times and progress text.
-- ⬜ RAW dialog (several lines, all sites), predefined site commands, command designer.
-- ⬜ Favourites menu (sites, recent sites), add a quick connection to the site manager,
-  manual download and incremented URL list, clipboard monitoring.
-- ⬜ Shortcut manager, configurable mouse actions, confirmations (exit, close a busy tab).
-- ⬜ Tray icon, lock, notifications (sounds, pop-ups, folder monitoring), window flash.
-- ⬜ Highlights, fonts, custom colours (with the contrast test), sort options, tab layout
-  options, saved layouts.
-- ⬜ Site manager: list mode, import plain text and UltraFXP, export text / CSV / HTML /
+- ✅ Separate FTP / transfer / system logs, log to disk, site names in the log; status bar
+  with queue times and progress text (J1).
+- ✅ RAW dialog (several lines, all sites), predefined site commands, command designer (J2).
+- ✅ Favourites menu (sites, recent sites), add a quick connection to the site manager,
+  manual download and incremented URL list, clipboard monitoring (J3).
+- ✅ Shortcut manager, configurable mouse actions, confirmations (exit, close a busy tab) (J4).
+- ✅ Tray icon, lock, notifications (sounds, pop-ups, folder monitoring), window flash (J5).
+- 🟡 Highlights, fonts, custom colours (with the contrast test), sort options, tab layout
+  options, saved layouts (J6; no choice of font, tabs on one line).
+- 🟡 Site manager: list mode, import plain text and UltraFXP, export text / CSV / HTML /
   XML (without passwords), optional master password; backup and restore of the
-  configuration, single instance; About window.
+  configuration, single instance; About window (J7; UltraFXP import not done: no sample file).
 
 ### K — Scripting
 - ⬜ Arrays, indexes, `case`, user procedures and functions.
