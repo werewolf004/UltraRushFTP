@@ -210,7 +210,9 @@ impl UltraRushApp {
     /// Sends mIRC the replies of the `RAW` it asked for; the others are forgotten.
     pub(super) fn forward_raw_replies(&mut self) {
         for t in 0..self.tabs.len() {
-            for (site, cmd, lines, ok) in std::mem::take(&mut self.tabs[t].raw_replies) {
+            for reply in std::mem::take(&mut self.tabs[t].raw_replies) {
+                self.raw.record(&reply);
+                let (site, cmd, lines, ok) = reply;
                 let pos = self.raw_callbacks.iter().position(|(s, c, _)| s.eq_ignore_ascii_case(&site) && c == &cmd);
                 if let Some(i) = pos {
                     let (_, _, cb) = self.raw_callbacks.remove(i);

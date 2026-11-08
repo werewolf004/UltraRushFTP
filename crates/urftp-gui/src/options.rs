@@ -257,7 +257,11 @@ impl OptionsWindow {
             }
             Page::Advanced => advanced_ui(ui, &mut s.transfer),
             Page::Browse => browse_ui(ui, &mut s.browse),
-            Page::Interface => interface_ui(ui, &mut s.interface),
+            Page::Interface => {
+                interface_ui(ui, &mut s.interface);
+                ui.add_space(8.0);
+                commands_ui(ui, &mut s.site_commands);
+            }
             Page::Ident => {
                 let id = &mut s.ident;
                 ui.checkbox(&mut id.enabled, t!("options.ident_enable"));
@@ -677,6 +681,46 @@ pub(crate) fn interface_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::Inte
         theme::grid_row(ui, t!("options.ui_status_format"), theme::single_line(&mut s.status_format).desired_width(260.0));
     });
     ui.label(RichText::new(t!("options.ui_status_hint")).weak());
+}
+
+/// Predefined site commands of the FTP menu ("Command designer").
+fn commands_ui(ui: &mut egui::Ui, list: &mut Vec<urftp_core::settings::SiteCommand>) {
+    ui.label(RichText::new(t!("options.ui_commands_section")).strong());
+    let mut remove = None;
+    let mut up = None;
+    egui::Grid::new("opt-commands").num_columns(4).spacing([8.0, 6.0]).show(ui, |ui| {
+        ui.label(RichText::new(t!("common.name")).weak());
+        ui.label(RichText::new(t!("options.ui_command_lines")).weak());
+        ui.end_row();
+        for (i, c) in list.iter_mut().enumerate() {
+            let r = ui.add(theme::single_line(&mut c.name).desired_width(140.0));
+            theme::name(&r, format!("{} {}", t!("common.name"), i + 1));
+            let r = ui.add(egui::TextEdit::multiline(&mut c.lines).font(egui::TextStyle::Monospace).desired_rows(1).desired_width(300.0));
+            theme::name(&r, format!("{} {}", t!("options.ui_command_lines"), i + 1));
+            if theme::icon_button(ui, "⏶", t!("common.move_up")).clicked() && i > 0 {
+                up = Some(i);
+            }
+            if theme::icon_button(ui, "✕", t!("common.remove")).clicked() {
+                remove = Some(i);
+            }
+            ui.end_row();
+        }
+    });
+    if let Some(i) = up {
+        list.swap(i, i - 1);
+    }
+    if let Some(i) = remove {
+        list.remove(i);
+    }
+    ui.horizontal(|ui| {
+        if ui.button(t!("options.browse_add")).clicked() {
+            list.push(urftp_core::settings::SiteCommand { name: t!("options.ui_command_new"), lines: "SITE ".into() });
+        }
+        if ui.button(t!("common.defaults")).clicked() {
+            *list = urftp_core::settings::default_site_commands();
+        }
+    });
+    ui.label(RichText::new(t!("options.ui_commands_hint")).weak());
 }
 
 /// "Browsing" page: directory cache and the programs of the remote files.

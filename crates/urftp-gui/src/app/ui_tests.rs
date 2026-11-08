@@ -1191,3 +1191,19 @@ fn logs_are_split_and_written_to_daily_files() {
     super::logs::configure(&urftp_core::settings::InterfaceSettings::default());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn raw_dialog_opens_with_ctrl_r_and_site_commands_fill_it() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.key_with(Modifiers::COMMAND, Key::R);
+    assert!(ui.app().raw.open && ui.has_label(&t!("raw.title")));
+    assert_all_named(&ui, "RAW dialog");
+    ui.app().raw.open = false;
+    let i = ui.app().options.settings.site_commands.iter().position(|c| c.lines.contains("%1")).unwrap();
+    act(&mut ui, super::Action::SiteCommand(i));
+    assert!(ui.app().raw.open);
+    assert_eq!(ui.app().raw.text, "SITE SEARCH %1", "a command with a parameter is put in the dialog");
+    // Nothing connected: the command is refused with a message.
+    assert_eq!(ui.app().send_raw("SITE WHO", super::raw::RawTarget::All), 0);
+    assert!(ui.app().tabs[0].log.iter().any(|e| e.text == t!("raw.no_connection")));
+}

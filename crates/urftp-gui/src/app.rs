@@ -35,6 +35,7 @@ use urftp_proto::throttle::RateLimiter;
 
 mod fileops;
 mod logs;
+mod raw;
 mod rushapp;
 #[cfg(test)]
 mod shots;
@@ -1254,6 +1255,8 @@ pub struct UltraRushApp {
     paste_down: bool,
     /// Last time the log files were written.
     logs_flushed: std::time::Instant,
+    /// "Send RAW command" dialog and the replies received.
+    raw: raw::RawDialog,
 }
 
 /// `ftp://user:pass@host:port`, `ftps://` (explicit), `ftpsi://` (implicit), `sftp://`.
@@ -1277,7 +1280,7 @@ fn parse_connect_url(url: &str) -> Option<QuickConnect> {
 }
 
 /// Keyboard shortcuts shown by F1: (keys, description), as catalogue keys.
-const SHORTCUTS: [(&str, &str); 25] = [
+const SHORTCUTS: [(&str, &str); 26] = [
     ("shortcuts.k_tab", "shortcuts.tab"),
     ("shortcuts.k_escape", "shortcuts.escape"),
     ("shortcuts.k_f6", "shortcuts.f6"),
@@ -1301,6 +1304,7 @@ const SHORTCUTS: [(&str, &str); 25] = [
     ("shortcuts.k_shift_dblclick", "shortcuts.shift_dblclick"),
     ("shortcuts.k_shift_bookmark", "shortcuts.shift_bookmark"),
     ("shortcuts.k_ctrl_t", "shortcuts.ctrl_t"),
+    ("shortcuts.k_ctrl_r", "shortcuts.ctrl_r"),
     ("shortcuts.k_ctrl_tab", "shortcuts.ctrl_tab"),
     ("shortcuts.k_f1", "shortcuts.f1"),
 ];
@@ -1308,6 +1312,10 @@ const SHORTCUTS: [(&str, &str); 25] = [
 enum Action {
     /// Operation of the Edit / FTP menus on a panel (see [`fileops::Op`]).
     Op(usize, Op),
+    /// "Send RAW command" dialog (`Ctrl+R`).
+    RawDialog,
+    /// Predefined site command `n` of the FTP menu.
+    SiteCommand(usize),
     Open(usize, String),
     Up(usize),
     Refresh(usize),
@@ -1413,6 +1421,7 @@ impl UltraRushApp {
             ipc_enabled: true,
             paste_down: false,
             logs_flushed: std::time::Instant::now(),
+            raw: raw::RawDialog::default(),
         };
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
@@ -2291,7 +2300,12 @@ impl UltraRushApp {
                 }
             });
             ui.menu_button(t!("menu.edit"), |ui| fileops::edit_menu(ui, &self.tabs[self.active], &mut actions));
-            ui.menu_button(t!("menu.ftp"), |ui| fileops::ftp_menu(ui, &mut self.tabs[self.active], &mut actions));
+            let commands = self.options.settings.site_commands.clone();
+            ui.menu_button(t!("menu.ftp"), |ui| {
+                fileops::ftp_menu(ui, &mut self.tabs[self.active], &mut actions);
+                ui.separator();
+                raw::commands_menu(ui, &commands, &mut actions);
+            });
             ui.menu_button(t!("menu.view"), |ui| {
                 if ui.button(if self.dark { t!("menu.light_theme") } else { t!("menu.dark_theme") }).clicked() {
                     self.dark = !self.dark;
@@ -2473,6 +2487,7 @@ impl UltraRushApp {
         let extra = self.queue_site_profiles(self.active);
         let mut scripts = Vec::new();
         let mut ops = Vec::new();
+        let (mut raw_dialog, mut site_commands) = (false, Vec::new());
         let (mut connects, mut reconnects, mut open_sites) = (Vec::new(), Vec::new(), false);
         let clear_on_logout = self.options.settings.transfer.clear_queue_on_logout;
         // Queue file: Some(true) = save, Some(false) = load (file dialog after the loop).
@@ -2481,6 +2496,8 @@ impl UltraRushApp {
         for a in actions {
             match a {
                 Action::Op(side, op) => ops.push((side, op)),
+                Action::RawDialog => raw_dialog = true,
+                Action::SiteCommand(i) => site_commands.push(i),
                 Action::RunScript => scripts.push(false),
                 Action::Invoke => scripts.push(true),
                 Action::Open(side, name) => match &mut tab.sides[side] {
@@ -2628,6 +2645,12 @@ impl UltraRushApp {
         for (side, op) in ops {
             self.run_op(side, op, ctx);
         }
+        if raw_dialog {
+            self.raw.open_with(None);
+        }
+        for i in site_commands {
+            self.site_command(i);
+        }
         match queue_file {
             Some(true) => {
                 let name = format!("{}.urq", self.tabs[self.active].title(self.active + 1));
@@ -2713,6 +2736,9 @@ impl UltraRushApp {
         }
         if pressed(Modifiers::COMMAND, Key::W) {
             self.close_tab(self.active);
+        }
+        if pressed(Modifiers::COMMAND, Key::R) {
+            self.raw.open_with(None);
         }
         let n = self.tabs.len();
         if pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::Tab) {
@@ -3108,6 +3134,7 @@ impl eframe::App for UltraRushApp {
         self.files_dropped(&ctx);
         self.prompt_dialog(&ctx);
         self.tools_ui(&ctx);
+        self.raw_dialog_window(&ctx);
         self.saved_queue_dialog(&ctx);
         self.trust_dialog(&ctx);
         self.shortcuts_window(&ctx);

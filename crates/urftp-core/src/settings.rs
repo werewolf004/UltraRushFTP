@@ -492,6 +492,35 @@ pub struct Settings {
     pub condition_schemes: Vec<ConditionScheme>,
     pub browse: BrowseSettings,
     pub interface: InterfaceSettings,
+    /// Predefined commands of the FTP menu ("Command designer").
+    pub site_commands: Vec<SiteCommand>,
+}
+
+/// A predefined command: one FTP command per line; `%1` is a parameter typed before
+/// sending.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct SiteCommand {
+    pub name: String,
+    pub lines: String,
+}
+
+impl SiteCommand {
+    fn new(name: &str, lines: &str) -> Self {
+        Self { name: name.into(), lines: lines.into() }
+    }
+}
+
+/// Commands offered to a new installation (glftpd and most servers).
+pub fn default_site_commands() -> Vec<SiteCommand> {
+    vec![
+        SiteCommand::new("SITE HELP", "SITE HELP"),
+        SiteCommand::new("SITE WHO", "SITE WHO"),
+        SiteCommand::new("SITE NEW", "SITE NEW"),
+        SiteCommand::new("SITE SEARCH", "SITE SEARCH %1"),
+        SiteCommand::new("SITE STAT", "SITE STAT"),
+        SiteCommand::new("SYST + FEAT", "SYST\nFEAT"),
+    ]
 }
 
 /// Logs, status bar and other display settings of the main window.
@@ -698,6 +727,7 @@ impl Default for Settings {
             condition_schemes: Vec::new(),
             browse: BrowseSettings::default(),
             interface: InterfaceSettings::default(),
+            site_commands: default_site_commands(),
         }
     }
 }
