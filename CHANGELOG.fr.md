@@ -10,6 +10,8 @@ la traduction.
 
 ## [Non publié]
 
+## [0.8.0] - 2026-11-11
+
 Propriétés des sites aussi complètes que celles de FTPRush v2.
 
 ### Ajouté
@@ -388,7 +390,8 @@ réels.
 - Alerte connue acceptée : `RUSTSEC-2023-0071` dans `rsa` (utilisée pour les clés SSH
   RSA) ; voir [SECURITY.fr.md](SECURITY.fr.md).
 
-[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.7.0...HEAD
+[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.4.0...v0.5.0
