@@ -360,6 +360,20 @@ impl SiteManager {
             if ui.button(mode).clicked() {
                 self.list_mode = !self.list_mode;
             }
+            // Connect and the count sit on the right; on their own row when the rest leaves
+            // them no room, so they never cover the buttons on the left.
+            let count = t!("sites.count", n = self.book.root.site_count());
+            let width = |text: &str| {
+                egui::WidgetText::from(text)
+                    .into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Button)
+                    .size()
+                    .x
+            };
+            let spacing = ui.spacing();
+            let right = width(&t!("sites.connect")) + 2.0 * spacing.button_padding.x + width(&count) + 3.0 * spacing.item_spacing.x;
+            if ui.available_size_before_wrap().x < right {
+                ui.end_row();
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Selection::Site(id) = self.selection {
                     let enabled = self.book.find(id).is_some_and(|s| s.enabled && !s.host.trim().is_empty());
@@ -371,7 +385,7 @@ impl SiteManager {
                         self.open = false;
                     }
                 }
-                ui.label(RichText::new(t!("sites.count", n = self.book.root.site_count())).weak());
+                ui.label(RichText::new(count).weak());
             });
         });
     }

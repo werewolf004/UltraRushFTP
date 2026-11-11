@@ -10,6 +10,12 @@ la traduction.
 
 ## [Non publié]
 
+### Corrigé
+
+- Barre d'outils du gestionnaire de sites : quand la fenêtre est étroite, **Connecter** et
+  le nombre de sites passent sur une ligne à part au lieu de recouvrir **Exporter** et le
+  bouton **Liste**.
+
 ## [0.8.0] - 2026-11-11
 
 Propriétés des sites aussi complètes que celles de FTPRush v2.

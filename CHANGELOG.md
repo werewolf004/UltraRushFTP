@@ -9,6 +9,11 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Site manager toolbar: when the window is narrow, **Connect** and the site count move to
+  a row of their own instead of covering **Export** and the **List** button.
+
 ## [0.8.0] - 2026-11-11
 
 Site properties as complete as those of FTPRush v2.
