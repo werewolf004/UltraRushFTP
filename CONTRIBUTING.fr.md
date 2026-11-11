@@ -89,5 +89,23 @@ démonstration (`127.0.0.1`, `example.com`).
 2. Mettre `version = "x.y.z"` dans `[workspace.package]` du `Cargo.toml`.
 3. Commiter, puis créer et pousser le tag : `git tag -a vx.y.z -m "UltraRushFTP x.y.z"` et
    `git push origin vx.y.z`. Le workflow *Release* vérifie la version, lance les tests,
-   compile et publie le zip avec sa somme de contrôle et la section du journal des
-   changements comme notes.
+   compile, puis `scripts/package.ps1` produit le zip et l'installateur (Inno Setup,
+   `installer/UltraRushFTP.iss`) avec leurs sommes de contrôle ; ils sont publiés avec la
+   section du journal des changements comme notes.
+
+En local, après la compilation release : `pwsh scripts/package.ps1 -Version x.y.z` (Inno
+Setup 6 nécessaire pour l'installateur, sinon `-NoInstaller`). L'icône est dessinée par
+`python -I scripts/make-icon.py`.
+
+### Signature du code
+
+`scripts/sign.ps1` signe avec `signtool` (SHA-256, horodatage RFC 3161) quand ces secrets
+du dépôt existent ; sans eux la version est publiée non signée :
+
+| Secret / variable | Contenu |
+|---|---|
+| `SIGN_PFX_BASE64` (secret) | Le certificat de signature de code `.pfx`, encodé en base64 |
+| `SIGN_PFX_PASSWORD` (secret) | Son mot de passe |
+| `SIGN_TIMESTAMP_URL` (variable, facultative) | Serveur d'horodatage ; par défaut `http://timestamp.digicert.com` |
+
+Les exécutables, les deux DLL et l'installateur sont signés.

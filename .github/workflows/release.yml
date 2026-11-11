@@ -53,24 +53,19 @@ jobs:
         shell: pwsh
         run: ./scripts/generate-dependencies.ps1 -Notices
 
-      - name: Package
-        id: package
+      - name: Inno Setup
         shell: pwsh
-        run: |
-          $name = "UltraRushFTP-${{ steps.meta.outputs.version }}-windows-x64"
-          $dir = "dist/$name"
-          New-Item -ItemType Directory -Force "$dir/mirc/x64", "$dir/mirc/x86" | Out-Null
-          Copy-Item target/release/UltraRushFTP.exe, target/release/urftp.exe $dir
-          Copy-Item scripts/validate-server.ps1 $dir
-          Copy-Item target/release/rushmirc.dll "$dir/mirc/x64/"
-          Copy-Item target/i686-pc-windows-msvc/release/rushmirc.dll "$dir/mirc/x86/"
-          Get-ChildItem -File -Include 'LICENSE*', 'README*.md', 'CHANGELOG*.md', 'SECURITY*.md', 'ROADMAP*.md', 'CONTRIBUTING*.md', 'THIRD-PARTY-LICENSES.txt' -Path * | Copy-Item -Destination $dir
-          Copy-Item -Recurse docs "$dir/docs"
-          Compress-Archive -Path "$dir/*" -DestinationPath "dist/$name.zip"
-          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
-          # LF line ending, so that `sha256sum -c` accepts it too.
-          [IO.File]::WriteAllText("$PWD/dist/$name.zip.sha256", "$hash  $name.zip`n")
-          "zip=dist/$name.zip" >> $env:GITHUB_OUTPUT
+        run: if (-not (Test-Path "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe")) { choco install innosetup -y --no-progress }
+
+      # Signed when the SIGN_PFX_BASE64 / SIGN_PFX_PASSWORD secrets exist (scripts/sign.ps1);
+      # without them the release is published unsigned.
+      - name: Package (zip and installer)
+        shell: pwsh
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+          SIGN_TIMESTAMP_URL: ${{ vars.SIGN_TIMESTAMP_URL }}
+        run: ./scripts/package.ps1 -Version '${{ steps.meta.outputs.version }}' | Set-Content -Encoding utf8 release-files.txt
 
       - name: Publish GitHub release
         shell: pwsh
@@ -79,5 +74,5 @@ jobs:
         run: |
           $tag = '${{ github.ref_name }}'
           $pre = if ($tag -match '-') { '--prerelease' } else { $null }
-          gh release create $tag --verify-tag --title "UltraRushFTP $tag" --notes-file release-notes.md $pre `
-            '${{ steps.package.outputs.zip }}' '${{ steps.package.outputs.zip }}.sha256'
+          $files = Get-Content release-files.txt
+          gh release create $tag --verify-tag --title "UltraRushFTP $tag" --notes-file release-notes.md $pre @files

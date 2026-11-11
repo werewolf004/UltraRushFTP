@@ -169,3 +169,99 @@ async fn listings_and_transfers_are_protected_separately() {
     let list = cmds.iter().position(|l| l.starts_with("MLSD") || l.starts_with("LIST")).unwrap();
     assert_eq!(cmds[..list].iter().rev().find(|l| l.starts_with("PROT")).map(String::as_str), Some("PROT C"), "{cmds:?}");
 }
+
+/// A router answering UPnP: SSDP on a local UDP port, then every SOAP action accepted
+/// (public address 203.0.113.7). Returns the discovery address and the actions received.
+async fn fake_router() -> (std::net::SocketAddr, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let http = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let http_addr = http.local_addr().unwrap();
+    let udp = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let ssdp = udp.local_addr().unwrap();
+    let actions = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    tokio::spawn(async move {
+        let mut buf = [0u8; 1024];
+        while let Ok((_, from)) = udp.recv_from(&mut buf).await {
+            let answer = format!("HTTP/1.1 200 OK\r\nLOCATION: http://{http_addr}/desc.xml\r\n\r\n");
+            let _ = udp.send_to(answer.as_bytes(), from).await;
+        }
+    });
+    let log = actions.clone();
+    tokio::spawn(async move {
+        while let Ok((mut s, _)) = http.accept().await {
+            let log = log.clone();
+            tokio::spawn(async move {
+                let mut raw = Vec::new();
+                let mut buf = [0u8; 4096];
+                loop {
+                    let n = s.read(&mut buf).await.unwrap_or(0);
+                    raw.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&raw);
+                    if n == 0 || (text.contains("\r\n\r\n") && (text.starts_with("GET") || text.ends_with("</s:Envelope>\r\n"))) {
+                        break;
+                    }
+                }
+                let req = String::from_utf8_lossy(&raw).into_owned();
+                let body = if req.starts_with("GET") {
+                    "<root><service><serviceType>urn:schemas-upnp-org:service:WANIPConnection:1</serviceType>\
+                     <controlURL>/ctl</controlURL></service></root>"
+                        .to_owned()
+                } else {
+                    let action = req.split('#').nth(1).and_then(|r| r.split('"').next()).unwrap_or_default().to_owned();
+                    log.lock().unwrap().push(action);
+                    "<s:Envelope><s:Body><u:R><NewExternalIPAddress>203.0.113.7</NewExternalIPAddress></u:R></s:Body></s:Envelope>"
+                        .to_owned()
+                };
+                let reply = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+                let _ = s.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    (ssdp, actions)
+}
+
+#[tokio::test]
+async fn active_mode_through_upnp_announces_the_router() {
+    let srv = MockServer::start(MockConfig::default()).await;
+    let (ssdp, actions) = fake_router().await;
+    let upnp = std::sync::Arc::new(urftp_proto::upnp::Upnp::with_discovery(ssdp, std::time::Duration::from_secs(2)));
+    let lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = lines.clone();
+    let log: urftp_proto::ftp::LogSink = std::sync::Arc::new(move |l| sink.lock().unwrap().push(format!("{l:?}")));
+    let cfg = FtpConfig {
+        active_mode: true,
+        active_port_range: Some((50_300, 50_310)),
+        upnp: Some(upnp),
+        connect_timeout: std::time::Duration::from_millis(300),
+        ..FtpConfig::default()
+    };
+    let mut c = FtpClient::connect_with_log("127.0.0.1", srv.addr.port(), cfg, Some(log)).await.unwrap();
+    c.login("test", "secret").await.unwrap();
+    // The public address is unreachable here: only the announced command is checked.
+    let _ = c.list(None).await;
+    let port_cmd = srv.received().into_iter().find(|l| l.starts_with("PORT ")).unwrap();
+    assert!(port_cmd.starts_with("PORT 203,0,113,7,"), "{port_cmd}");
+    let n: Vec<u16> = port_cmd[5..].split(',').map(|s| s.parse().unwrap()).collect();
+    assert!((50_300..=50_310).contains(&(n[4] * 256 + n[5])), "{port_cmd}");
+    assert_eq!(actions.lock().unwrap().as_slice(), ["AddPortMapping", "GetExternalIPAddress"]);
+    assert!(lines.lock().unwrap().iter().any(|l| l.contains("UPnP: router port")));
+    drop(c);
+    for _ in 0..50 {
+        if actions.lock().unwrap().len() == 3 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(actions.lock().unwrap().last().map(String::as_str), Some("DeletePortMapping"), "the port is closed with the connection");
+}
+
+#[tokio::test]
+async fn active_mode_without_a_router_keeps_the_local_address() {
+    let srv = MockServer::start(MockConfig::default()).await;
+    let silent = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let upnp =
+        std::sync::Arc::new(urftp_proto::upnp::Upnp::with_discovery(silent.local_addr().unwrap(), std::time::Duration::from_millis(200)));
+    let c = roundtrip(&srv, FtpConfig { active_mode: true, upnp: Some(upnp), ..FtpConfig::default() }).await;
+    drop(c);
+    assert!(srv.received().iter().any(|l| l.starts_with("PORT 127,0,0,1,")));
+}

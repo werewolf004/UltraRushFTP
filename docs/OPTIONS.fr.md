@@ -357,6 +357,7 @@ serveur l'a coupée.
 | Ports locaux du mode actif | 0 – 0 (tous) | Plage redirigée par le routeur vers cet ordinateur |
 | Adresse locale des connexions | vide | IP de la carte réseau d'où partent les connexions FTP et SFTP (pas utilisée à travers un proxy) |
 | Envoyer NOOP pendant les transferts, toutes les | non, 60 s | FTP : garde la connexion de contrôle active pendant les longs transferts (proxys, routeurs) ; les réponses sont lues avec la fin du transfert |
+| Utiliser l'UPnP : ouvrir sur le routeur les ports du mode actif et le port Ident | non | Le routeur (Internet Gateway Device, trouvé par SSDP) ouvre chaque port du mode actif le temps de son usage, et le port 113 vers le serveur Ident ; son adresse publique est envoyée par `PORT` sauf si une adresse externe est donnée. **Relancer le service UPnP** (aussi dans le menu FTP) recherche à nouveau le routeur. L'état (routeur trouvé, adresse publique, port Ident) s'affiche sous l'option. IPv4 seulement |
 
 Les réglages de listing d'un site (fiche du site › Listing) l'emportent sur les trois
 premières options. Une adresse invalide est affichée en rouge et ignorée.

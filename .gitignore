@@ -30,3 +30,6 @@ Desktop.ini
 
 # Generated at release time (scripts/generate-dependencies.ps1 -Notices)
 /THIRD-PARTY-LICENSES.txt
+
+# Packages written by scripts/package.ps1
+/dist/

@@ -349,6 +349,7 @@ idle before reusing it, and opens a new one when the server has dropped it.
 | Local ports of the active mode | 0 – 0 (any) | Range forwarded by the router to this computer |
 | Local address of the connections | empty | IP of the network card the FTP and SFTP connections leave from (not used through a proxy) |
 | Send NOOP during the transfers, every | off, 60 s | FTP: keeps the control connection alive during long transfers (proxies, routers); the replies are read with the end of the transfer |
+| Use UPnP: open the active-mode ports and the Ident port on the router | off | The router (Internet Gateway Device, found by SSDP) opens each active-mode port while it is used, and port 113 to the Ident server; its public address is sent with `PORT` unless an external address is given. **Restart UPnP service** (also in the FTP menu) searches the router again. The state (router found, public address, Ident port) is shown under the option. IPv4 only |
 
 The listing settings of a site (site record › Listing) win over the first three options.
 An invalid address is shown in red and ignored.

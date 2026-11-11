@@ -54,7 +54,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (287 sujets : ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (287 sujets : ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
@@ -144,11 +144,12 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
   une zone live.
 
 ### Distribution
-- ⬜ Manifeste d'application (`longPathAware`, prise en compte du DPI), icône et ressources
-  de version.
-- ⬜ Signature des binaires.
-- ⬜ Installateur (facultatif, en plus du zip portable).
-- ⬜ Redirection de ports UPnP (mode actif, Ident).
+- ✅ Manifeste d'application (`longPathAware`, DPI par écran), icône et ressources de
+  version.
+- 🟡 Signature des binaires : prête dans le workflow de publication, en attente d'un
+  certificat.
+- ✅ Installateur (Inno Setup, par utilisateur ou pour tous) en plus du zip portable.
+- ✅ Redirection de ports UPnP (mode actif, Ident), Relancer le service UPnP.
 
 ## Plus tard
 

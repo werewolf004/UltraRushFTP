@@ -55,13 +55,13 @@ fn run() -> Result<(), StartupError> {
         tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("urftp-net").build().map_err(StartupError::Runtime)?;
     let handle = runtime.handle().clone();
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("UltraRushFTP")
-            .with_inner_size([1320.0, 820.0])
-            .with_min_inner_size([900.0, 560.0]),
-        ..Default::default()
-    };
+    let mut viewport =
+        egui::ViewportBuilder::default().with_title("UltraRushFTP").with_inner_size([1320.0, 820.0]).with_min_inner_size([900.0, 560.0]);
+    // Title bar and taskbar icon; the system's default one if the image cannot be read.
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon-256.png")) {
+        viewport = viewport.with_icon(icon);
+    }
+    let options = eframe::NativeOptions { viewport, ..Default::default() };
     eframe::run_native(
         "UltraRushFTP",
         options,

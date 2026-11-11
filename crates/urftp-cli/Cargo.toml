@@ -23,3 +23,6 @@ tokio = { workspace = true, features = ["rt-multi-thread", "sync", "fs", "time"]
 
 [lints]
 workspace = true
+
+[build-dependencies]
+embed-resource = "3.0.12"

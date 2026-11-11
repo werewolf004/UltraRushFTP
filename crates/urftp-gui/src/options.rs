@@ -89,6 +89,10 @@ pub struct OptionsWindow {
     last_change: f64,
     /// Status message of the Ident server (shown on the Ident page).
     pub ident_status: Option<(String, bool)>,
+    /// State of the router (UPnP), shown on the Connection page.
+    pub upnp_status: Option<(String, bool)>,
+    /// "Restart UPnP service" was pressed (read by the application).
+    pub upnp_restart: bool,
     error: Option<String>,
     /// Fields of the master password (never stored).
     master: MasterForm,
@@ -120,6 +124,8 @@ impl OptionsWindow {
             dirty: false,
             last_change: 0.0,
             ident_status: None,
+            upnp_status: None,
+            upnp_restart: false,
             error,
             master: MasterForm::default(),
         }
@@ -279,7 +285,7 @@ impl OptionsWindow {
             Page::Priorities => priorities_ui(ui, &mut s.priorities),
             Page::Proxy => proxy_ui(ui, &mut s.proxy, &mut s.proxies),
             Page::KeepAlive => keep_alive_ui(ui, &mut s.keep_alive),
-            Page::Connection => connection_ui(ui, s),
+            Page::Connection => connection_ui(ui, s, self.upnp_status.as_ref(), &mut self.upnp_restart),
             Page::NewSite => {
                 ui.label(RichText::new(t!("options.new_site_note")).weak());
                 ui.add_space(4.0);
@@ -332,7 +338,7 @@ fn ip_field(ui: &mut egui::Ui, label: String, value: &mut String, hint: &str) {
 }
 
 /// Connection page: listing and active mode.
-fn connection_ui(ui: &mut egui::Ui, s: &mut Settings) {
+fn connection_ui(ui: &mut egui::Ui, s: &mut Settings, upnp_status: Option<&(String, bool)>, upnp_restart: &mut bool) {
     let l = &mut s.listing;
     ui.strong(t!("options.listing"));
     ui.checkbox(&mut l.use_mlsd, t!("options.use_mlsd"));
@@ -367,6 +373,22 @@ fn connection_ui(ui: &mut egui::Ui, s: &mut Settings) {
         theme::name(&r, t!("options.noop_interval"));
     });
     ui.label(RichText::new(t!("options.active_note")).weak());
+    ui.add_space(10.0);
+
+    ui.strong("UPnP");
+    ui.checkbox(&mut n.upnp, t!("options.upnp"));
+    if n.upnp {
+        ui.horizontal(|ui| {
+            if ui.button(t!("options.upnp_restart")).clicked() {
+                *upnp_restart = true;
+            }
+            if let Some((msg, ok)) = upnp_status {
+                let p = theme::colors(ui);
+                ui.colored_label(if *ok { p.success } else { p.error }, format!("{} {msg}", if *ok { "✔" } else { "⚠" }));
+            }
+        });
+    }
+    ui.label(RichText::new(t!("options.upnp_note")).weak());
 }
 
 /// Applies the language setting. `URUSHFTP_LANG=en|fr` overrides it (screenshots, tests).

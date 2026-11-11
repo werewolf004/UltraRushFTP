@@ -29,3 +29,4 @@ pub mod proxy;
 pub mod session;
 pub mod sftp;
 pub mod throttle;
+pub mod upnp;

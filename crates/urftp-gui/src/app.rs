@@ -1233,6 +1233,17 @@ struct QuickConnect {
     proto: QuickProto,
 }
 
+/// Router state filled by the UPnP task (see `UltraRushApp::sync_upnp`).
+#[derive(Default)]
+struct UpnpState {
+    /// Number of the last request; an older answer is ignored.
+    generation: u64,
+    /// Message of the Connection page: (text, success?).
+    status: Option<(String, bool)>,
+    /// Port 113 of the router opened to the Ident server.
+    ident: Option<urftp_proto::upnp::Mapping>,
+}
+
 pub struct UltraRushApp {
     rt: Handle,
     /// Queues left unfinished last time, waiting for the user's answer, with the ones
@@ -1257,6 +1268,9 @@ pub struct UltraRushApp {
     upload_limit: Arc<RateLimiter>,
     ident: Option<IdentServer>,
     ident_applied: Option<IdentSettings>,
+    /// Router (UPnP): what was last applied, and the state the background task fills.
+    upnp_applied: Option<(bool, Option<u16>)>,
+    upnp: Arc<Mutex<UpnpState>>,
     /// Statistics (stored totals, session, rates) for `RushApp.*` and the status bar.
     stats: rushapp::Stats,
     /// Separator of the site lists in scripts (`RushApp.FTP.Splitter`).
@@ -1448,6 +1462,8 @@ impl UltraRushApp {
             upload_limit: RateLimiter::new(ul),
             ident: None,
             ident_applied: None,
+            upnp_applied: None,
+            upnp: Arc::default(),
             stats: rushapp::Stats::load(),
             splitter: ";".into(),
             startup_script_done: false,
@@ -1658,6 +1674,59 @@ impl UltraRushApp {
         self.download_limit.set_rate(s.transfer.download_limit_kib * 1024);
         self.upload_limit.set_rate(s.transfer.upload_limit_kib * 1024);
         self.sync_ident();
+    }
+
+    /// Asks the router (UPnP) again when the option or the Ident port changed, or on
+    /// "Restart UPnP service": finds the router and its public address, and opens port 113
+    /// to the Ident server. Active-mode ports are opened by each connection.
+    fn sync_upnp(&mut self, restart: bool) {
+        let on = self.options.settings.network.upnp;
+        let ident = self.ident.as_ref().map(|s| s.local_addr().port());
+        if !restart && self.upnp_applied == Some((on, ident)) {
+            return;
+        }
+        self.upnp_applied = Some((on, ident));
+        let generation = {
+            let mut s = self.upnp.lock();
+            s.generation += 1;
+            // Dropped: the router closes the former Ident port.
+            s.ident = None;
+            s.status = on.then(|| (t!("upnp.searching"), true));
+            s.generation
+        };
+        if !on {
+            return;
+        }
+        let state = self.upnp.clone();
+        self.rt.spawn(async move {
+            let upnp = urftp_proto::upnp::shared();
+            if restart {
+                upnp.reset().await;
+            }
+            let found = async {
+                let public = upnp.external_ip().await?;
+                let mapping = match ident {
+                    Some(port) => {
+                        let local = std::net::SocketAddrV4::new(upnp.local_ip().await?, port);
+                        Some(upnp.map_exact(113, local, "UltraRushFTP Ident").await?)
+                    }
+                    None => None,
+                };
+                Ok::<_, urftp_proto::upnp::UpnpError>((public, mapping))
+            }
+            .await;
+            let mut s = state.lock();
+            // A newer request replaced this one: its answer is the one shown.
+            if s.generation != generation {
+                return;
+            }
+            s.status = Some(match &found {
+                Ok((ip, Some(m))) => (t!("upnp.ident_open", ip = ip, local = m.local()), true),
+                Ok((ip, None)) => (t!("upnp.found", ip = ip), true),
+                Err(e) => (t!("upnp.failed", error = e), false),
+            });
+            s.ident = found.ok().and_then(|(_, m)| m);
+        });
     }
 
     /// (Re)starts or stops the Ident server when its settings changed.
@@ -2348,6 +2417,13 @@ impl UltraRushApp {
                 fileops::ftp_menu(ui, &mut self.tabs[self.active], &mut actions);
                 ui.separator();
                 raw::commands_menu(ui, &commands, &mut actions);
+                ui.separator();
+                let upnp = self.options.settings.network.upnp;
+                let restart = egui::Button::new(t!("options.upnp_restart"));
+                if ui.add_enabled(upnp, restart).on_disabled_hover_text(t!("options.upnp")).clicked() {
+                    self.options.upnp_restart = true;
+                    ui.close();
+                }
             });
             ui.menu_button(t!("menu.view"), |ui| {
                 self.layouts_menu(ui);
@@ -3146,6 +3222,9 @@ impl eframe::App for UltraRushApp {
         if self.ident_applied.is_none() {
             self.sync_ident();
         }
+        let restart = std::mem::take(&mut self.options.upnp_restart);
+        self.sync_upnp(restart);
+        self.options.upnp_status = self.upnp.lock().status.clone();
         if std::mem::take(&mut self.autoconnect) {
             self.quick_connect(&ctx);
         }

@@ -35,17 +35,21 @@ compatible with FTPRush's `rushmirc.dll`.
 
 ## Installation
 
-1. Download `UltraRushFTP-<version>-windows-x64.zip` from the
-   [releases](https://github.com/werewolf004/UltraRushFTP/releases) of the repository and
-   check it against the published `.sha256` file.
-2. Unzip it anywhere. It contains `UltraRushFTP.exe` (interface), `urftp.exe` (command
-   line), `mirc/x86/rushmirc.dll` and `mirc/x64/rushmirc.dll`, the documentation, the
-   licence and the third-party notices.
-3. Run `UltraRushFTP.exe`. Settings and sites are stored in `%APPDATA%\UltraRushFTP`;
-   start with `-f` to keep them next to the program instead (portable mode).
+The [releases](https://github.com/werewolf004/UltraRushFTP/releases) of the repository
+offer two packages, each with a `.sha256` file to check it:
 
-Requirements: Windows 10 or later, 64-bit. The binaries are not code-signed yet, so
-Windows SmartScreen may ask for confirmation on first start.
+- **Installer** `UltraRushFTP-<version>-windows-x64-setup.exe`: installs for the current
+  user (no administrator rights) or for all users, in English or French, with a Start menu
+  shortcut and an uninstaller. A running UltraRushFTP is closed first.
+- **Portable zip** `UltraRushFTP-<version>-windows-x64.zip`: unzip it anywhere.
+
+Both contain `UltraRushFTP.exe` (interface), `urftp.exe` (command line),
+`mirc/x86/rushmirc.dll` and `mirc/x64/rushmirc.dll`, the documentation, the licence and the
+third-party notices. Settings and sites are stored in `%APPDATA%\UltraRushFTP` (kept when
+uninstalling); start with `-f` to keep them next to the program instead (portable mode).
+
+Requirements: Windows 10 or later, 64-bit. Until the releases are code-signed, Windows
+SmartScreen may ask for confirmation on first start.
 
 ## Quick start
 

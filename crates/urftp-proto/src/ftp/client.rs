@@ -1,5 +1,5 @@
 use std::future::Future;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -41,6 +41,9 @@ pub struct FtpConfig {
     pub active_external_ip: Option<IpAddr>,
     /// Range of local ports for active mode (router port forwarding).
     pub active_port_range: Option<(u16, u16)>,
+    /// Active mode through UPnP: the port is opened on the router and its public address
+    /// announced (unless `active_external_ip` gives one).
+    pub upnp: Option<Arc<crate::upnp::Upnp>>,
     /// Proxy (SOCKS4/4A/5, HTTP tunnel). Ignored when its bypass rules apply.
     pub proxy: Option<ProxyConfig>,
     /// Ask the server its capabilities (`FEAT`) after the login.
@@ -89,6 +92,7 @@ impl Default for FtpConfig {
             active_mode: false,
             active_external_ip: None,
             active_port_range: None,
+            upnp: None,
             connect_timeout: Duration::from_secs(30),
             io_timeout: Duration::from_secs(120),
             prefer_epsv: true,
@@ -176,6 +180,9 @@ pub struct FtpClient {
     passive_failed: bool,
     /// `NOOP` sent during a transfer whose reply has not been read yet.
     pending_noops: usize,
+    /// Router port of the last active-mode listener (UPnP), kept until the next one.
+    active_mapping: Option<crate::upnp::Mapping>,
+    upnp_warned: bool,
     log: Option<LogSink>,
 }
 
@@ -264,6 +271,8 @@ impl FtpClient {
             mode_z: false,
             epsv_refused: false,
             passive_failed: false,
+            active_mapping: None,
+            upnp_warned: false,
             pending_noops: 0,
             log,
         };
@@ -751,8 +760,21 @@ impl FtpClient {
             }
             None => TcpListener::bind((ip, 0)).await?,
         };
-        let port = listener.local_addr()?.port();
-        let advertised = self.config.active_external_ip.unwrap_or(ip);
+        let mut port = listener.local_addr()?.port();
+        let mut advertised = self.config.active_external_ip.unwrap_or(ip);
+        if let Some(upnp) = self.config.upnp.clone() {
+            match self.upnp_open(&upnp, ip, port).await {
+                Ok((public, external)) => {
+                    advertised = self.config.active_external_ip.unwrap_or(IpAddr::V4(public));
+                    port = external;
+                }
+                Err(e) if !self.upnp_warned => {
+                    self.upnp_warned = true;
+                    self.status(format!("UPnP: {e}; the local address is announced"));
+                }
+                Err(_) => {}
+            }
+        }
         let cmd = match advertised {
             IpAddr::V4(v4) => {
                 let o = v4.octets();
@@ -762,6 +784,26 @@ impl FtpClient {
         };
         self.ok(&cmd).await?;
         Ok(listener)
+    }
+
+    /// Opens the router port of an active-mode listener; answers the public address and port.
+    async fn upnp_open(
+        &mut self,
+        upnp: &Arc<crate::upnp::Upnp>,
+        ip: IpAddr,
+        port: u16,
+    ) -> std::result::Result<(Ipv4Addr, u16), crate::upnp::UpnpError> {
+        let local = SocketAddrV4::new(crate::upnp::ipv4(ip)?, port);
+        // The same listener port again (port range): the mapping already exists.
+        let reuse = self.active_mapping.as_ref().is_some_and(|m| m.local() == local);
+        if !reuse {
+            self.active_mapping = None;
+            let mapping = upnp.map(local, "UltraRushFTP active mode").await?;
+            self.status(format!("UPnP: router port {} opened to {local}", mapping.external_port()));
+            self.active_mapping = Some(mapping);
+        }
+        let external = self.active_mapping.as_ref().map_or(port, crate::upnp::Mapping::external_port);
+        Ok((upnp.external_ip().await?, external))
     }
 
     /// Opens a passive data connection (`PRET` when announced, `EPSV` then `PASV`).

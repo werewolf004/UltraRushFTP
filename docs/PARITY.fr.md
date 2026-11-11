@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (287 sujets) : ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
+Résumé (287 sujets) : ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 
 ## Fenêtre principale et menus
 
@@ -109,7 +109,7 @@ Résumé (287 sujets) : ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 | À la fin des transferts : quitter | ✅ | Options › Transferts, et `-rx` |
 | Créer un fichier SFV ou MD5 | ✅ | Clic droit dans un panneau local |
 | Traduction d'adresse IP | ⬜ | Adresse hexadécimale / numérique vers la forme pointée |
-| Redémarrer le service UPnP | ⬜ | Vient avec UPnP |
+| Redémarrer le service UPnP | ✅ | Menu FTP, et Options › Connexion |
 | Options | ✅ | Fenêtre Options |
 
 ### Aide
@@ -200,7 +200,7 @@ Résumé (287 sujets) : ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 | Mode de listing : `STAT -l` | ✅ | Lu sur le canal de contrôle |
 | Mode de listing : retirer les espaces de tête | ✅ | Toujours fait pour `STAT` |
 | Mode de listing : commande personnalisée | ✅ | |
-| Mode de listing : UPnP | ⬜ | |
+| Mode de listing : UPnP | ✅ | Option globale (Options › Connexion) : les listings en mode actif s'en servent aussi |
 | Cache des dossiers par site | ✅ | Réglage global, ou oui / non dans la fiche du site |
 | Jeu de caractères des dossiers (serveurs non UTF-8) | ✅ | Commandes, réponses et listings ; 14 jeux de caractères |
 | Choix de l'analyseur de listing | ✅ | Automatique, Unix ou DOS/IIS (`MLSD` est toujours lu comme tel) |
@@ -237,7 +237,7 @@ Résumé (287 sujets) : ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 | Journal sur disque | ✅ | Un fichier par jour et par journal |
 | Mise à jour groupée du journal | ➖ | L'interface redessine déjà au plus une fois par image |
 | Réserve de threads | ➖ | Moteur asynchrone (tokio) ; rien à régler |
-| UPnP | ⬜ | |
+| UPnP | ✅ | Ports du mode actif et port Ident 113 ouverts sur le routeur, adresse publique annoncée |
 
 ### Connexion
 

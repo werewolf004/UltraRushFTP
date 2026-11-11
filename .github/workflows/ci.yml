@@ -73,13 +73,19 @@ jobs:
         run: |
           ./scripts/check-dll-exports.ps1 -Path target/release/rushmirc.dll -Bits 64
           ./scripts/check-dll-exports.ps1 -Path target/i686-pc-windows-msvc/release/rushmirc.dll -Bits 32
+      - name: Inno Setup
+        shell: pwsh
+        run: if (-not (Test-Path "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Package (zip and installer, unsigned)
+        shell: pwsh
+        run: |
+          ./scripts/generate-dependencies.ps1 -Notices
+          ./scripts/package.ps1 -Version 0.0.0-ci
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ultrarushftp-${{ github.sha }}
           retention-days: 7
           if-no-files-found: error
           path: |
-            target/release/UltraRushFTP.exe
-            target/release/urftp.exe
-            target/release/rushmirc.dll
-            target/i686-pc-windows-msvc/release/rushmirc.dll
+            dist/*.zip
+            dist/*-setup.exe

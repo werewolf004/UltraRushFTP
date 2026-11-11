@@ -10,7 +10,7 @@ Goal: every feature of FTPRush v2, modernised, with **tabbed** site containers a
 | Crate | Role | `unsafe` |
 |---|---|---|
 | `urftp-core` | Data model: sites and bookmarks, site book storage, options, queue and queue files, item options of scripts and conditional transfers (`itemopts`), skip list, priorities, "existing file" rules, SFV / MD5 checksums, panel helpers (`browsing`: quick filter, masks, renaming several items, folder comparison, local walks, space used, directory tree, CHMOD modes, dates), addresses and incremented lists (`urls`), imports and exports, master password hash (`master`, PBKDF2 of `ring`), configuration backups (`backup`), DPAPI-protected secrets | forbidden |
-| `urftp-proto` | FTP client, explicit/implicit FTPS, SFTP, FXP, proxies, Ident server, queue engine, speed limiting, site → connection profile conversion | forbidden |
+| `urftp-proto` | FTP client, explicit/implicit FTPS, SFTP, FXP, proxies, Ident server, UPnP port mapping (`upnp`: SSDP and SOAP), queue engine, speed limiting, site → connection profile conversion | forbidden |
 | `urftp-script` | Interpreter of the FTPRush Pascal Script (procedures, arrays, `case`; `RushApp.*`, `RS_*` flags, event handlers) | forbidden |
 | `urftp-i18n` | English and French catalogs (`locales/*.json`), `t!` macro, Windows language detection | forbidden |
 | `urftp-sys` | **The only crate allowed to contain `unsafe`**: mIRC link window (`TfmUltraRush`, or `TfmRush` in compatibility mode) and shared memory (application side of the mIRC protocol), DPAPI, sleep / hibernate / shut down (`power`), free disk space, files copied in Explorer (`CF_HDROP`), clipboard text, the `Ctrl+V` key state, local time, the notification area icon, window flashing and event sounds (`tray`), single instance (`WM_SHOW_APP`), `rushmirc.dll` exports (`mirc-dll` feature) | allowed, audited |
@@ -73,7 +73,8 @@ Declared once in `[workspace.lints]` (root `Cargo.toml`) and inherited by every 
 - **Local**: no `MAX_PATH` (260) limit. File operations go through `std::fs`, which adds the
   `\\?\` prefix when needed; `urftp-core::localpath::to_verbatim` produces `\\?\C:\…` /
   `\\?\UNC\…` paths for direct Win32 calls. Tested with trees longer than 600 characters.
-  An application manifest with `longPathAware` is still to be added (see the roadmap).
+  The application manifest declares `longPathAware`, so Win32 calls also accept long
+  paths when long paths are enabled in Windows.
 - **Remote**: no fixed-size buffer. When a server refuses a long absolute `CWD`, the client
   navigates segment by segment, then acts on the bare name.
 

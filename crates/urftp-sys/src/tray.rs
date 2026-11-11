@@ -13,13 +13,28 @@ use windows_sys::Win32::UI::Shell::{
     NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_INFO, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW, Shell_NotifyIconW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CREATESTRUCTW, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetMessageW, GetWindowLongPtrW,
-    HWND_MESSAGE, IDI_APPLICATION, LoadIconW, MSG, PostMessageW, PostQuitMessage, RegisterClassExW, SW_RESTORE, SW_SHOW,
-    SetForegroundWindow, SetWindowLongPtrW, ShowWindow, TranslateMessage, WM_APP, WM_CLOSE, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP,
-    WM_NCCREATE, WM_RBUTTONUP, WNDCLASSEXW,
+    CREATESTRUCTW, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetMessageW, GetSystemMetrics,
+    GetWindowLongPtrW, HICON, HWND_MESSAGE, IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTCOLOR, LR_SHARED, LoadIconW, LoadImageW, MSG,
+    PostMessageW, PostQuitMessage, RegisterClassExW, SM_CXSMICON, SM_CYSMICON, SW_RESTORE, SW_SHOW, SetForegroundWindow, SetWindowLongPtrW,
+    ShowWindow, TranslateMessage, WM_APP, WM_CLOSE, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_NCCREATE, WM_RBUTTONUP, WNDCLASSEXW,
 };
 
 use crate::win::wide;
+
+/// Icon of the program (resource 1 of the executable) at the small-icon size of the
+/// notification area; the stock application icon when the executable has none (tests).
+fn app_icon(hinst: windows_sys::Win32::Foundation::HINSTANCE) -> HICON {
+    // SAFETY: plain metric queries.
+    let (cx, cy) = unsafe { (GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON)) };
+    // SAFETY: `hinst` is the module of this process; resource 1 is an integer resource
+    // name (MAKEINTRESOURCE), never dereferenced as a string. A shared icon is not owned.
+    let own = unsafe { LoadImageW(hinst, 1 as windows_sys::core::PCWSTR, IMAGE_ICON, cx, cy, LR_DEFAULTCOLOR | LR_SHARED) };
+    if !own.is_null() {
+        return own;
+    }
+    // SAFETY: a null instance with `IDI_APPLICATION` loads the stock application icon.
+    unsafe { LoadIconW(std::ptr::null_mut(), IDI_APPLICATION) }
+}
 
 /// Message the icon sends to its window.
 const WM_TRAY: u32 = WM_APP + 41;
@@ -164,8 +179,7 @@ fn create(state: State, tip: &str) -> Result<HWND, std::io::Error> {
     let mut d = icon_data(hwnd);
     d.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     d.uCallbackMessage = WM_TRAY;
-    // SAFETY: a null instance with `IDI_APPLICATION` loads the stock application icon.
-    d.hIcon = unsafe { LoadIconW(std::ptr::null_mut(), IDI_APPLICATION) };
+    d.hIcon = app_icon(hinst);
     d.szTip = field(tip);
     // SAFETY: `d` is fully initialised for our window.
     if unsafe { Shell_NotifyIconW(NIM_ADD, &d) } == 0 {

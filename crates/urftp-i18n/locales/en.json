@@ -78,6 +78,10 @@
   "log.keepalive_logout": "Idle for too long: disconnected.",
 
   "ident.stopped": "Ident server stopped.",
+  "upnp.searching": "Searching the router…",
+  "upnp.found": "Router found, public address {ip}.",
+  "upnp.ident_open": "Router found, public address {ip}; port 113 open to Ident ({local}).",
+  "upnp.failed": "UPnP: {error}",
   "ident.running": "Ident server listening on port {port}.",
   "ident.bind_failed": "Cannot listen on port {port}: {error}",
 
@@ -500,6 +504,9 @@
   "options.ident_only_connecting": "Answer only while a connection is being opened",
   "options.noop_during_transfers": "Send NOOP during the transfers, every",
   "options.noop_interval": "Interval of the NOOP sent during the transfers",
+  "options.upnp": "Use UPnP: open the active-mode ports and the Ident port on the router",
+  "options.upnp_restart": "Restart UPnP service",
+  "options.upnp_note": "The router (Internet Gateway Device) opens each active-mode port while it is used, and port 113 to the Ident server; the public address of the router is sent with PORT unless an external address is given above. IPv4 only.",
   "options.named_proxies": "Named proxies",
   "options.named_proxies_note": "Chosen by name in the site records (Proxy). A site whose proxy was removed from this list follows the global setting.",
   "options.add_proxy": "+ Add a proxy",

@@ -82,4 +82,23 @@ anyway. Screenshots and examples use demo data only (`127.0.0.1`, `example.com`)
 2. Set `version = "x.y.z"` in `[workspace.package]` of `Cargo.toml`.
 3. Commit, then tag and push: `git tag -a vx.y.z -m "UltraRushFTP x.y.z"` and
    `git push origin vx.y.z`. The *Release* workflow checks the version, runs the tests,
-   builds and publishes the zip with its checksum and the changelog section as notes.
+   builds, then `scripts/package.ps1` writes the zip and the installer (Inno Setup,
+   `installer/UltraRushFTP.iss`) with their checksums; they are published with the
+   changelog section as notes.
+
+Locally, after the release build: `pwsh scripts/package.ps1 -Version x.y.z` (Inno Setup 6
+needed for the installer, or `-NoInstaller`). The icon is drawn by
+`python -I scripts/make-icon.py`.
+
+### Code signing
+
+`scripts/sign.ps1` signs with `signtool` (SHA-256, RFC 3161 timestamp) when these
+repository secrets exist; without them the release is published unsigned:
+
+| Secret / variable | Content |
+|---|---|
+| `SIGN_PFX_BASE64` (secret) | The code-signing certificate `.pfx`, base64-encoded |
+| `SIGN_PFX_PASSWORD` (secret) | Its password |
+| `SIGN_TIMESTAMP_URL` (variable, optional) | Timestamp server; default `http://timestamp.digicert.com` |
+
+The executables, both DLLs and the installer are signed.

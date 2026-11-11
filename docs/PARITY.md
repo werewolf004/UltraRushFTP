@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (287 topics): ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
+Summary (287 topics): ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 
 ## Main window and menus
 
@@ -109,7 +109,7 @@ Summary (287 topics): ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 | On transfer completed: exit | ✅ | Options › Transfers, and `-rx` |
 | Create SFV or MD5 file | ✅ | Right-click in a local panel |
 | IP address translate | ⬜ | Hexadecimal / numeric address to dotted form |
-| Restart UPnP service | ⬜ | Comes with UPnP |
+| Restart UPnP service | ✅ | FTP menu, and Options › Connection |
 | Option | ✅ | Options window |
 
 ### Help
@@ -200,7 +200,7 @@ Summary (287 topics): ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 | List mode: `STAT -l` | ✅ | Read on the control channel |
 | List mode: trim leading spaces | ✅ | Always done for `STAT` |
 | List mode: custom list command | ✅ | |
-| List mode: UPnP | ⬜ | |
+| List mode: UPnP | ✅ | Global option (Options › Connection): listings in active mode use it too |
 | Directory cache per site | ✅ | Global setting, or yes / no in the site record |
 | Directory charset (non-UTF-8 servers) | ✅ | Commands, replies and listings; 14 character sets |
 | Listing parser choice | ✅ | Automatic, Unix or DOS/IIS (`MLSD` is always read as such) |
@@ -237,7 +237,7 @@ Summary (287 topics): ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18.
 | Log to disk | ✅ | One file per day and per log |
 | Batched log updates | ➖ | The interface already redraws at most once per frame |
 | Thread pool | ➖ | Asynchronous runtime (tokio); nothing to tune |
-| UPnP | ⬜ | |
+| UPnP | ✅ | Active-mode ports and Ident port 113 opened on the router, public address announced |
 
 ### Connection
 

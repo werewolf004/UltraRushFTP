@@ -9,6 +9,30 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Distribution.
+
+### Added
+
+- **Installer** `UltraRushFTP-<version>-windows-x64-setup.exe` (Inno Setup) next to the
+  portable zip: for the current user without administrator rights, or for all users;
+  English or French; Start menu shortcut, optional desktop shortcut, the mIRC DLLs and the
+  documentation; the uninstaller keeps the settings in `%APPDATA%\UltraRushFTP`.
+- **Icon** of the application (window, taskbar, notification area, files), **version
+  information** in the properties of `UltraRushFTP.exe`, `urftp.exe` and `rushmirc.dll`,
+  and an **application manifest**: long paths (`longPathAware`), per-monitor DPI,
+  Windows 10/11, current visual style of the system dialogs.
+- **UPnP** (Options › Connection): the router opens each active-mode port while it is used
+  and port 113 to the Ident server, and its public address is announced with `PORT`;
+  **Restart UPnP service** in the FTP menu and on the options page. Written for the
+  project (SSDP and SOAP), without a new dependency at run time.
+- Code signing ready: releases sign the binaries and the installer as soon as a
+  certificate is stored in the repository secrets (`scripts/sign.ps1`); unsigned until
+  then.
+
+### Changed
+
+- Releases and CI packages are built by `scripts/package.ps1` (zip, installer, checksums).
+
 ### Fixed
 
 - Site manager toolbar: when the window is narrow, **Connect** and the site count move to

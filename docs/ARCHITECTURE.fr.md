@@ -11,7 +11,7 @@ pour les types de connexion.
 | Crate | Rôle | `unsafe` |
 |---|---|---|
 | `urftp-core` | Modèle : sites et signets, enregistrement du carnet, options, file d'attente et fichiers de file, options d'élément des scripts et du transfert conditionnel (`itemopts`), liste d'exclusion, priorités, règles « fichier existant », sommes SFV / MD5, aides des panneaux (`browsing` : filtre rapide, masques, renommage de plusieurs éléments, comparaison de dossiers, parcours locaux, espace utilisé, arborescence, modes CHMOD, dates), adresses et listes incrémentées (`urls`), imports et exports, empreinte du mot de passe maître (`master`, PBKDF2 de `ring`), sauvegardes de la configuration (`backup`), secrets protégés par DPAPI | interdit |
-| `urftp-proto` | Client FTP, FTPS explicite/implicite, SFTP, FXP, proxys, serveur Ident, moteur de file, limitation de débit, conversion fiche de site → profil de connexion | interdit |
+| `urftp-proto` | Client FTP, FTPS explicite/implicite, SFTP, FXP, proxys, serveur Ident, redirection de ports UPnP (`upnp` : SSDP et SOAP), moteur de file, limitation de débit, conversion fiche de site → profil de connexion | interdit |
 | `urftp-script` | Interpréteur du Pascal Script de FTPRush (procédures, tableaux, `case` ; `RushApp.*`, drapeaux `RS_*`, gestionnaires d'événements) | interdit |
 | `urftp-i18n` | Catalogues anglais et français (`locales/*.json`), macro `t!`, détection de la langue de Windows | interdit |
 | `urftp-sys` | **Seule crate autorisée à contenir du `unsafe`** : fenêtre de la liaison mIRC (`TfmUltraRush`, ou `TfmRush` en mode compatibilité) et mémoire partagée (côté application du protocole mIRC), DPAPI, veille / veille prolongée / arrêt (`power`), espace disque libre, fichiers copiés dans l'Explorateur (`CF_HDROP`), texte du presse-papiers, état de la touche `Ctrl+V`, heure locale, icône de la zone de notification, clignotement de la fenêtre et sons des événements (`tray`), instance unique (`WM_SHOW_APP`), exports de `rushmirc.dll` (fonctionnalité `mirc-dll`) | autorisé, audité |
@@ -76,8 +76,9 @@ les crates :
 - **Local** : aucune limite `MAX_PATH` (260). Les opérations sur les fichiers passent par
   `std::fs`, qui ajoute le préfixe `\\?\` quand il le faut ;
   `urftp-core::localpath::to_verbatim` produit des chemins `\\?\C:\…` / `\\?\UNC\…` pour
-  les appels Win32 directs. Testé avec des arborescences de plus de 600 caractères. Un
-  manifeste d'application avec `longPathAware` reste à ajouter (voir la feuille de route).
+  les appels Win32 directs. Testé avec des arborescences de plus de 600 caractères. Le
+  manifeste d'application déclare `longPathAware` : les appels Win32 acceptent aussi les
+  chemins longs quand ils sont activés dans Windows.
 - **Distant** : aucun tampon de taille fixe. Quand un serveur refuse un `CWD` absolu trop
   long, le client navigue segment par segment, puis agit sur le nom seul.
 

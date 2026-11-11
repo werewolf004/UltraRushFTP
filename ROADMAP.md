@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (287 topics: ✅ 228 · 🟡 25 · ⬜ 16 · ➖ 18). The
+[docs/PARITY.md](docs/PARITY.md) (287 topics: ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -128,10 +128,11 @@ planned work is grouped below into blocks, each ending with a release.
 - ✅ Screen readers: the row under the file-list cursor is told by a live region.
 
 ### Distribution
-- ⬜ Application manifest (`longPathAware`, DPI awareness), icon and version resources.
-- ⬜ Code signing of the binaries.
-- ⬜ Installer (optional, in addition to the portable zip).
-- ⬜ UPnP port mapping (active mode, Ident).
+- ✅ Application manifest (`longPathAware`, per-monitor DPI), icon and version resources.
+- 🟡 Code signing of the binaries: ready in the release workflow, waiting for a
+  certificate.
+- ✅ Installer (Inno Setup, per user or for all users) in addition to the portable zip.
+- ✅ UPnP port mapping (active mode, Ident), Restart UPnP service.
 
 ## Later
 

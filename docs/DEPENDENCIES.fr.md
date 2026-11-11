@@ -59,6 +59,7 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `sys-locale` | 0.3 | MIT / Apache-2.0 | i18n | Langue de l'interface de Windows |
 | `rand` | 0.10 | MIT / Apache-2.0 | proto (tests) | Données de test |
 | `rcgen` | 0.14 | MIT / Apache-2.0 | proto (tests) | Certificats de test du serveur FTPS de test |
+| `embed-resource` | 3.0 | MIT | gui, cli, rushmirc (compilation) | Compile et lie les ressources Windows (icône, informations de version, manifeste ; `build/winres.rs`) |
 | `egui_kittest` | 0.36 | MIT / Apache-2.0 | gui (tests) | Tests de l'interface par l'arbre AccessKit (clavier, noms, taille des cibles) ; captures de la documentation dessinées hors écran (`wgpu`) |
 
 « / » signifie « ou » (la crate laisse le choix de la licence).
@@ -70,5 +71,8 @@ générée par `scripts/generate-dependencies.ps1` dans
 | Rust 1.99.1 (`rust-toolchain.toml`) avec `clippy`, `rustfmt` et la cible `i686-pc-windows-msvc` | Compilation, analyse, formatage |
 | Visual Studio Build Tools (éditeur de liens MSVC, SDK Windows) | Édition des liens sous Windows |
 | `cargo-deny` | Vérification des licences, alertes et sources |
-| PowerShell 7 | Scripts de `scripts/` (exports de la DLL, journal des changements, dépendances, captures) |
+| PowerShell 7 | Scripts de `scripts/` (exports de la DLL, journal des changements, dépendances, captures, paquets, signature) |
+| Inno Setup 6 | Installateur (`installer/UltraRushFTP.iss`, via `scripts/package.ps1`) |
+| `signtool` (SDK Windows) | Signature du code quand un certificat est configuré (`scripts/sign.ps1`) |
+| Python 3 | Dessine l'icône (`scripts/make-icon.py`, bibliothèque standard seulement) |
 | GitHub Actions : `actions/checkout`, `dtolnay/rust-toolchain`, `Swatinem/rust-cache`, `EmbarkStudios/cargo-deny-action`, `actions/upload-artifact` | CI et versions publiées, épinglées sur des commits |

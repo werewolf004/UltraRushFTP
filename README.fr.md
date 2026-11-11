@@ -35,18 +35,23 @@ DLL compatible avec la `rushmirc.dll` de FTPRush.
 
 ## Installation
 
-1. Télécharger `UltraRushFTP-<version>-windows-x64.zip` dans les
-   [versions publiées](https://github.com/werewolf004/UltraRushFTP/releases) du dépôt et
-   le vérifier avec le fichier `.sha256` publié à côté.
-2. Le décompresser où l'on veut. Il contient `UltraRushFTP.exe` (interface), `urftp.exe`
-   (ligne de commande), `mirc/x86/rushmirc.dll` et `mirc/x64/rushmirc.dll`, la
-   documentation, la licence et les mentions des composants tiers.
-3. Lancer `UltraRushFTP.exe`. Réglages et sites sont enregistrés dans
-   `%APPDATA%\UltraRushFTP` ; lancer avec `-f` pour les garder à côté du programme (mode
-   portable).
+Les [versions publiées](https://github.com/werewolf004/UltraRushFTP/releases) du dépôt
+proposent deux paquets, chacun avec un fichier `.sha256` pour le vérifier :
 
-Configuration requise : Windows 10 ou plus récent, 64 bits. Les binaires ne sont pas
-encore signés : Windows SmartScreen peut demander une confirmation au premier lancement.
+- **Installateur** `UltraRushFTP-<version>-windows-x64-setup.exe` : installe pour
+  l'utilisateur courant (sans droits d'administrateur) ou pour tous les utilisateurs, en
+  anglais ou en français, avec un raccourci dans le menu Démarrer et un désinstallateur.
+  Un UltraRushFTP lancé est d'abord fermé.
+- **Zip portable** `UltraRushFTP-<version>-windows-x64.zip` : à décompresser où l'on veut.
+
+Les deux contiennent `UltraRushFTP.exe` (interface), `urftp.exe` (ligne de commande),
+`mirc/x86/rushmirc.dll` et `mirc/x64/rushmirc.dll`, la documentation, la licence et les
+mentions des composants tiers. Réglages et sites sont enregistrés dans
+`%APPDATA%\UltraRushFTP` (gardés à la désinstallation) ; lancer avec `-f` pour les garder
+à côté du programme (mode portable).
+
+Configuration requise : Windows 10 ou plus récent, 64 bits. Tant que les versions ne sont
+pas signées, Windows SmartScreen peut demander une confirmation au premier lancement.
 
 ## Prise en main
 

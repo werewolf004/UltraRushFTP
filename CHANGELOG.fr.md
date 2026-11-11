@@ -10,6 +10,32 @@ la traduction.
 
 ## [Non publié]
 
+Distribution.
+
+### Ajouté
+
+- **Installateur** `UltraRushFTP-<version>-windows-x64-setup.exe` (Inno Setup) à côté du
+  zip portable : pour l'utilisateur courant sans droits d'administrateur, ou pour tous les
+  utilisateurs ; en anglais ou en français ; raccourci du menu Démarrer, raccourci du
+  bureau au choix, DLL mIRC et documentation ; le désinstallateur garde les réglages de
+  `%APPDATA%\UltraRushFTP`.
+- **Icône** de l'application (fenêtre, barre des tâches, zone de notification, fichiers),
+  **informations de version** dans les propriétés de `UltraRushFTP.exe`, `urftp.exe` et
+  `rushmirc.dll`, et **manifeste d'application** : chemins longs (`longPathAware`), DPI par
+  écran, Windows 10/11, style visuel actuel des boîtes de dialogue du système.
+- **UPnP** (Options › Connexion) : le routeur ouvre chaque port du mode actif le temps de
+  son usage et le port 113 vers le serveur Ident, et son adresse publique est annoncée par
+  `PORT` ; **Relancer le service UPnP** dans le menu FTP et sur la page d'options. Écrit
+  pour le projet (SSDP et SOAP), sans nouvelle dépendance à l'exécution.
+- Signature prête : les versions publiées signent les binaires et l'installateur dès qu'un
+  certificat est enregistré dans les secrets du dépôt (`scripts/sign.ps1`) ; non signées
+  d'ici là.
+
+### Modifié
+
+- Les paquets des versions et de la CI sont produits par `scripts/package.ps1` (zip,
+  installateur, sommes de contrôle).
+
 ### Corrigé
 
 - Barre d'outils du gestionnaire de sites : quand la fenêtre est étroite, **Connecter** et

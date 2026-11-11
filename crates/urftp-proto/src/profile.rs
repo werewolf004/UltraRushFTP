@@ -151,6 +151,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             send_pbsz: site.send_pbsz,
             active_external_ip: net.external(),
             active_port_range: net.port_range(),
+            upnp: settings.network.upnp.then(crate::upnp::shared),
             bind_ip: net.bind(),
             list_command: list_command.clone(),
             use_mlsd,

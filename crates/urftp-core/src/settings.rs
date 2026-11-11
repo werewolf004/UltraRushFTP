@@ -422,6 +422,9 @@ pub struct NetworkSettings {
     /// that drop a connection idle for too long).
     pub noop_during_transfers: bool,
     pub noop_interval_secs: u32,
+    /// UPnP: open the active-mode ports and the Ident port on the router, and announce its
+    /// public address.
+    pub upnp: bool,
 }
 
 impl Default for NetworkSettings {
@@ -433,6 +436,7 @@ impl Default for NetworkSettings {
             bind_ip: String::new(),
             noop_during_transfers: false,
             noop_interval_secs: 60,
+            upnp: false,
         }
     }
 }
