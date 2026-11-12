@@ -537,6 +537,9 @@ must be started again. The passwords of a backup only work for the same Windows 
 
 ![Site manager](images/site-manager.en.png)
 
+In the site tree, a site is moved by dragging it onto a folder (at its end) or onto another
+site (before it); a folder is dragged onto another folder to go inside it.
+
 | Field | Default | Notes |
 |---|---|---|
 | Name | "New site" | Used by scripts, mIRC and `urftp` (case-insensitive) |

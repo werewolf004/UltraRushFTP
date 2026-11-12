@@ -28,6 +28,8 @@ Advanced transfers (block O) and finishing touches (block P).
 
 ### Fixed
 
+- Site manager: sites and folders are moved in the tree by **drag and drop** (onto a
+  folder, or before another site).
 - After a compressed transfer, a listing on the same connection was read compressed: it
   goes back to `MODE S` (or reads the compressed listing).
 

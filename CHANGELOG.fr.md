@@ -30,6 +30,8 @@ Transferts avancés (bloc O) et finitions (bloc P).
 
 ### Corrigé
 
+- Gestionnaire de sites : les sites et les dossiers se déplacent dans l'arbre par
+  **glisser-déposer** (sur un dossier, ou avant un autre site).
 - Après un transfert compressé, une liste sur la même connexion était lue compressée :
   elle repasse en `MODE S` (ou lit la liste compressée).
 

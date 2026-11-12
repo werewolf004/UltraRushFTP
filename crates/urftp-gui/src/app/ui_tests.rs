@@ -1947,3 +1947,50 @@ fn script_console_opens_and_saves_files() {
     tab.open_script(&scratch().join("missing.pas"));
     assert!(tab.script_out.last().is_some_and(|(ok, _)| !ok), "an unreadable file is told");
 }
+
+impl Ui {
+    /// Drags the control named `from` and drops it on the control named `to`.
+    fn drag_onto(&mut self, from: &str, to: &str) {
+        self.harness.run_steps(12);
+        let start = self.harness.get_by_label(from).rect().center();
+        let end = self.harness.get_by_label(to).rect().center();
+        self.harness.hover_at(start);
+        self.harness.drag_at(start);
+        self.run();
+        for k in 1..=4 {
+            self.harness.hover_at(start + (end - start) * (k as f32 / 4.0));
+            self.run();
+        }
+        self.harness.drop_at(end);
+        self.run();
+    }
+}
+
+#[test]
+fn sites_and_folders_are_dragged_in_the_site_manager() {
+    use urftp_core::site::{Site, SiteGroup};
+    let mut ui = Ui::start(Lang::En, true);
+    // An empty book: the other tests leave their sites in the shared data folder.
+    ui.app().sites.book = urftp_core::site::SiteBook::default();
+    let book = &mut ui.app().sites.book;
+    book.root.groups.push(SiteGroup::new("Archive"));
+    book.root.groups.push(SiteGroup::new("Other"));
+    let anchor = book.add_site(&[0], Site { name: "Anchor".into(), host: "a.example.com".into(), ..Default::default() });
+    let mover = book.add_site(&[], Site { name: "Mover".into(), host: "m.example.com".into(), ..Default::default() });
+    ui.app().sites.open = true;
+    ui.run();
+    // A site onto a folder: at its end.
+    ui.drag_onto("🌐 Mover", "📁 Archive");
+    let ids = |ui: &mut Ui, g: usize| ui.app().sites.book.root.groups[g].sites.iter().map(|s| s.id).collect::<Vec<_>>();
+    assert_eq!(ids(&mut ui, 0), [anchor, mover]);
+    // A site onto another site: before it.
+    ui.drag_onto("🌐 Mover", "🌐 Anchor");
+    assert_eq!(ids(&mut ui, 0), [mover, anchor]);
+    // A folder onto another folder: inside it.
+    ui.drag_onto("📁 Archive", "📁 Other");
+    let root = &ui.app().sites.book.root;
+    assert_eq!((root.groups.len(), root.groups[0].groups[0].name.as_str()), (1, "Archive"));
+    assert_eq!(ui.app().sites.book.group_path_of(anchor), Some(vec![0, 0]));
+    assert!(ui.app().sites.dirty, "saved after the move");
+    assert_all_named(&ui, "site tree after drag and drop");
+}

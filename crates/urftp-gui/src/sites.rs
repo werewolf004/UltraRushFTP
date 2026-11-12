@@ -93,7 +93,7 @@ pub struct SiteManager {
     path: PathBuf,
     selection: Selection,
     show_password: bool,
-    dirty: bool,
+    pub(crate) dirty: bool,
     last_change: f64,
     report: Option<Report>,
     confirm_delete: Option<Selection>,
@@ -252,11 +252,26 @@ impl SiteManager {
                         scroll.id_salt("site-tree").max_height(ui.available_height() - 4.0).show(ui, |ui| {
                             let mut clicked = None;
                             let mut double = None;
+                            let mut dropped = None;
                             if self.list_mode {
                                 self.list(ui, &mut clicked, &mut double);
                             } else {
                                 let probes = self.probes.lock().clone();
-                                tree(ui, &self.book.root, &mut Vec::new(), &self.selection, &probes, &mut clicked, &mut double);
+                                tree(
+                                    ui,
+                                    &self.book.root,
+                                    &mut Vec::new(),
+                                    &self.selection,
+                                    &probes,
+                                    &mut clicked,
+                                    &mut double,
+                                    &mut dropped,
+                                );
+                            }
+                            if let Some((what, on)) = dropped
+                                && self.drop_in_tree(what, on)
+                            {
+                                self.mark_dirty(ui);
                             }
                             if let Some(sel) = clicked {
                                 self.selection = sel;
@@ -469,6 +484,40 @@ impl SiteManager {
         });
     }
 
+    /// Moves what was dropped in the tree; `true` if something moved.
+    fn drop_in_tree(&mut self, what: SiteDrag, on: DropOn) -> bool {
+        match what {
+            SiteDrag::Site(id) => match on {
+                DropOn::Group(path) => self.book.move_site(id, &path, None),
+                DropOn::Site(before) => {
+                    let Some(path) = self.book.group_path_of(before) else { return false };
+                    self.book.move_site(id, &path, Some(before))
+                }
+            },
+            SiteDrag::Group(from) => {
+                let to = match on {
+                    DropOn::Group(path) => path,
+                    DropOn::Site(id) => match self.book.group_path_of(id) {
+                        Some(p) => p,
+                        None => return false,
+                    },
+                };
+                let Some(moved) = self.book.move_group(&from, &to) else { return false };
+                // The selected folder (or one of its subfolders) has a new path.
+                if let Selection::Group(sel) = &self.selection
+                    && sel.starts_with(&from)
+                {
+                    let mut p = moved;
+                    p.extend_from_slice(&sel[from.len()..]);
+                    self.selection = Selection::Group(p);
+                } else if matches!(self.selection, Selection::Group(_)) {
+                    self.selection = Selection::Group(Vec::new());
+                }
+                true
+            }
+        }
+    }
+
     fn mark_dirty(&mut self, ui: &egui::Ui) {
         self.dirty = true;
         self.last_change = ui.input(|i| i.time);
@@ -597,6 +646,44 @@ fn probe_mark(ui: &egui::Ui, p: &Probe) -> (RichText, String) {
     }
 }
 
+/// What is dragged in the site tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SiteDrag {
+    Site(u64),
+    /// A folder (never the root).
+    Group(Vec<usize>),
+}
+
+/// Where it is dropped: on a folder (at its end) or on a site (before it, in its folder).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DropOn {
+    Group(Vec<usize>),
+    Site(u64),
+}
+
+/// Shows what is dragged next to the pointer, and marks the place it would go.
+fn drag_feedback(ui: &egui::Ui, r: &egui::Response, label: &str, before: bool) {
+    if r.dragged()
+        && let Some(pos) = ui.ctx().pointer_interact_pos()
+    {
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("site-drag")));
+        let text = painter.layout_no_wrap(label.to_string(), egui::TextStyle::Body.resolve(ui.style()), ui.visuals().strong_text_color());
+        let rect = egui::Rect::from_min_size(pos + egui::vec2(14.0, 6.0), text.size()).expand(4.0);
+        painter.rect_filled(rect, 4.0, ui.visuals().window_fill);
+        painter.rect_stroke(rect, 4.0, ui.visuals().window_stroke, egui::StrokeKind::Inside);
+        painter.galley(rect.min + egui::vec2(4.0, 4.0), text, ui.visuals().strong_text_color());
+    }
+    if r.dnd_hover_payload::<SiteDrag>().is_some() && !r.dragged() {
+        let stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
+        if before {
+            ui.painter().hline(r.rect.x_range(), r.rect.top(), stroke);
+        } else {
+            ui.painter().rect_stroke(r.rect, 3.0, stroke, egui::StrokeKind::Inside);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn tree(
     ui: &mut egui::Ui,
     g: &SiteGroup,
@@ -605,15 +692,16 @@ fn tree(
     probes: &HashMap<u64, Probe>,
     clicked: &mut Option<Selection>,
     double: &mut Option<u64>,
+    dropped: &mut Option<(SiteDrag, DropOn)>,
 ) {
     let title = if path.is_empty() { t!("sites.all_sites") } else { format!("📁 {}", g.name) };
-    let header = egui::CollapsingHeader::new(RichText::new(title).strong())
+    let header = egui::CollapsingHeader::new(RichText::new(&title).strong())
         .id_salt(("grp", path.clone()))
         .default_open(path.len() < 2)
         .show(ui, |ui| {
             for (i, child) in g.groups.iter().enumerate() {
                 path.push(i);
-                tree(ui, child, path, sel, probes, clicked, double);
+                tree(ui, child, path, sel, probes, clicked, double, dropped);
                 path.pop();
             }
             for s in &g.sites {
@@ -639,7 +727,14 @@ fn tree(
                         } else {
                             format!("{}\n{}:{}", s.description.trim(), s.host, s.port)
                         };
-                        let r = ui.selectable_label(*sel == Selection::Site(s.id), text).on_hover_text(hover);
+                        // Dragged onto a folder or before another site.
+                        let r = ui.selectable_label(*sel == Selection::Site(s.id), text).interact(egui::Sense::drag());
+                        r.dnd_set_drag_payload(SiteDrag::Site(s.id));
+                        drag_feedback(ui, &r, &s.name, true);
+                        if let Some(what) = r.dnd_release_payload::<SiteDrag>() {
+                            *dropped = Some(((*what).clone(), DropOn::Site(s.id)));
+                        }
+                        let r = r.on_hover_text(hover);
                         if r.clicked() {
                             *clicked = Some(Selection::Site(s.id));
                         }
@@ -654,7 +749,15 @@ fn tree(
                 });
             }
         });
-    if header.header_response.clicked() {
+    let r = if path.is_empty() { header.header_response } else { header.header_response.interact(egui::Sense::drag()) };
+    if !path.is_empty() {
+        r.dnd_set_drag_payload(SiteDrag::Group(path.clone()));
+    }
+    drag_feedback(ui, &r, &title, false);
+    if let Some(what) = r.dnd_release_payload::<SiteDrag>() {
+        *dropped = Some(((*what).clone(), DropOn::Group(path.clone())));
+    }
+    if r.clicked() {
         *clicked = Some(Selection::Group(path.clone()));
     }
 }

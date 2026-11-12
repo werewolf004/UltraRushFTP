@@ -552,6 +552,9 @@ que pour le même compte Windows.
 
 ![Gestionnaire de sites](images/site-manager.fr.png)
 
+Dans l'arbre des sites, un site se déplace en le glissant sur un dossier (à la fin de celui-ci)
+ou sur un autre site (avant lui) ; un dossier glissé sur un autre dossier va dedans.
+
 | Champ | Défaut | Remarques |
 |---|---|---|
 | Nom | « Nouveau site » | Utilisé par les scripts, mIRC et `urftp` (insensible à la casse) |

@@ -759,6 +759,39 @@ impl SiteBook {
         Some(self.add_site(&path, copy))
     }
 
+    /// Moves a site to a folder: before the site `before` when it is in that folder, at the
+    /// end otherwise. Returns `false` (and changes nothing) for an unknown site or folder.
+    pub fn move_site(&mut self, id: u64, group: &[usize], before: Option<u64>) -> bool {
+        if before == Some(id) || self.root.group(group).is_none() {
+            return false;
+        }
+        let Some(site) = self.root.remove(id) else { return false };
+        let Some(g) = self.root.group_mut(group) else { return false };
+        let at = before.and_then(|b| g.sites.iter().position(|s| s.id == b)).unwrap_or(g.sites.len());
+        g.sites.insert(at, site);
+        true
+    }
+
+    /// Moves a folder (with its content) at the end of another folder and returns its new
+    /// path. Refused for the root, an unknown folder, or a folder into itself or one of its
+    /// subfolders.
+    pub fn move_group(&mut self, from: &[usize], to: &[usize]) -> Option<Vec<usize>> {
+        let (&last, parent) = from.split_last()?;
+        if to.starts_with(from) || self.root.group(to).is_none() || parent == to {
+            return None;
+        }
+        let group = self.root.group_mut(parent).filter(|p| last < p.groups.len())?.groups.remove(last);
+        // The folders after the one taken out of `parent` moved up by one.
+        let mut to = to.to_vec();
+        if to.len() > parent.len() && to.starts_with(parent) && to[parent.len()] > last {
+            to[parent.len()] -= 1;
+        }
+        let target = self.root.group_mut(&to)?;
+        target.groups.push(group);
+        to.push(target.groups.len() - 1);
+        Some(to)
+    }
+
     /// Grafts an imported group at the root, with new identifiers.
     pub fn merge_import(&mut self, mut group: SiteGroup) {
         let mut next = self.next_id() - 1;
@@ -773,6 +806,38 @@ mod tests {
 
     fn site(name: &str) -> Site {
         Site { name: name.into(), host: format!("{name}.example.com"), ..Site::default() }
+    }
+
+    #[test]
+    fn sites_and_folders_move() {
+        let mut book = SiteBook::default();
+        book.root.groups.push(SiteGroup::new("A"));
+        book.root.groups.push(SiteGroup::new("B"));
+        book.root.groups[1].groups.push(SiteGroup::new("B1"));
+        let x = book.add_site(&[], site("X"));
+        let y = book.add_site(&[0], site("Y"));
+        let z = book.add_site(&[0], site("Z"));
+        // Into another folder, before a site, at the end.
+        assert!(book.move_site(x, &[0], Some(z)));
+        let names = |g: &SiteGroup| g.sites.iter().map(|s| s.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&book.root.groups[0]), ["Y", "X", "Z"]);
+        assert!(book.move_site(y, &[1, 0], None));
+        assert_eq!(book.group_path_of(y), Some(vec![1, 0]));
+        assert!(!book.move_site(y, &[7], None), "unknown folder");
+        assert!(!book.move_site(99, &[], None), "unknown site");
+        assert_eq!(book.group_path_of(y), Some(vec![1, 0]));
+        // A folder into a later sibling: the target index shifts.
+        assert_eq!(book.move_group(&[0], &[1]), Some(vec![0, 1]));
+        assert_eq!(book.root.groups.len(), 1);
+        assert_eq!(book.root.groups[0].groups[1].name, "A");
+        assert_eq!(book.group_path_of(z), Some(vec![0, 1]));
+        // Never into itself or below itself, never the root.
+        assert_eq!(book.move_group(&[0], &[0, 0]), None);
+        assert_eq!(book.move_group(&[0], &[0]), None);
+        assert_eq!(book.move_group(&[], &[0]), None);
+        // Back to the root.
+        assert_eq!(book.move_group(&[0, 1], &[]), Some(vec![1]));
+        assert_eq!(book.root.groups[1].name, "A");
     }
 
     #[test]
