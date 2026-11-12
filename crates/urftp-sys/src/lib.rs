@@ -104,6 +104,8 @@ pub mod power;
 #[cfg(windows)]
 pub mod server;
 #[cfg(windows)]
+pub mod shellmenu;
+#[cfg(windows)]
 pub mod tray;
 #[cfg(windows)]
 pub mod win;

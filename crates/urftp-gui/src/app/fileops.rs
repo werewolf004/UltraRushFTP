@@ -157,6 +157,8 @@ pub(super) enum Op {
     /// Files copied in Explorer, sent into the panel (`Ctrl+V`).
     Paste,
     CurrentEdits,
+    /// Windows Explorer menu of the selection of a local panel.
+    ExplorerMenu,
 }
 
 /// Modal dialog of an operation.
@@ -867,16 +869,18 @@ impl UltraRushApp {
             }
             Op::Bookmark(name, both) => {
                 let Some(bm) = bookmarks.into_iter().find(|b| b.name == name) else { return };
+                // Date tokens (`%yyyy%`, `%mm%`…) take today's date.
+                let now = super::tasks::now_local();
                 if let Side::Remote(r) = &tab.sides[side]
                     && !bm.remote_dir.trim().is_empty()
                 {
-                    r.handle.send(BrowserCmd::Cwd(bm.remote_dir.trim().to_string()));
+                    r.handle.send(BrowserCmd::Cwd(bm.remote_at(now)));
                 }
                 if both
                     && !bm.local_dir.trim().is_empty()
                     && let Side::Local(l) = &mut tab.sides[1 - side]
                 {
-                    l.path = PathBuf::from(bm.local_dir.trim());
+                    l.path = PathBuf::from(bm.local_at(now));
                     l.reload();
                 }
             }
@@ -890,6 +894,20 @@ impl UltraRushApp {
                 }
             }
             Op::CurrentEdits => tab.tools.edits_open = true,
+            Op::ExplorerMenu => {
+                let Side::Local(l) = &tab.sides[side] else { return };
+                let paths: Vec<PathBuf> = tab.sides[side].picked_or_cursor().into_iter().map(|(n, _)| l.path.join(n)).collect();
+                let refs: Vec<&std::path::Path> = paths.iter().map(PathBuf::as_path).collect();
+                match urftp_sys::shellmenu::explorer_menu(&refs) {
+                    Ok(true) => {
+                        if let Side::Local(l) = &mut tab.sides[side] {
+                            l.reload();
+                        }
+                    }
+                    Ok(false) => {}
+                    Err(e) => tab.push_log(side, LogKind::Error, t!("ops.explorer_failed", error = e)),
+                }
+            }
         }
     }
 

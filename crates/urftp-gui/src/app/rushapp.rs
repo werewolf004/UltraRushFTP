@@ -395,7 +395,7 @@ impl AppHost<'_> {
         }
         if has_flag(flags, "RS_BOOKMARK") {
             return match Self::bookmark(site, param) {
-                Some(bm) => Ok(Some(bm.remote_dir.clone())),
+                Some(bm) => Ok(Some(bm.remote_at(super::tasks::now_local()))),
                 None => Err(HostError::UnknownBookmark { bookmark: param.into(), site: Some(site.name.clone()) }),
             };
         }
@@ -466,7 +466,7 @@ impl AppHost<'_> {
             };
             let dir = if has_flag(flags, "RS_BOOKMARK") {
                 match self.app.sites.book.find_by_name(&site_name).and_then(|site| Self::bookmark(site, &param)) {
-                    Some(bm) => bm.remote_dir.clone(),
+                    Some(bm) => bm.remote_at(super::tasks::now_local()),
                     None => {
                         self.log(LogKind::Status, t!("host.cwd_no_bookmark", bookmark = param, site = site_name));
                         continue;
@@ -548,7 +548,7 @@ impl AppHost<'_> {
             };
             let dir = if has_flag(flags, "RS_BOOKMARK") {
                 match self.app.sites.book.find_by_name(&site_name).and_then(|site| Self::bookmark(site, &path)) {
-                    Some(bm) => bm.remote_dir.clone(),
+                    Some(bm) => bm.remote_at(super::tasks::now_local()),
                     None => {
                         self.log(LogKind::Error, t!("host.delete_no_bookmark", bookmark = path, site = site_name));
                         continue;
@@ -577,7 +577,8 @@ impl AppHost<'_> {
         let bm = site
             .and_then(|st| Self::bookmark(st, value))
             .ok_or_else(|| HostError::UnknownBookmark { bookmark: value.into(), site: site.map(|st| st.name.clone()) })?;
-        Ok(if local { bm.local_dir.clone() } else { bm.remote_dir.clone() })
+        let now = super::tasks::now_local();
+        Ok(if local { bm.local_at(now) } else { bm.remote_at(now) })
     }
 
     fn transfer(&mut self, a: &[Value]) -> Result<(), HostError> {

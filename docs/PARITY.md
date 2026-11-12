@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
+Summary (287 topics): ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
 
 ## Main window and menus
 
@@ -52,7 +52,7 @@ Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | Local columns size / date | ✅ | |
 | Window list columns | ✅ | FTP and Action (View › Window list columns) |
 | Grid lines | ➖ | Striped rows instead |
-| Columns auto size | 🟡 | Columns resizable, no automatic fit |
+| Columns auto size | ✅ | Options › Interface: local, remote and queue columns sized to their content |
 | Current edit files | ✅ | FTP menu → Files being edited |
 
 ### FTP
@@ -85,7 +85,7 @@ Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | Queue information | ✅ | Counts, sizes, time left |
 | Restore queue, load / save queue file | ✅ | Unfinished queue at startup; `.urq` files by hand |
 | Schedule queue to task | ✅ | ⋯ Queue › Schedule queue to task: the queue runs in a new tab at its time |
-| Limit upload / download speed toggles | 🟡 | Limits in the options; no one-click toggle |
+| Limit upload / download speed toggles | ✅ | ⬇ / ⬆ buttons of the status bar |
 
 ### Tools → other
 
@@ -108,7 +108,7 @@ Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | On transfer completed: shut down / standby / hibernate | ✅ | With a countdown that can be cancelled |
 | On transfer completed: exit | ✅ | Options › Transfers, and `-rx` |
 | Create SFV or MD5 file | ✅ | Right-click in a local panel |
-| IP address translate | ⬜ | Hexadecimal / numeric address to dotted form |
+| IP address translate | ✅ | FTP › IP address translate: hexadecimal or numeric address to dotted form |
 | Restart UPnP service | ✅ | FTP menu, and Options › Connection |
 | Option | ✅ | Options window |
 
@@ -138,7 +138,7 @@ Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | Topic | Status | Notes |
 |---|---|---|
 | Add or edit skip list item | ✅ | Edited in the grid of the options |
-| Bookmark dialog | 🟡 | Name, remote and local paths; date tokens (`%yyyy%`, `%mm%`...) not yet |
+| Bookmark dialog | ✅ | Name, remote and local paths; date tokens `%yyyy%` `%yy%` `%mm%` `%m%` `%dd%` `%d%` `%ww%` `%w%` |
 | Create CRC checksums | ✅ | SFV and MD5 files |
 | Condition transfer | ✅ | See *Conditional transfer* |
 | Calculate FTP space used | ✅ | |
@@ -157,7 +157,7 @@ Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 |---|---|---|
 | Toolbar: properties, folder, new site, delete | ✅ | |
 | Tree mode | ✅ | |
-| List mode, column auto width | 🟡 | List mode, sortable; no automatic column width |
+| List mode, column auto width | ✅ | List mode, sortable; columns fitted to their content, scrolls sideways when wider than the pane |
 | Import plain text (one URL per line) | ✅ | Detected by the import |
 | Import UltraFXP sites and settings | ⬜ | Not done: no sample file of the format |
 | Import FTPRush XML | ✅ | Plus FTPRush v1/v3, FileZilla, FlashFXP; passwords are not imported |
@@ -281,8 +281,8 @@ Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | On transfer completed: idle / disconnect | ✅ | |
 | ASCII list, no resume for ASCII files | ✅ | |
 | Skip list: enable, zero-byte files, empty folders, folders | ✅ | |
-| Skip list: colour of skipped items | ⬜ | |
-| Skip list: mode auto / manual / both | ⬜ | Applied to every item today |
+| Skip list: colour of skipped items | ✅ | Colour per theme, struck through, told by screen readers |
+| Skip list: mode auto / manual / both | ✅ | Options › Skipped files › Applies to |
 | File-exists rules (resume, skip, rename, overwrite, ask) | ✅ | Plus overwrite when resume fails |
 | Queue: reload unfinished queue at startup, auto save | ✅ | Ask, load or discard (Options › General) |
 | Queue: keep failed items | ✅ | |
@@ -318,10 +318,10 @@ Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 |---|---|---|
 | System tray: minimize, flash while transferring, always show | 🟡 | Minimize and always show; the button flashes when a queue ends, not during the transfers |
 | Local window: full path in the address bar | ✅ | |
-| Local window: show hidden files | ⬜ | Hidden files are listed today |
-| File size display: bytes / KB / dynamic | 🟡 | Dynamic only |
+| Local window: show hidden files | ✅ | Options › Interface |
+| File size display: bytes / KB / dynamic | ✅ | Options › Interface › File sizes |
 | Flash the window when transfers end | ✅ | When the window is in the background |
-| Refresh the size of a file being downloaded | ⬜ | |
+| Refresh the size of a file being downloaded | ✅ | Options › Interface: the local folder of a running download is read again every N seconds |
 | Favourites menu: split, history, quick connect entry, recent sites | 🟡 | Recent sites and every site; no split menu, no history of quick connections |
 | Gradient side indicator, hide selection without focus, name separator | ➖ | Cosmetic options of the Delphi interface |
 | Language | 🟡 | English and French |
@@ -344,7 +344,7 @@ Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | Double-click actions (file, log, site, side indicator, tab, queue item) | 🟡 | Double-click on a file: transfer, view or nothing; the others are fixed |
 | Drag from Explorer to a remote panel | ✅ | Into the folder of the remote panel under the pointer |
 | Paste local files into a remote panel (`Ctrl+V`) | ✅ | |
-| Explorer context menu in the local panel | ⬜ | |
+| Explorer context menu in the local panel | ✅ | Options › Interface (right-click), or *Windows Explorer menu…* of the panel menu |
 | File associations: view and edit remote files with external programs | ✅ | Options › Browsing; Notepad when no program matches; an edited file is sent back when saved |
 | Event notification: sounds, tray pop-ups, event list | ✅ | Options › Notifications |
 | Confirmations: delete local files | ✅ | Always asked |

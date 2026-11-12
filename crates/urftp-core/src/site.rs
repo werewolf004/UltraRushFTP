@@ -453,6 +453,18 @@ pub struct Bookmark {
     pub local_dir: String,
 }
 
+impl Bookmark {
+    /// Remote folder with its date tokens (`%yyyy%`, `%mm%`…) replaced by the local date `at`.
+    pub fn remote_at(&self, at: i64) -> String {
+        crate::urls::expand_date_tokens(self.remote_dir.trim(), at)
+    }
+
+    /// Local folder with its date tokens replaced by the local date `at`.
+    pub fn local_at(&self, at: i64) -> String {
+        crate::urls::expand_date_tokens(self.local_dir.trim(), at)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Site {

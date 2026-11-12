@@ -197,6 +197,33 @@ async fn folder_download_with_skiplist_and_priorities() {
 }
 
 #[tokio::test]
+async fn skip_mode_auto_and_manual() {
+    use urftp_core::skiplist::SkipMode;
+    let srv = MockServer::start(MockConfig::default()).await;
+    {
+        let mut fs = srv.fs.lock().unwrap();
+        fs.mkdir_p("/rel");
+        for name in ["a.nfo", "b.bin", "chosen.nfo"] {
+            fs.files.insert(format!("/rel/{name}"), payload(50, 7));
+        }
+        fs.files.insert("/chosen.nfo".into(), payload(50, 8));
+    }
+    for (mode, chosen_kept, inside_kept) in [(SkipMode::Auto, true, false), (SkipMode::Manual, false, true)] {
+        let dir = temp_dir();
+        let mut q = Queue::new();
+        q.push(Endpoint::remote("A", "/rel"), Endpoint::local(local(&dir.join("rel"))), true, None, None);
+        q.push(Endpoint::remote("A", "/chosen.nfo"), Endpoint::local(local(&dir.join("chosen.nfo"))), false, Some(50), None);
+        let skiplist = SkipList { mode, rules: vec![SkipRule::skip("*.nfo", RuleTarget::Files)], ..SkipList::default() };
+        let r = engine(q, vec![site("A", srv.addr.port(), 1)], EngineOptions { skiplist, ..opts() });
+        r.engine.run().await;
+        assert_eq!(dir.join("chosen.nfo").exists(), chosen_kept, "{mode:?}: file chosen by hand");
+        assert_eq!(dir.join("rel/a.nfo").exists(), inside_kept, "{mode:?}: file inside the folder");
+        assert!(dir.join("rel/b.bin").exists(), "{mode:?}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[tokio::test]
 async fn folder_upload_creates_remote_tree() {
     let srv = MockServer::start(MockConfig::default()).await;
     let dir = temp_dir();

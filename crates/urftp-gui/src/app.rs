@@ -105,6 +105,20 @@ impl FileRow {
     }
 }
 
+/// A local item with the Windows "hidden" attribute.
+fn is_hidden(meta: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        meta.file_attributes() & 0x2 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = meta;
+        false
+    }
+}
+
 /// Windows attributes of a local item as letters: read-only, hidden, system, archive.
 fn local_attributes(meta: &std::fs::Metadata) -> String {
     #[cfg(windows)]
@@ -260,6 +274,9 @@ impl LocalView {
                     .flatten()
                     .filter_map(|e| {
                         let meta = e.metadata().ok()?;
+                        if !look::show_hidden() && is_hidden(&meta) {
+                            return None;
+                        }
                         let secs = meta
                             .modified()
                             .ok()
@@ -1279,6 +1296,12 @@ pub struct UltraRushApp {
     upnp: Arc<Mutex<UpnpState>>,
     /// Scheduled tasks and their dialog.
     tasks: tasks::TasksState,
+    /// Last reading of the local panels of the running downloads.
+    downloads_refreshed: std::time::Instant,
+    /// Skip list of the options, compiled for the colour of the skipped items.
+    skip_view: Option<(urftp_core::settings::SkipSettings, urftp_core::skiplist::SkipList)>,
+    /// "IP address translate" window: the text typed.
+    ip_tool: Option<String>,
     /// Statistics (stored totals, session, rates) for `RushApp.*` and the status bar.
     stats: rushapp::Stats,
     /// Separator of the site lists in scripts (`RushApp.FTP.Splitter`).
@@ -1457,8 +1480,9 @@ impl UltraRushApp {
         set_download_dir(&options.settings.download_dir);
         logs::configure(&options.settings.interface);
         look::configure(&options.settings.interface);
-        let dl = options.settings.transfer.download_limit_kib * 1024;
-        let ul = options.settings.transfer.upload_limit_kib * 1024;
+        let t = &options.settings.transfer;
+        let dl = if t.download_limit_on { t.download_limit_kib * 1024 } else { 0 };
+        let ul = if t.upload_limit_on { t.upload_limit_kib * 1024 } else { 0 };
         let mut app = Self {
             rt,
             saved_queue: None,
@@ -1486,6 +1510,9 @@ impl UltraRushApp {
             upnp_applied: None,
             upnp: Arc::default(),
             tasks: tasks::TasksState::load(),
+            downloads_refreshed: std::time::Instant::now(),
+            skip_view: None,
+            ip_tool: None,
             stats: rushapp::Stats::load(),
             splitter: ";".into(),
             startup_script_done: false,
@@ -1682,7 +1709,14 @@ impl UltraRushApp {
         let s = &self.options.settings;
         set_download_dir(&s.download_dir);
         logs::configure(&s.interface);
-        look::configure(&s.interface);
+        if look::configure(&s.interface) {
+            for side in self.tabs.iter_mut().flat_map(|t| t.sides.iter_mut().chain(t.parked.iter_mut().flatten())) {
+                if let Side::Local(l) = side {
+                    l.reload();
+                }
+            }
+        }
+        let s = &self.options.settings;
         ctx.set_zoom_factor(s.interface.zoom_percent.clamp(50, 300) as f32 / 100.0);
         let before = urftp_i18n::language();
         options::apply_language(s.language);
@@ -1700,9 +1734,42 @@ impl UltraRushApp {
             self.dark = s.dark_theme;
             theme::apply(ctx, self.dark);
         }
-        self.download_limit.set_rate(s.transfer.download_limit_kib * 1024);
-        self.upload_limit.set_rate(s.transfer.upload_limit_kib * 1024);
+        self.apply_limits();
         self.sync_ident();
+    }
+
+    /// Speed limits of the options, when their toggle is on.
+    fn apply_limits(&self) {
+        let t = &self.options.settings.transfer;
+        self.download_limit.set_rate(if t.download_limit_on { t.download_limit_kib * 1024 } else { 0 });
+        self.upload_limit.set_rate(if t.upload_limit_on { t.upload_limit_kib * 1024 } else { 0 });
+    }
+
+    /// "Update downloading file size": the local panels showing the folder of a running
+    /// download are read again every few seconds.
+    fn refresh_downloads(&mut self) {
+        let secs = self.options.settings.interface.refresh_download_secs;
+        if secs == 0 || self.downloads_refreshed.elapsed() < Duration::from_secs(u64::from(secs)) {
+            return;
+        }
+        self.downloads_refreshed = std::time::Instant::now();
+        for tab in self.tabs.iter_mut().filter(|t| t.engine.is_some()) {
+            let dirs: Vec<PathBuf> = tab
+                .queue
+                .lock()
+                .items()
+                .iter()
+                .filter(|i| i.state == ItemState::Running && !i.is_dir && i.dst.is_local())
+                .filter_map(|i| Path::new(&i.dst.path).parent().map(Path::to_path_buf))
+                .collect();
+            for side in &mut tab.sides {
+                if let Side::Local(l) = side
+                    && dirs.contains(&l.path)
+                {
+                    l.reload();
+                }
+            }
+        }
     }
 
     /// Asks the router (UPnP) again when the option or the Ident port changed, or on
@@ -2461,6 +2528,10 @@ impl UltraRushApp {
                 ui.separator();
                 raw::commands_menu(ui, &commands, &mut actions);
                 ui.separator();
+                if ui.button(t!("menu.ip_translate")).clicked() {
+                    self.ip_tool = Some(String::new());
+                    ui.close();
+                }
                 let upnp = self.options.settings.network.upnp;
                 let restart = egui::Button::new(t!("options.upnp_restart"));
                 if ui.add_enabled(upnp, restart).on_disabled_hover_text(t!("options.upnp")).clicked() {
@@ -2646,8 +2717,16 @@ impl UltraRushApp {
         }
     }
 
-    fn status_bar(&self, ui: &mut egui::Ui) {
+    fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
+            let t = &mut self.options.settings.transfer;
+            let down = limit_toggle(ui, "⬇", t.download_limit_kib, &mut t.download_limit_on, &t!("status.limit_down"));
+            let up = limit_toggle(ui, "⬆", t.upload_limit_kib, &mut t.upload_limit_on, &t!("status.limit_up"));
+            if down || up {
+                self.apply_limits();
+                self.options.touch(ui.ctx());
+            }
+            ui.separator();
             let running = self.tabs.iter().filter(|t| t.engine_events.is_some()).count();
             let connected = self
                 .tabs
@@ -3326,6 +3405,7 @@ impl eframe::App for UltraRushApp {
         let restart = std::mem::take(&mut self.options.upnp_restart);
         self.sync_upnp(restart);
         self.tasks_tick(&ctx);
+        self.refresh_downloads();
         self.options.upnp_status = self.upnp.lock().status.clone();
         if std::mem::take(&mut self.autoconnect) {
             self.quick_connect(&ctx);
@@ -3361,6 +3441,12 @@ impl eframe::App for UltraRushApp {
         let named_sites: Vec<String> =
             self.sites.book.all_sites().into_iter().map(|(_, s)| s).filter(|s| s.log_site_name).map(|s| s.name.clone()).collect();
         let window_rows: Vec<windows::WindowRow> = self.tabs.iter().enumerate().map(|(i, t)| t.window_row(i + 1)).collect();
+        // The skip list is compiled again only when its options changed.
+        if self.skip_view.as_ref().is_none_or(|(s, _)| *s != self.options.settings.skiplist) {
+            let s = self.options.settings.skiplist.clone();
+            let list = s.to_skiplist();
+            self.skip_view = Some((s, list));
+        }
         let active_tab = self.active;
         egui::CentralPanel::default().show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
@@ -3376,6 +3462,10 @@ impl eframe::App for UltraRushApp {
             let log_look = (look::log_colors(ui_opts, dark), ui_opts.log_text_size);
             let script_running = self.scripts.console_running(tab.id);
             let window_cols = (ui_opts.window_list_ftp, ui_opts.window_list_action);
+            let skip_view = match (&self.skip_view, look::skipped_color(&self.options.settings.skiplist, dark)) {
+                (Some((_, list)), Some(c)) => Some((list, c)),
+                _ => None,
+            };
             let task_state = (&self.tasks.book, self.tasks.error.as_deref());
             let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, tools, .. } = tab;
             let mut viewer = PaneViewer {
@@ -3405,6 +3495,8 @@ impl eframe::App for UltraRushApp {
                 active_tab,
                 window_cols,
                 tasks: task_state,
+                skip_view,
+                explorer_menu: ui_opts.local_explorer_menu,
             };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
@@ -3429,6 +3521,7 @@ impl eframe::App for UltraRushApp {
         self.about_window(&ctx);
         self.queue_edit_dialog(&ctx);
         self.task_dialog(&ctx);
+        self.ip_tool_window(&ctx);
         self.queue_info_window(&ctx);
         self.queue_end_dialog(&ctx);
         self.conditional_dialog(&ctx);
@@ -3500,6 +3593,33 @@ struct PaneViewer<'a> {
     window_cols: (bool, bool),
     /// Tasks for the Task window, with the error of their file.
     tasks: (&'a urftp_core::tasks::TaskBook, Option<&'a str>),
+    /// Skip list and colour of the skipped items (`None`: not shown).
+    skip_view: Option<(&'a urftp_core::skiplist::SkipList, egui::Color32)>,
+    /// A right-click in a local panel shows the Windows Explorer menu.
+    explorer_menu: bool,
+}
+
+/// Column of the queue: sized to its content when chosen in the options.
+fn queue_column(width: f32) -> Column {
+    if look::autosize(2) { Column::auto().at_least(60.0) } else { Column::initial(width) }
+}
+
+/// One-click toggle of a speed limit of the status bar; answers whether it was clicked.
+fn limit_toggle(ui: &mut egui::Ui, icon: &str, kib: u64, on: &mut bool, name: &str) -> bool {
+    if kib == 0 {
+        let r = ui.add_enabled(false, egui::Button::new(format!("{icon} ∞")).small());
+        theme::name(&r, format!("{name}: {}", t!("status.no_limit")));
+        r.on_disabled_hover_text(t!("status.no_limit_hint"));
+        return false;
+    }
+    let text = if *on { format!("{icon} {}/s", human_size(kib * 1024)) } else { format!("{icon} ∞") };
+    let r = ui.add(egui::Button::selectable(*on, text).small());
+    theme::name(&r, if *on { t!("status.limit_on", what = name) } else { t!("status.limit_off", what = name) });
+    let clicked = r.on_hover_text(t!("status.limit_hint")).clicked();
+    if clicked {
+        *on = !*on;
+    }
+    clicked
 }
 
 /// A site of the site manager, for the connection menus.
@@ -3681,6 +3801,31 @@ impl PaneViewer<'_> {
         let rows: Vec<FileRow> = self.sides[side].rows().to_vec();
         let marks = self.sides[side].list().marks.clone();
         let remote_panel = self.sides[side].is_remote();
+        // Items the skip list would skip, for their colour.
+        let panel_dir = match &self.sides[side] {
+            Side::Local(l) => l.path.to_string_lossy().into_owned(),
+            Side::Remote(r) => r.dir.clone(),
+        };
+        let skip_view = self.skip_view;
+        let skipped = |f: &FileRow| {
+            skip_view.is_some_and(|(list, _)| {
+                let (full, kind) = if remote_panel {
+                    (rpath::join(&panel_dir, &f.name), urftp_core::TransferKind::Download)
+                } else {
+                    (format!("{}\\{}", panel_dir.trim_end_matches('\\'), f.name), urftp_core::TransferKind::Upload)
+                };
+                let c = urftp_core::skiplist::Candidate {
+                    name: &f.name,
+                    full_path: &full,
+                    is_dir: f.is_dir,
+                    size: (!f.is_dir).then_some(f.size),
+                    kind,
+                };
+                list.check(&c).is_some()
+            })
+        };
+        let auto = look::autosize(u8::from(remote_panel));
+        let sized = |w: f32, min: f32| if auto { Column::auto().at_least(min) } else { Column::initial(w).at_least(min) };
         let http = matches!(&self.sides[side], Side::Remote(r) if r.http.is_set());
         let local_panel = matches!(&self.sides[side], Side::Local(_));
         let selected = self.sides[side].selected().clone();
@@ -3711,9 +3856,9 @@ impl PaneViewer<'_> {
                 // Rows are not in the Tab order: the list is driven by its keyboard cursor.
                 .sense(Sense::CLICK | Sense::DRAG)
                 .column(Column::remainder().at_least(160.0).clip(true))
-                .column(Column::initial(90.0).at_least(60.0))
-                .column(Column::initial(130.0).at_least(80.0))
-                .columns(Column::initial(80.0).at_least(40.0).clip(true), if remote_panel { 3 } else { 1 })
+                .column(sized(90.0, 60.0))
+                .column(sized(130.0, 80.0))
+                .columns(sized(80.0, 40.0).clip(true), if remote_panel { 3 } else { 1 })
                 .header(22.0, |mut h| {
                     for (col, label) in [
                         (SortCol::Name, t!("files.col_name")),
@@ -3748,11 +3893,17 @@ impl PaneViewer<'_> {
                             if let Some((_, c)) = self.highlights.iter().find(|(m, _)| urftp_core::browsing::mask_matches(m, &f.name)) {
                                 text = text.color(*c);
                             }
+                            // Skipped by the skip list: its colour, and struck through.
+                            if let Some((_, c)) = self.skip_view
+                                && skipped(f)
+                            {
+                                text = text.color(c).strikethrough();
+                            }
                             // Marked: bold and underlined, not told by colour alone.
                             ui.label(if marked { text.strong().underline() } else { text });
                         });
                         row.col(|ui| {
-                            ui.label(if f.is_dir { String::new() } else { human_size(f.size) });
+                            ui.label(if f.is_dir { String::new() } else { look::size_text(f.size) });
                         });
                         row.col(|ui| {
                             ui.label(RichText::new(&f.modified).weak());
@@ -3772,12 +3923,15 @@ impl PaneViewer<'_> {
                         if cursor_row == Some(i) {
                             painter.rect_stroke(resp.rect.shrink(1.0), 3.0, cursor_stroke, egui::StrokeKind::Inside);
                         }
-                        let size = if f.is_dir { t!("files.folder") } else { human_size(f.size) };
-                        let spoken = if marked {
+                        let size = if f.is_dir { t!("files.folder") } else { look::size_text(f.size) };
+                        let mut spoken = if marked {
                             format!("{}, {}, {size}, {}", f.name, t!("files.marked"), f.modified)
                         } else {
                             format!("{}, {size}, {}", f.name, f.modified)
                         };
+                        if skipped(f) {
+                            spoken.push_str(&format!(", {}", t!("files.skipped")));
+                        }
                         let is_selected = selected.contains(&i);
                         resp.ctx.accesskit_node_builder(resp.id, |n| {
                             n.set_label(spoken);
@@ -3810,58 +3964,69 @@ impl PaneViewer<'_> {
                         } else if resp.secondary_clicked() && !selected.contains(&i) {
                             clicked = Some((i, false, false));
                         }
-                        resp.context_menu(|ui| {
-                            if ui.button(t!("files.ctx_transfer")).clicked() {
-                                menu.push(Action::Transfer(side));
-                                ui.close();
-                            }
-                            if ui.button(t!("files.ctx_conditional")).clicked() {
-                                menu.push(Action::Conditional(side));
-                                ui.close();
-                            }
-                            if local_panel {
-                                if ui.button(t!("files.ctx_create_sfv")).clicked() {
-                                    menu.push(Action::Checksums(side, false));
+                        // "Explorer menu": the right-click shows the menu of Windows.
+                        let explorer = local_panel && self.explorer_menu;
+                        if explorer && resp.secondary_clicked() {
+                            menu.push(Action::Op(side, Op::ExplorerMenu));
+                        }
+                        if !explorer {
+                            resp.context_menu(|ui| {
+                                if ui.button(t!("files.ctx_transfer")).clicked() {
+                                    menu.push(Action::Transfer(side));
                                     ui.close();
                                 }
-                                if ui.button(t!("files.ctx_create_md5")).clicked() {
-                                    menu.push(Action::Checksums(side, true));
+                                if ui.button(t!("files.ctx_conditional")).clicked() {
+                                    menu.push(Action::Conditional(side));
                                     ui.close();
                                 }
-                            }
-                            if f.is_dir && ui.button(t!("files.ctx_open")).clicked() {
-                                menu.push(Action::Open(side, f.name.clone()));
-                                ui.close();
-                            }
-                            ui.separator();
-                            fileops::context_menu(ui, side, remote_panel, f, &mut menu);
-                            ui.separator();
-                            if ui.button(t!("files.ctx_rename")).clicked() {
-                                menu.push(Action::Rename(side));
-                                ui.close();
-                            }
-                            if ui.button(t!("files.ctx_delete")).clicked() {
-                                menu.push(Action::Delete(side));
-                                ui.close();
-                            }
-                            if ui.button(t!("files.ctx_new_folder")).clicked() {
-                                menu.push(Action::NewFolder(side));
-                                ui.close();
-                            }
-                            ui.separator();
-                            if ui.button(t!("files.ctx_copy_path")).clicked() {
-                                menu.push(Action::CopyPath(side, f.name.clone()));
-                                ui.close();
-                            }
-                            if http && ui.button(t!("files.ctx_copy_http")).clicked() {
-                                menu.push(Action::CopyHttpUrl(side, f.name.clone()));
-                                ui.close();
-                            }
-                            if ui.button(t!("files.ctx_refresh")).clicked() {
-                                menu.push(Action::Refresh(side));
-                                ui.close();
-                            }
-                        });
+                                if local_panel {
+                                    if ui.button(t!("files.ctx_create_sfv")).clicked() {
+                                        menu.push(Action::Checksums(side, false));
+                                        ui.close();
+                                    }
+                                    if ui.button(t!("files.ctx_create_md5")).clicked() {
+                                        menu.push(Action::Checksums(side, true));
+                                        ui.close();
+                                    }
+                                    if ui.button(t!("files.ctx_explorer")).clicked() {
+                                        menu.push(Action::Op(side, Op::ExplorerMenu));
+                                        ui.close();
+                                    }
+                                }
+                                if f.is_dir && ui.button(t!("files.ctx_open")).clicked() {
+                                    menu.push(Action::Open(side, f.name.clone()));
+                                    ui.close();
+                                }
+                                ui.separator();
+                                fileops::context_menu(ui, side, remote_panel, f, &mut menu);
+                                ui.separator();
+                                if ui.button(t!("files.ctx_rename")).clicked() {
+                                    menu.push(Action::Rename(side));
+                                    ui.close();
+                                }
+                                if ui.button(t!("files.ctx_delete")).clicked() {
+                                    menu.push(Action::Delete(side));
+                                    ui.close();
+                                }
+                                if ui.button(t!("files.ctx_new_folder")).clicked() {
+                                    menu.push(Action::NewFolder(side));
+                                    ui.close();
+                                }
+                                ui.separator();
+                                if ui.button(t!("files.ctx_copy_path")).clicked() {
+                                    menu.push(Action::CopyPath(side, f.name.clone()));
+                                    ui.close();
+                                }
+                                if http && ui.button(t!("files.ctx_copy_http")).clicked() {
+                                    menu.push(Action::CopyHttpUrl(side, f.name.clone()));
+                                    ui.close();
+                                }
+                                if ui.button(t!("files.ctx_refresh")).clicked() {
+                                    menu.push(Action::Refresh(side));
+                                    ui.close();
+                                }
+                            });
+                        }
                     });
                 });
         });
@@ -3983,9 +4148,9 @@ impl PaneViewer<'_> {
             .sense(Sense::click())
             .column(Column::initial(28.0))
             .column(Column::remainder().at_least(160.0).clip(true))
-            .column(Column::initial(90.0))
-            .column(Column::initial(170.0))
-            .column(Column::initial(140.0).clip(true))
+            .column(queue_column(90.0))
+            .column(queue_column(170.0))
+            .column(queue_column(140.0).clip(true))
             .header(22.0, |mut h| {
                 for t in [String::new(), t!("queue.col_item"), t!("queue.col_size"), t!("queue.col_progress"), t!("queue.col_state")] {
                     h.col(|ui| {

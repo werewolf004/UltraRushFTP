@@ -5316,6 +5316,7 @@ name = "urftp-sys"
 version = "0.10.0"
 dependencies = [
  "thiserror 2.0.21",
+ "windows",
  "windows-sys 0.61.2",
 ]
 

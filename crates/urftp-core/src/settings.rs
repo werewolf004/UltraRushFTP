@@ -83,11 +83,27 @@ pub struct SkipSettings {
     pub rules: Vec<SkipRuleSetting>,
     pub skip_zero_byte_files: bool,
     pub skip_empty_dirs: bool,
+    /// Items chosen by hand, contents of the folders, or both.
+    pub mode: crate::skiplist::SkipMode,
+    /// The items the list would skip are shown in this colour (`#RRGGBB` per theme) and
+    /// struck through in the panels.
+    pub show_skipped: bool,
+    pub skipped_dark: String,
+    pub skipped_light: String,
 }
 
 impl Default for SkipSettings {
     fn default() -> Self {
-        Self { enabled: true, rules: Vec::new(), skip_zero_byte_files: false, skip_empty_dirs: false }
+        Self {
+            enabled: true,
+            rules: Vec::new(),
+            skip_zero_byte_files: false,
+            skip_empty_dirs: false,
+            mode: crate::skiplist::SkipMode::Both,
+            show_skipped: true,
+            skipped_dark: "#9AA0A6".into(),
+            skipped_light: "#5F6368".into(),
+        }
     }
 }
 
@@ -107,7 +123,13 @@ impl SkipSettings {
                 Some(SkipRule { pattern: mask.compile().ok()?, action: r.action, target: r.target, directions: r.directions, full_path })
             })
             .collect();
-        SkipList { enabled: self.enabled, rules, skip_zero_byte_files: self.skip_zero_byte_files, skip_empty_dirs: self.skip_empty_dirs }
+        SkipList {
+            enabled: self.enabled,
+            mode: self.mode,
+            rules,
+            skip_zero_byte_files: self.skip_zero_byte_files,
+            skip_empty_dirs: self.skip_empty_dirs,
+        }
     }
 }
 
@@ -124,6 +146,9 @@ pub struct TransferSettings {
     /// Speeds in KiB/s (0 = unlimited).
     pub download_limit_kib: u64,
     pub upload_limit_kib: u64,
+    /// The limits above are applied (one-click toggles of the status bar).
+    pub download_limit_on: bool,
+    pub upload_limit_on: bool,
     pub connect_timeout_secs: u32,
     pub io_timeout_secs: u32,
     /// Retries per direction (`None`: [`TransferSettings::retries`]).
@@ -254,6 +279,8 @@ impl Default for TransferSettings {
             quick_connect_transfers: 2,
             download_limit_kib: 0,
             upload_limit_kib: 0,
+            download_limit_on: true,
+            upload_limit_on: true,
             connect_timeout_secs: 30,
             io_timeout_secs: 120,
             retries_download: None,
@@ -737,6 +764,33 @@ pub struct InterfaceSettings {
     /// Optional columns of the window list.
     pub window_list_ftp: bool,
     pub window_list_action: bool,
+    /// Sizes of the file lists: bytes, KiB or the best unit.
+    pub size_display: SizeDisplay,
+    /// The local panels list hidden and system files.
+    pub local_show_hidden: bool,
+    /// While a download runs, the local panel showing its folder is read again every so
+    /// many seconds (0: never).
+    pub refresh_download_secs: u32,
+    /// Columns sized to their content: local panels, remote panels, queue.
+    pub autosize_local: bool,
+    pub autosize_remote: bool,
+    pub autosize_queue: bool,
+    /// A right-click in a local panel shows the Windows Explorer menu instead of the menu
+    /// of UltraRushFTP.
+    pub local_explorer_menu: bool,
+}
+
+/// How the file lists show sizes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SizeDisplay {
+    /// `1 234 567`.
+    Bytes,
+    /// `1 206 KB` (rounded up).
+    KBytes,
+    /// B, KB, MB, GB… depending on the size.
+    #[default]
+    Dynamic,
 }
 
 /// Colour of the names matching masks, for each theme (`#RRGGBB`).
@@ -794,6 +848,13 @@ impl Default for InterfaceSettings {
             default_layout: String::new(),
             window_list_ftp: true,
             window_list_action: true,
+            size_display: SizeDisplay::Dynamic,
+            local_show_hidden: true,
+            refresh_download_secs: 0,
+            autosize_local: false,
+            autosize_remote: false,
+            autosize_queue: false,
+            local_explorer_menu: false,
         }
     }
 }

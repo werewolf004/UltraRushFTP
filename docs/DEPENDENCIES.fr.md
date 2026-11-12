@@ -52,6 +52,7 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `roxmltree` | 0.21 | MIT / Apache-2.0 | core | Analyseur XML en lecture seule pour les imports |
 | `base64` | 0.23 | MIT / Apache-2.0 | core | Codage des secrets, imports |
 | `windows-sys` | 0.61 | MIT / Apache-2.0 | sys | API Win32 (fenêtres, mémoire partagée, DPAPI, alimentation, espace disque, presse-papiers, état des touches, zone de notification, sons, heure locale) |
+| `windows` | 0.62 | MIT / Apache-2.0 | sys | Interfaces COM du shell Windows (menu de l'Explorateur des panneaux locaux : `IShellFolder`, `IContextMenu`), absentes de `windows-sys` |
 | `eframe` | 0.36 | MIT / Apache-2.0 | gui | Fenêtre native et rendu pour egui |
 | `egui_extras` | 0.36 | MIT / Apache-2.0 | gui | Tableaux des panneaux de fichiers et de la file |
 | `egui_dock` | 0.21 | MIT | gui | Panneaux réorganisables dans chaque onglet (fonctionnalité `serde` : dispositions enregistrées) |

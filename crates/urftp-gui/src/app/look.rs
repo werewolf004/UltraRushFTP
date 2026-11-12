@@ -1,7 +1,7 @@
 //! Look of the main window: highlighted names, colours of the logs, sort options, size of
 //! the interface and of the logs, saved layouts of the panels.
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU8};
 
 use serde::{Deserialize, Serialize};
 use urftp_core::settings::InterfaceSettings;
@@ -10,11 +10,66 @@ use super::*;
 
 static DIRS_FIRST: AtomicBool = AtomicBool::new(true);
 static DESC_FIRST: AtomicBool = AtomicBool::new(false);
+static SHOW_HIDDEN: AtomicBool = AtomicBool::new(true);
+/// 0: bytes, 1: KiB, 2: best unit.
+static SIZE_MODE: AtomicU8 = AtomicU8::new(2);
+/// Bit 0: local panels, bit 1: remote panels, bit 2: queue.
+static AUTOSIZE: AtomicU8 = AtomicU8::new(0);
 
-/// Applies the sort options.
-pub(super) fn configure(s: &InterfaceSettings) {
+/// Applies the sort and display options; answers whether the local panels must be read
+/// again (hidden files shown or not).
+pub(super) fn configure(s: &InterfaceSettings) -> bool {
+    use urftp_core::settings::SizeDisplay;
     DIRS_FIRST.store(s.dirs_first, Ordering::Relaxed);
     DESC_FIRST.store(s.sort_desc_first, Ordering::Relaxed);
+    SIZE_MODE.store(
+        match s.size_display {
+            SizeDisplay::Bytes => 0,
+            SizeDisplay::KBytes => 1,
+            SizeDisplay::Dynamic => 2,
+        },
+        Ordering::Relaxed,
+    );
+    AUTOSIZE.store(u8::from(s.autosize_local) | u8::from(s.autosize_remote) << 1 | u8::from(s.autosize_queue) << 2, Ordering::Relaxed);
+    SHOW_HIDDEN.swap(s.local_show_hidden, Ordering::Relaxed) != s.local_show_hidden
+}
+
+/// The local panels list hidden files.
+pub(super) fn show_hidden() -> bool {
+    SHOW_HIDDEN.load(Ordering::Relaxed)
+}
+
+/// Columns sized to their content: 0 local panels, 1 remote panels, 2 queue.
+pub(super) fn autosize(which: u8) -> bool {
+    AUTOSIZE.load(Ordering::Relaxed) & (1 << which) != 0
+}
+
+/// Size of a file in the lists, in the unit chosen in the options.
+pub(super) fn size_text(n: u64) -> String {
+    match SIZE_MODE.load(Ordering::Relaxed) {
+        0 => format!("{} {}", group_digits(n), urftp_i18n::text("units.b")),
+        1 => format!("{} {}", group_digits(n.div_ceil(1024)), urftp_i18n::text("units.kb")),
+        _ => human_size(n),
+    }
+}
+
+/// `1234567` → `1,234,567` (English) or `1 234 567` (French, narrow no-break spaces).
+fn group_digits(n: u64) -> String {
+    let sep = if urftp_i18n::language() == Lang::Fr { '\u{202F}' } else { ',' };
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(sep);
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Colour of the items the skip list would skip, for the theme (`None`: not shown).
+pub(super) fn skipped_color(s: &urftp_core::settings::SkipSettings, dark: bool) -> Option<egui::Color32> {
+    (s.enabled && s.show_skipped).then(|| theme::parse_color(if dark { &s.skipped_dark } else { &s.skipped_light })).flatten()
 }
 
 /// Folders are listed before the files.

@@ -279,10 +279,17 @@ impl OptionsWindow {
                     );
                 });
                 ui.add_space(6.0);
+                ui.checkbox(&mut t.download_limit_on, t!("options.download_limit_on"));
+                ui.checkbox(&mut t.upload_limit_on, t!("options.upload_limit_on"));
                 ui.label(RichText::new(t!("options.speed_note")).weak());
+                ui.label(RichText::new(t!("options.speed_toggle_note")).weak());
             }
             Page::Exists => exists_ui(ui, &mut s.exists),
-            Page::Skiplist => skiplist_ui(ui, &mut s.skiplist),
+            Page::Skiplist => {
+                skiplist_ui(ui, &mut s.skiplist);
+                ui.add_space(8.0);
+                skipped_color_ui(ui, &mut s.skiplist);
+            }
             Page::Priorities => priorities_ui(ui, &mut s.priorities),
             Page::Proxy => proxy_ui(ui, &mut s.proxy, &mut s.proxies),
             Page::KeepAlive => keep_alive_ui(ui, &mut s.keep_alive),
@@ -530,6 +537,14 @@ pub(crate) fn skiplist_ui(ui: &mut egui::Ui, k: &mut SkipSettings) {
     });
     ui.checkbox(&mut k.skip_zero_byte_files, t!("options.skip_zero"));
     ui.checkbox(&mut k.skip_empty_dirs, t!("options.skip_empty_dirs"));
+    ui.horizontal(|ui| {
+        use urftp_core::skiplist::SkipMode;
+        ui.label(t!("options.skip_mode"));
+        ui.radio_value(&mut k.mode, SkipMode::Auto, t!("options.skip_mode_auto"));
+        ui.radio_value(&mut k.mode, SkipMode::Manual, t!("options.skip_mode_manual"));
+        ui.radio_value(&mut k.mode, SkipMode::Both, t!("options.skip_mode_both"));
+    });
+    ui.label(RichText::new(t!("options.skip_mode_note")).weak());
     ui.add_space(6.0);
     ui.label(RichText::new(t!("options.skip_note")).weak());
     ui.add_space(4.0);
@@ -991,6 +1006,22 @@ fn notifications_ui(ui: &mut egui::Ui, n: &mut urftp_core::settings::NotifySetti
     ui.label(RichText::new(t!("options.nt_monitor_note")).weak());
 }
 
+/// Colour of the items the skip list would skip, in the panels.
+fn skipped_color_ui(ui: &mut egui::Ui, k: &mut SkipSettings) {
+    ui.checkbox(&mut k.show_skipped, t!("options.skip_show"));
+    ui.add_enabled_ui(k.show_skipped, |ui| {
+        egui::Grid::new("opt-skip-color").num_columns(4).spacing([8.0, 6.0]).show(ui, |ui| {
+            ui.label(t!("options.look_dark"));
+            color_field(ui, &mut k.skipped_dark, true, &format!("{} ({})", t!("options.skip_show"), t!("options.look_dark")));
+            ui.end_row();
+            ui.label(t!("options.look_light"));
+            color_field(ui, &mut k.skipped_light, false, &format!("{} ({})", t!("options.skip_show"), t!("options.look_light")));
+            ui.end_row();
+        });
+    });
+    ui.label(RichText::new(t!("options.skip_show_note")).weak());
+}
+
 /// A colour field `#RRGGBB` with a sample and its contrast against the list backgrounds of
 /// the theme (WCAG AA asks for 4.5:1).
 fn color_field(ui: &mut egui::Ui, value: &mut String, dark: bool, name: &str) {
@@ -1022,6 +1053,26 @@ fn display_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettings
         theme::grid_row(ui, t!("options.look_default_layout"), theme::single_line(&mut s.default_layout).desired_width(160.0));
     });
     ui.checkbox(&mut s.tabs_bottom, t!("options.look_tabs_bottom"));
+    ui.horizontal(|ui| {
+        use urftp_core::settings::SizeDisplay;
+        ui.label(t!("options.look_sizes"));
+        ui.radio_value(&mut s.size_display, SizeDisplay::Bytes, t!("options.look_sizes_bytes"));
+        ui.radio_value(&mut s.size_display, SizeDisplay::KBytes, t!("options.look_sizes_kb"));
+        ui.radio_value(&mut s.size_display, SizeDisplay::Dynamic, t!("options.look_sizes_dynamic"));
+    });
+    ui.checkbox(&mut s.local_show_hidden, t!("options.look_show_hidden"));
+    ui.checkbox(&mut s.local_explorer_menu, t!("options.look_explorer_menu"));
+    ui.horizontal(|ui| {
+        let l = ui.label(t!("options.look_refresh_download"));
+        ui.add(egui::DragValue::new(&mut s.refresh_download_secs).range(0..=3600).suffix(" s")).labelled_by(l.id);
+        ui.label(RichText::new(t!("options.look_refresh_download_off")).weak());
+    });
+    ui.horizontal(|ui| {
+        ui.label(t!("options.look_autosize"));
+        ui.checkbox(&mut s.autosize_local, t!("options.look_autosize_local"));
+        ui.checkbox(&mut s.autosize_remote, t!("options.look_autosize_remote"));
+        ui.checkbox(&mut s.autosize_queue, t!("options.look_autosize_queue"));
+    });
     ui.checkbox(&mut s.dirs_first, t!("options.look_dirs_first"));
     ui.checkbox(&mut s.sort_desc_first, t!("options.look_desc_first"));
     ui.add_space(6.0);

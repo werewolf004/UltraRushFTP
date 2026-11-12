@@ -75,6 +75,9 @@ pub struct QueueItem {
     pub sequence: Option<u64>,
     /// Binary, ASCII or by the ASCII list ("Edit queue"); the contents of a folder keep it.
     pub mode: TransferMode,
+    /// Chosen by hand (or by a script), not found inside a folder: the skip mode tells
+    /// whether the skip list applies to it.
+    pub chosen: bool,
 }
 
 impl QueueItem {
@@ -229,6 +232,7 @@ impl Queue {
             options: None,
             sequence: None,
             mode: TransferMode::Auto,
+            chosen: true,
         }
     }
 
@@ -258,6 +262,7 @@ impl Queue {
                 it.options.clone_from(&options);
                 it.sequence = sequence;
                 it.mode = mode;
+                it.chosen = false;
                 it
             })
             .collect();

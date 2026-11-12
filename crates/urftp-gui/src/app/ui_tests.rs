@@ -383,11 +383,11 @@ fn availability_test_marks_an_unreachable_site() {
     let mut ui = Ui::start(Lang::En, true);
     // A local port nobody listens on: the test fails quickly.
     let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    let site = urftp_core::site::Site { name: "Down".into(), host: "127.0.0.1".into(), port, ..Default::default() };
+    let site = urftp_core::site::Site { name: "Unreachable".into(), host: "127.0.0.1".into(), port, ..Default::default() };
     let id = ui.app().sites.book.add_site(&[], site);
     ui.app().sites.open = true;
     ui.run();
-    ui.harness.get_by_label_contains("Down").click();
+    ui.harness.get_by_label_contains("Unreachable").click();
     ui.run();
     ui.harness.get_by_label(&t!("sites.test")).click();
     ui.run();
@@ -1604,4 +1604,108 @@ fn window_list_task_window_and_task_dialog_controls_are_named() {
     assert_all_named(&ui, "task dialog");
     ui.key(Key::Escape);
     assert!(!ui.app().task_dialog_open());
+}
+
+#[test]
+fn file_sizes_follow_the_display_option() {
+    use urftp_core::settings::SizeDisplay;
+    let _ui = Ui::start(Lang::En, true);
+    let mut s = urftp_core::settings::InterfaceSettings::default();
+    for (mode, expected) in [(SizeDisplay::Bytes, "1,234,567 B"), (SizeDisplay::KBytes, "1,206 KB"), (SizeDisplay::Dynamic, "1.2 MB")] {
+        s.size_display = mode;
+        super::look::configure(&s);
+        assert_eq!(super::look::size_text(1_234_567), expected);
+    }
+    urftp_i18n::set_language(Lang::Fr);
+    s.size_display = SizeDisplay::Bytes;
+    super::look::configure(&s);
+    assert_eq!(super::look::size_text(1_234_567), "1\u{202F}234\u{202F}567 o");
+    s.size_display = SizeDisplay::Dynamic;
+    super::look::configure(&s);
+}
+
+#[test]
+fn hidden_local_files_can_be_left_out() {
+    let mut ui = Ui::start(Lang::En, true);
+    let dir = scratch().join("hidden-lab");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("shown.txt"), b"a").unwrap();
+    std::fs::write(dir.join("secret.txt"), b"b").unwrap();
+    let status = std::process::Command::new("attrib").arg("+h").arg(dir.join("secret.txt")).status().unwrap();
+    assert!(status.success());
+    ui.app().tabs[0].sides[0] = Side::Local(super::LocalView::new(dir.clone()));
+    assert_eq!(ui.left_rows(), ["secret.txt", "shown.txt"]);
+    let ctx = ui.harness.ctx.clone();
+    ui.app().options.settings.interface.local_show_hidden = false;
+    ui.app().apply_settings(&ctx);
+    assert_eq!(ui.left_rows(), ["shown.txt"], "listed again without the hidden file");
+    ui.app().options.settings.interface.local_show_hidden = true;
+    ui.app().apply_settings(&ctx);
+    assert_eq!(ui.left_rows().len(), 2);
+}
+
+#[test]
+fn speed_limits_toggle_from_the_status_bar() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.app().options.settings.transfer.download_limit_kib = 100;
+    ui.app().apply_limits();
+    ui.run();
+    assert_eq!(ui.app().download_limit.rate(), 100 * 1024);
+    let name = t!("status.limit_on", what = t!("status.limit_down"));
+    ui.harness.get_by_label(&name).click();
+    ui.run();
+    assert!(!ui.app().options.settings.transfer.download_limit_on);
+    assert_eq!(ui.app().download_limit.rate(), 0, "unlimited at once, during transfers too");
+    ui.harness.get_by_label(&t!("status.limit_off", what = t!("status.limit_down"))).click();
+    ui.run();
+    assert_eq!(ui.app().download_limit.rate(), 100 * 1024);
+    // No limit set: the upload toggle cannot be used.
+    let up_name = format!("{}: {}", t!("status.limit_up"), t!("status.no_limit"));
+    assert!(ui.harness.get_by_label(&up_name).accesskit_node().is_disabled());
+}
+
+#[test]
+fn items_the_skip_list_would_skip_are_told() {
+    use urftp_core::settings::SkipRuleSetting;
+    let mut ui = Ui::start(Lang::En, true);
+    let mut rule = SkipRuleSetting::default();
+    rule.mask.mask = "*.log".into();
+    ui.app().options.settings.skiplist.rules = vec![rule];
+    ui.run();
+    let spoken = |ui: &Ui, name: &str| {
+        ui.harness.root().children_recursive().filter_map(|n| n.accesskit_node().label()).find(|l| l.starts_with(&format!("{name},")))
+    };
+    let log = spoken(&ui, "gamma.log").unwrap();
+    assert!(log.ends_with(&t!("files.skipped")), "{log}");
+    assert!(!spoken(&ui, "alpha.txt").unwrap().contains(&t!("files.skipped")));
+    ui.app().options.settings.skiplist.show_skipped = false;
+    ui.run();
+    assert!(!spoken(&ui, "gamma.log").unwrap().contains(&t!("files.skipped")));
+}
+
+#[test]
+fn ip_address_translate_window() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.app().ip_tool = Some("C0A80101".into());
+    ui.run();
+    assert!(ui.has_label("192.168.1.1"));
+    assert_all_named(&ui, "IP address translate");
+    ui.app().ip_tool = Some("not an address".into());
+    ui.run();
+    assert!(ui.harness.query_by_label_contains(&t!("ip.invalid")).is_some());
+}
+
+#[test]
+fn columns_sized_to_their_content_keep_the_panels_usable() {
+    let mut ui = Ui::start(Lang::Fr, false);
+    let ctx = ui.harness.ctx.clone();
+    let s = &mut ui.app().options.settings.interface;
+    (s.autosize_local, s.autosize_remote, s.autosize_queue) = (true, true, true);
+    ui.app().apply_settings(&ctx);
+    ui.run();
+    assert_eq!(ui.left_rows().len(), 4);
+    assert_all_named(&ui, "columns sized to their content");
+    let s = &mut ui.app().options.settings.interface;
+    (s.autosize_local, s.autosize_remote, s.autosize_queue) = (false, false, false);
+    ui.app().apply_settings(&ctx);
 }

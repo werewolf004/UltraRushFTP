@@ -9,6 +9,22 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Everyday comfort (block M).
+
+### Added
+
+- **⬇ / ⬆ speed limit toggles** in the status bar: each limit on or off in one click,
+  running transfers included.
+- Options › Interface: **file sizes** in bytes, KB or dynamic; **hidden local files** shown
+  or not; **columns sized to their content** (local, remote, queue); the local folder of a
+  running download **read again every N seconds**; **right-click: Windows Explorer menu**
+  in the local panels (also *Windows Explorer menu…* in the panel menu).
+- Skip list: **applies to** the contents of folders (auto), the items chosen (manual) or
+  both; the items it would skip are **shown in a colour** and struck through.
+- **Date tokens** in bookmarks: `%yyyy%`, `%yy%`, `%mm%`, `%m%`, `%dd%`, `%d%`, `%ww%`,
+  `%w%` (ISO week).
+- FTP › **IP address translate…**: hexadecimal or numeric address to dotted form.
+
 ## [0.10.0] - 2026-11-12
 
 Windows, tabs and tasks (block L).

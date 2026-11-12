@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
+Résumé (287 sujets) : ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
 
 ## Fenêtre principale et menus
 
@@ -52,7 +52,7 @@ Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | Colonnes locales taille / date | ✅ | |
 | Colonnes de la liste des fenêtres | ✅ | FTP et Action (Affichage › Colonnes de la liste des fenêtres) |
 | Lignes de grille | ➖ | Lignes alternées à la place |
-| Ajustement automatique des colonnes | 🟡 | Colonnes redimensionnables, sans ajustement automatique |
+| Ajustement automatique des colonnes | ✅ | Options › Interface : colonnes locales, distantes et de la file ajustées à leur contenu |
 | Fichiers en cours d'édition | ✅ | Menu FTP → Fichiers en cours de modification |
 
 ### FTP
@@ -85,7 +85,7 @@ Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | Informations sur la file | ✅ | Nombres, tailles, temps restant |
 | Restaurer la file, charger / enregistrer un fichier de file | ✅ | File non terminée au démarrage ; fichiers `.urq` à la main |
 | Planifier la file en tâche | ✅ | ⋯ File › Planifier la file en tâche : la file se lance dans un nouvel onglet à son heure |
-| Bascules de limite de vitesse d'envoi / de réception | 🟡 | Limites dans les options ; pas de bascule en un clic |
+| Bascules de limite de vitesse d'envoi / de réception | ✅ | Boutons ⬇ / ⬆ de la barre d'état |
 
 ### Outils → autres
 
@@ -108,7 +108,7 @@ Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | À la fin des transferts : éteindre / veille / veille prolongée | ✅ | Avec un compte à rebours annulable |
 | À la fin des transferts : quitter | ✅ | Options › Transferts, et `-rx` |
 | Créer un fichier SFV ou MD5 | ✅ | Clic droit dans un panneau local |
-| Traduction d'adresse IP | ⬜ | Adresse hexadécimale / numérique vers la forme pointée |
+| Traduction d'adresse IP | ✅ | FTP › Traduction d'adresse IP : adresse hexadécimale ou numérique vers la forme pointée |
 | Redémarrer le service UPnP | ✅ | Menu FTP, et Options › Connexion |
 | Options | ✅ | Fenêtre Options |
 
@@ -138,7 +138,7 @@ Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | Sujet | État | Remarques |
 |---|---|---|
 | Ajouter ou modifier une règle de la liste d'exclusion | ✅ | Modifiée dans la grille des options |
-| Signets | 🟡 | Nom, chemins distant et local ; jetons de date (`%yyyy%`, `%mm%`…) pas encore |
+| Signets | ✅ | Nom, chemins distant et local ; jetons de date `%yyyy%` `%yy%` `%mm%` `%m%` `%dd%` `%d%` `%ww%` `%w%` |
 | Créer des sommes de contrôle CRC | ✅ | Fichiers SFV et MD5 |
 | Transfert conditionnel | ✅ | Voir *Transfert conditionnel* |
 | Calculer l'espace FTP utilisé | ✅ | |
@@ -157,7 +157,7 @@ Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 |---|---|---|
 | Barre d'outils : propriétés, dossier, nouveau site, supprimer | ✅ | |
 | Mode arborescence | ✅ | |
-| Mode liste, largeur automatique des colonnes | 🟡 | Mode liste, triable ; pas de largeur automatique des colonnes |
+| Mode liste, largeur automatique des colonnes | ✅ | Mode liste, triable ; colonnes ajustées à leur contenu, défilement horizontal si la liste est plus large que le volet |
 | Import texte brut (une URL par ligne) | ✅ | Détecté par l'import |
 | Import des sites et réglages UltraFXP | ⬜ | Pas fait : aucun fichier d'exemple du format |
 | Import FTPRush XML | ✅ | Plus FTPRush v1/v3, FileZilla, FlashFXP ; les mots de passe ne sont pas importés |
@@ -281,8 +281,8 @@ Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | À la fin des transferts : rester connecté / déconnecter | ✅ | |
 | Liste ASCII, pas de reprise pour les fichiers ASCII | ✅ | |
 | Liste d'exclusion : activer, fichiers vides, dossiers vides, dossiers | ✅ | |
-| Liste d'exclusion : couleur des éléments exclus | ⬜ | |
-| Liste d'exclusion : mode auto / manuel / les deux | ⬜ | Appliquée à tout élément aujourd'hui |
+| Liste d'exclusion : couleur des éléments exclus | ✅ | Couleur par thème, barrés, annoncés par les lecteurs d'écran |
+| Liste d'exclusion : mode auto / manuel / les deux | ✅ | Options › Fichiers ignorés › S'applique à |
 | Règles « fichier existant » (reprendre, ignorer, renommer, écraser, demander) | ✅ | Plus écraser si la reprise échoue |
 | File : recharger la file inachevée au démarrage, enregistrement automatique | ✅ | Demander, charger ou abandonner (Options › Général) |
 | File : garder les éléments en échec | ✅ | |
@@ -318,10 +318,10 @@ Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 |---|---|---|
 | Zone de notification : réduire, clignoter pendant les transferts, toujours afficher | 🟡 | Réduire et toujours afficher ; le bouton clignote à la fin d'une file, pas pendant les transferts |
 | Fenêtre locale : chemin complet dans la barre d'adresse | ✅ | |
-| Fenêtre locale : afficher les fichiers cachés | ⬜ | Les fichiers cachés sont listés aujourd'hui |
-| Affichage des tailles : octets / Ko / dynamique | 🟡 | Dynamique seulement |
+| Fenêtre locale : afficher les fichiers cachés | ✅ | Options › Interface |
+| Affichage des tailles : octets / Ko / dynamique | ✅ | Options › Interface › Tailles des fichiers |
 | Faire clignoter la fenêtre à la fin des transferts | ✅ | Quand la fenêtre est en arrière-plan |
-| Actualiser la taille d'un fichier en cours de téléchargement | ⬜ | |
+| Actualiser la taille d'un fichier en cours de téléchargement | ✅ | Options › Interface : le dossier local d'un téléchargement en cours est relu toutes les N secondes |
 | Menu des favoris : découpage, historique, entrée connexion rapide, sites récents | 🟡 | Sites récents et tous les sites ; pas de menu scindé, pas d'historique des connexions rapides |
 | Indicateur de côté en dégradé, masquer la sélection sans focus, séparateur de noms | ➖ | Options cosmétiques de l'interface Delphi |
 | Langue | 🟡 | Anglais et français |
@@ -344,7 +344,7 @@ Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 | Actions du double-clic (fichier, journal, site, indicateur de côté, onglet, élément de file) | 🟡 | Double-clic sur un fichier : transférer, afficher ou rien ; les autres sont fixes |
 | Glisser depuis l'Explorateur vers un panneau distant | ✅ | Dans le dossier du panneau distant sous le pointeur |
 | Coller des fichiers locaux dans un panneau distant (`Ctrl+V`) | ✅ | |
-| Menu contextuel de l'Explorateur dans le panneau local | ⬜ | |
+| Menu contextuel de l'Explorateur dans le panneau local | ✅ | Options › Interface (clic droit), ou *Menu de l'Explorateur Windows…* du menu du panneau |
 | Associations de fichiers : voir et modifier les fichiers distants avec des programmes externes | ✅ | Options › Navigation ; Bloc-notes quand aucun programme ne correspond ; un fichier modifié est renvoyé à l'enregistrement |
 | Notification d'événements : sons, bulles de notification, liste d'événements | ✅ | Options › Notifications |
 | Confirmations : supprimer des fichiers locaux | ✅ | Toujours demandée |

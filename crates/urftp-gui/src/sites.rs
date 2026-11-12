@@ -247,7 +247,9 @@ impl SiteManager {
                 ui.horizontal_top(|ui| {
                     ui.vertical(|ui| {
                         ui.set_width(if self.list_mode { 420.0 } else { 260.0 });
-                        egui::ScrollArea::vertical().id_salt("site-tree").max_height(ui.available_height() - 4.0).show(ui, |ui| {
+                        // List mode: the columns fit their content, a wide list scrolls sideways.
+                        let scroll = if self.list_mode { egui::ScrollArea::both() } else { egui::ScrollArea::vertical() };
+                        scroll.id_salt("site-tree").max_height(ui.available_height() - 4.0).show(ui, |ui| {
                             let mut clicked = None;
                             if self.list_mode {
                                 self.list(ui, &mut clicked);

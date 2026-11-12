@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (287 topics: ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18). The
+[docs/PARITY.md](docs/PARITY.md) (287 topics: ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -132,6 +132,13 @@ planned work is grouped below into blocks, each ending with a release.
 - ✅ Window list pane with FTP and Action columns.
 - ✅ Task window: queues and scripts scheduled once, every N minutes or on days of the
   week; Schedule queue to task.
+
+### M — Everyday comfort
+- ✅ One-click speed limit toggles, file sizes in bytes / KB / dynamic, hidden local files
+  shown or not, columns sized to their content, size of a running download refreshed.
+- ✅ Skip list: colour of the skipped items, mode auto / manual / both.
+- ✅ Date tokens in bookmarks, IP address translate, Windows Explorer menu in the local
+  panels.
 
 ### Distribution
 - ✅ Application manifest (`longPathAware`, per-monitor DPI), icon and version resources.

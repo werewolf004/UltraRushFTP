@@ -111,10 +111,35 @@ pub struct Candidate<'a> {
     pub kind: TransferKind,
 }
 
+/// Which items the skip list applies to (FTPRush "Skip mode").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkipMode {
+    /// Only to the contents of the folders transferred, not to the items chosen by hand.
+    Auto,
+    /// Only to the items chosen by hand (a folder is skipped, its contents are not checked).
+    Manual,
+    /// To both.
+    #[default]
+    Both,
+}
+
+impl SkipMode {
+    /// The list applies to an item chosen by hand (`chosen`) or found inside a folder.
+    pub fn applies(self, chosen: bool) -> bool {
+        match self {
+            SkipMode::Auto => !chosen,
+            SkipMode::Manual => chosen,
+            SkipMode::Both => true,
+        }
+    }
+}
+
 /// Complete skip list of a site (or global).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkipList {
     pub enabled: bool,
+    pub mode: SkipMode,
     pub rules: Vec<SkipRule>,
     /// Do not transfer 0-byte files.
     pub skip_zero_byte_files: bool,
@@ -124,11 +149,17 @@ pub struct SkipList {
 
 impl Default for SkipList {
     fn default() -> Self {
-        Self { enabled: true, rules: Vec::new(), skip_zero_byte_files: false, skip_empty_dirs: false }
+        Self { enabled: true, mode: SkipMode::Both, rules: Vec::new(), skip_zero_byte_files: false, skip_empty_dirs: false }
     }
 }
 
 impl SkipList {
+    /// [`SkipList::check`] for an item chosen by hand (`chosen`) or found inside a folder,
+    /// following the [`SkipMode`].
+    pub fn check_as(&self, c: &Candidate<'_>, chosen: bool) -> Option<SkipReason> {
+        if self.mode.applies(chosen) { self.check(c) } else { None }
+    }
+
     /// Reason for the exclusion, or `None` when the item must be transferred.
     pub fn check(&self, c: &Candidate<'_>) -> Option<SkipReason> {
         if !self.enabled {
@@ -156,6 +187,16 @@ mod tests {
 
     fn file<'a>(name: &'a str, path: &'a str, size: u64) -> Candidate<'a> {
         Candidate { name, full_path: path, is_dir: false, size: Some(size), kind: TransferKind::Download }
+    }
+
+    #[test]
+    fn skip_mode_chooses_the_items_checked() {
+        let mut list = SkipList { rules: vec![SkipRule::skip("*.nfo", RuleTarget::Files)], ..SkipList::default() };
+        let nfo = file("a.nfo", "/r/a.nfo", 5);
+        for (mode, chosen, inside) in [(SkipMode::Both, true, true), (SkipMode::Auto, false, true), (SkipMode::Manual, true, false)] {
+            list.mode = mode;
+            assert_eq!((list.check_as(&nfo, true).is_some(), list.check_as(&nfo, false).is_some()), (chosen, inside), "{mode:?}");
+        }
     }
 
     #[test]

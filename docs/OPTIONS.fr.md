@@ -31,6 +31,8 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | FTP → Espace utilisé, Exporter l'arborescence, Chercher sur les sites, Comparer les panneaux | Voir *Outils de dossier* |
 | FTP → Vider le cache de ce site / tous les caches, Fichiers en cours de modification | Voir *Outils de dossier* |
 | FTP → Envoyer une commande RAW (`Ctrl+R`), Commandes de site | Voir *Commandes RAW* |
+| FTP → Traduction d'adresse IP… | Une adresse écrite en hexadécimal (`C0A80101`, `0xC0A80101`) ou en un seul nombre (`3232235777`) sous forme pointée, avec un bouton Copier |
+| FTP → Relancer le service UPnP | Recherche à nouveau le routeur (Options › Connexion) |
 | Affichage → Liste des fenêtres / Fenêtre des tâches | Affiche ou masque ce volet dans l'onglet affiché (à côté de la file) ; voir *Liste des fenêtres et fenêtre des tâches* |
 | Affichage → Colonnes de la liste des fenêtres | Colonnes FTP et Action de la liste des fenêtres |
 | Affichage → Dispositions | Appliquer, enregistrer ou supprimer une disposition des panneaux ; revenir à celle par défaut |
@@ -51,7 +53,7 @@ Chaque panneau a sa propre barre de connexion, au-dessus de son dossier :
 | `🔌 Connexion ▾` | Menu des sites du gestionnaire (les dossiers en sous-menus) et *Gestionnaire de sites* : connecte **ce** panneau ; `Maj` : connexion fantôme, `Ctrl` : `-password`. Le dossier local du site, s'il est rempli, va dans l'autre panneau quand celui-ci est local. |
 | `⟲ Reconnecter` | Rouvre la connexion du panneau, dans le même dossier |
 | `Déconnecter` | Ferme la connexion du panneau (affichée, ou gardée derrière le dossier local) |
-| `Signets ▾` | Signets de la fiche du site (panneau distant) : va dans le dossier distant ; `Maj` : le dossier local du signet dans l'autre panneau aussi |
+| `Signets ▾` | Signets de la fiche du site (panneau distant) : va dans le dossier distant ; `Maj` : le dossier local du signet dans l'autre panneau aussi. Les jetons de date prennent la date du jour : `%yyyy%` / `%yy%` année, `%mm%` / `%m%` mois, `%dd%` / `%d%` jour, `%ww%` / `%w%` semaine ISO |
 | `💻 Local` / `🌐 site` | Bascule le panneau entre son dossier local et sa connexion ; la connexion reste ouverte pendant ce temps, et l'onglet garde son nom |
 
 Dans un panneau distant, le champ du chemin accepte un dossier (absolu, ou relatif au
@@ -125,6 +127,11 @@ fichiers*, chaque journal va dans `<dossier>\<date>-ftp.log`, `-transfer.log`,
 Pendant une file, la barre d'état montre sa barre de progression avec le texte de
 l'option *Interface* (`%p` pourcentage, `%b` octets, `%s` vitesse, `%e` temps restant,
 `%c` éléments).
+
+Les boutons **⬇** et **⬆** à gauche de la barre d'état montrent les limites de réception
+et d'envoi d'Options › Débit et activent ou désactivent chacune en un clic (`∞` : illimité),
+tout de suite, transferts en cours compris. Ils sont grisés tant qu'aucune limite n'est
+réglée.
 
 ### Commandes RAW
 
@@ -290,6 +297,7 @@ Enregistrée automatiquement dans `settings.json` une seconde après une modific
 |---|---|---|
 | Téléchargement (Kio/s) | 0 (illimité) | Partagé par tous les téléchargements, appliqué tout de suite |
 | Envoi (Kio/s) | 0 (illimité) | Partagé par tous les envois, appliqué tout de suite |
+| Appliquer la limite de réception / la limite d'envoi | oui | Aussi les boutons ⬇ / ⬆ de la barre d'état : une limite désactivée garde sa valeur |
 
 Le FXP n'est pas limité : ses données ne passent pas par cet ordinateur.
 
@@ -317,6 +325,8 @@ Les règles d'une version précédente s'appliquent aux trois sens.
 | Utiliser la liste de fichiers ignorés | oui | Active les règles ci-dessous |
 | Ignorer les fichiers de 0 octet | non | — |
 | Ne pas créer les dossiers vides | non | — |
+| S'applique à | Les deux | **Contenu des dossiers (auto)** : les éléments que vous choisissez sont toujours transférés, les règles filtrent ce qui est trouvé dans les dossiers ; **Éléments choisis (manuel)** : les règles vérifient les éléments choisis, pas le contenu des dossiers ; **Les deux** |
+| Afficher dans cette couleur les éléments que la liste exclurait | oui, `#9AA0A6` (sombre) / `#5F6368` (clair) | Dans les panneaux, aussi barrés et annoncés par les lecteurs d'écran (« exclu par la liste d'exclusion ») ; le contraste est affiché |
 | Règles | aucune | Appliquées dans l'ordre, la première qui correspond décide : **Ignorer** ou **Autoriser**, masque (joker `*` `?`, ou expression régulière avec *regex*), cible (fichiers, dossiers, les deux), sens (envoi ⬆, téléchargement ⬇, FXP ↔), *chemin* = le masque porte sur le chemin complet (s'écrit aussi `%W%masque`) |
 | Exporter… / Importer… | — | Les règles dans un fichier JSON ; *Importer* lit aussi un fichier texte d'un masque par ligne (lignes commençant par `#` ignorées) et ajoute les règles |
 
@@ -466,6 +476,11 @@ pourrait lancer un programme téléchargé.
 | Taille du texte des journaux | 0 (thème) | |
 | Disposition des nouveaux onglets | — | Nom d'une disposition enregistrée (Affichage → Dispositions) |
 | Onglets sous les panneaux | désactivé | |
+| Tailles des fichiers | Dynamique | **Octets** (`1 234 567 o`), **Ko** (`1 206 Ko`, arrondi au-dessus) ou **Dynamique** (o, Ko, Mo, Go…) dans les listes de fichiers |
+| Afficher les fichiers et dossiers cachés dans les panneaux locaux | activé | Éléments avec l'attribut Windows *caché* |
+| Clic droit dans un panneau local : menu de l'Explorateur Windows | désactivé | Le menu de Windows pour la sélection (Ouvrir avec, Envoyer vers, Propriétés…) ; le menu d'UltraRushFTP reste dans les menus Édition et FTP, et son entrée *Menu de l'Explorateur Windows…* donne le menu de Windows quand l'option est désactivée |
+| Relire le dossier d'un téléchargement en cours toutes les | 0 s (jamais) | Le panneau local qui montre le dossier d'un téléchargement en cours est relu, pour suivre la taille du fichier |
+| Colonnes ajustées à leur contenu : Local, Distant, File | désactivé | Colonnes taille, date et attributs ajustées à ce qu'elles montrent |
 | Dossiers avant les fichiers | activé | |
 | Taille et date : plus grand / plus récent d'abord | désactivé | Premier clic sur ces colonnes |
 | Noms surlignés | — | Masques et une couleur par thème ; le contraste contre les fonds des listes est affiché (4,5:1 au moins est conseillé) |

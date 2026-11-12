@@ -31,6 +31,7 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | FTP → Space used, Export the directory tree, Find files at sites, Compare the panels | See *Folder tools* |
 | FTP → Clear the cache of this site / every cache, Files being edited | See *Folder tools* |
 | FTP → Send RAW command (`Ctrl+R`), Site commands | See *RAW commands* |
+| FTP → IP address translate… | An address written in hexadecimal (`C0A80101`, `0xC0A80101`) or as one number (`3232235777`) in dotted form, with a Copy button |
 | FTP → Restart UPnP service | Searches the router again (Options › Connection) |
 | View → Window list / Task window | Shows or hides that pane in the tab shown (next to the queue); see *Window list and Task window* |
 | View → Window list columns | FTP and Action columns of the window list |
@@ -52,7 +53,7 @@ Each panel has its own connection bar, above its folder:
 | `🔌 Connect ▾` | Menu of the sites of the site manager (groups as sub-menus) and *Site manager*: connects **this** panel; `Shift`: ghost login, `Ctrl`: `-password`. The local folder of the site, when set, goes to the other panel if it is local. |
 | `⟲ Reconnect` | Opens the connection of the panel again, in the same folder |
 | `Disconnect` | Closes the connection of the panel (shown, or kept behind the local folder) |
-| `Bookmarks ▾` | Bookmarks of the site record (remote panel): goes to the remote folder; `Shift`: the local folder of the bookmark in the other panel too |
+| `Bookmarks ▾` | Bookmarks of the site record (remote panel): goes to the remote folder; `Shift`: the local folder of the bookmark in the other panel too. Date tokens are replaced by today's date: `%yyyy%` / `%yy%` year, `%mm%` / `%m%` month, `%dd%` / `%d%` day, `%ww%` / `%w%` ISO week |
 | `💻 Local` / `🌐 site` | Switches the panel between its local folder and its connection; the connection stays open meanwhile, and the tab keeps its name |
 
 In a remote panel, the path field takes a folder (absolute, or relative to the current
@@ -123,6 +124,10 @@ see *Interface*. With *Write the logs to files*, each log goes to
 
 While a queue runs, the status bar shows its progress bar with the text of the
 *Interface* option (`%p` percent, `%b` bytes, `%s` speed, `%e` time left, `%c` items).
+
+The **⬇** and **⬆** buttons at the left of the status bar show the download and upload
+limits of Options › Speed and turn each one on or off in one click (`∞`: unlimited),
+immediately, running transfers included. They are greyed out while no limit is set.
 
 ### RAW commands
 
@@ -280,6 +285,7 @@ Saved automatically in `settings.json` one second after a change.
 |---|---|---|
 | Download (KiB/s) | 0 (unlimited) | Shared by every download, applied immediately |
 | Upload (KiB/s) | 0 (unlimited) | Shared by every upload, applied immediately |
+| Apply the download limit / the upload limit | on | Also the ⬇ / ⬆ buttons of the status bar: a limit turned off keeps its value |
 
 FXP is not limited: its data does not go through this computer.
 
@@ -307,6 +313,8 @@ The rules of an older version apply to the three directions.
 | Use the skip list | on | Enables the rules below |
 | Skip 0-byte files | off | — |
 | Do not create empty folders | off | — |
+| Applies to | Both | **Contents of folders (auto)**: the items you choose are always transferred, the rules filter what is found inside the folders; **Items chosen (manual)**: the rules check the items you choose, not the contents of the folders; **Both** |
+| Show the items the skip list would skip in this colour | on, `#9AA0A6` (dark) / `#5F6368` (light) | In the panels, also struck through and told by screen readers ("skipped by the skip list"); the contrast is shown |
 | Rules | none | Applied in order, the first match decides: **Skip** or **Allow**, mask (wildcard `*` `?`, or regular expression with *regex*), target (files, folders, both), directions (upload ⬆, download ⬇, FXP ↔), *path* = the mask applies to the full path (also written `%W%mask`) |
 | Export… / Import… | — | The rules as a JSON file; *Import* also reads a text file with one mask per line (lines starting with `#` ignored) and adds the rules |
 
@@ -455,6 +463,11 @@ downloaded program.
 | Text size of the logs | 0 (theme) | |
 | Layout of the new tabs | — | Name of a saved layout (View → Layouts) |
 | Tabs below the panels | off | |
+| File sizes | Dynamic | **Bytes** (`1,234,567 B`), **KB** (`1,206 KB`, rounded up) or **Dynamic** (B, KB, MB, GB…) in the file lists |
+| Show hidden files and folders in the local panels | on | Items with the Windows *hidden* attribute |
+| Right-click in a local panel: Windows Explorer menu | off | The menu of Windows for the selection (Open with, Send to, Properties…); the menu of UltraRushFTP stays in the Edit and FTP menus, and its *Windows Explorer menu…* item gives the menu of Windows when this is off |
+| Read the folder of a running download again every | 0 s (never) | The local panel showing the folder of a running download is listed again, to follow the size of the file |
+| Columns sized to their content: Local, Remote, Queue | off | Size, date and attribute columns fitted to what they show |
 | Folders before the files | on | |
 | Size and date: largest / newest first | off | First click on these columns |
 | Highlighted names | — | Masks and a colour per theme; the contrast against the list backgrounds is shown (4.5:1 at least is advised) |

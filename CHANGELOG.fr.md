@@ -10,6 +10,25 @@ la traduction.
 
 ## [Non publié]
 
+Confort au quotidien (bloc M).
+
+### Ajouté
+
+- **Bascules ⬇ / ⬆ de limite de débit** dans la barre d'état : chaque limite activée ou
+  non en un clic, transferts en cours compris.
+- Options › Interface : **tailles des fichiers** en octets, Ko ou dynamique ; **fichiers
+  locaux cachés** affichés ou non ; **colonnes ajustées à leur contenu** (local, distant,
+  file) ; le dossier local d'un téléchargement en cours **relu toutes les N secondes** ;
+  **clic droit : menu de l'Explorateur Windows** dans les panneaux locaux (aussi *Menu de
+  l'Explorateur Windows…* dans le menu du panneau).
+- Liste d'exclusion : **s'applique au** contenu des dossiers (auto), aux éléments choisis
+  (manuel) ou aux deux ; les éléments qu'elle exclurait sont **affichés en couleur** et
+  barrés.
+- **Jetons de date** dans les signets : `%yyyy%`, `%yy%`, `%mm%`, `%m%`, `%dd%`, `%d%`,
+  `%ww%`, `%w%` (semaine ISO).
+- FTP › **Traduction d'adresse IP…** : adresse hexadécimale ou numérique vers la forme
+  pointée.
+
 ## [0.10.0] - 2026-11-12
 
 Fenêtres, onglets et tâches (bloc L).

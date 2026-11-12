@@ -702,7 +702,7 @@ impl Engine {
         if item.options.as_ref().is_some_and(|o| o.no_skiplist) {
             return None;
         }
-        self.skiplist(item).check(&Candidate { name, full_path: &item.src.path, is_dir, size, kind: item.kind() })
+        self.skiplist(item).check_as(&Candidate { name, full_path: &item.src.path, is_dir, size, kind: item.kind() }, item.chosen)
     }
 
     fn progress(&self, id: ItemId, bytes: u64, total: Option<u64>) {
@@ -987,7 +987,7 @@ impl Engine {
             }
             let child_src = join_endpoint(&item.src, &e.name);
             let probe = Candidate { name: &e.name, full_path: &child_src.path, is_dir: e.is_dir, size: e.size, kind };
-            if !options.no_skiplist && self.skiplist(item).check(&probe).is_some() {
+            if !options.no_skiplist && self.skiplist(item).check_as(&probe, false).is_some() {
                 continue;
             }
             if let Some(sync) = options.sync

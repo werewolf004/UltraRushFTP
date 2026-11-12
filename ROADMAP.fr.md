@@ -54,7 +54,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (287 sujets : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (287 sujets : ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
@@ -149,6 +149,14 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
 - ✅ Volet Liste des fenêtres avec les colonnes FTP et Action.
 - ✅ Fenêtre des tâches : files et scripts planifiés une fois, toutes les N minutes ou
   certains jours de la semaine ; Planifier la file en tâche.
+
+### M — Confort au quotidien
+- ✅ Bascules de limite de débit en un clic, tailles en octets / Ko / dynamique, fichiers
+  locaux cachés affichés ou non, colonnes ajustées à leur contenu, taille d'un
+  téléchargement en cours actualisée.
+- ✅ Liste d'exclusion : couleur des éléments exclus, mode auto / manuel / les deux.
+- ✅ Jetons de date dans les signets, traduction d'adresse IP, menu de l'Explorateur
+  Windows dans les panneaux locaux.
 
 ### Distribution
 - ✅ Manifeste d'application (`longPathAware`, DPI par écran), icône et ressources de

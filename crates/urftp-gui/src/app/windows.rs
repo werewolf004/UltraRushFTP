@@ -151,3 +151,38 @@ impl UltraRushApp {
         self.tabs[self.active].dock.find_tab(&pane).is_some()
     }
 }
+
+impl UltraRushApp {
+    /// "IP address translate": hexadecimal or numeric address to the dotted form.
+    pub(super) fn ip_tool_window(&mut self, ctx: &egui::Context) {
+        let Some(text) = &mut self.ip_tool else { return };
+        let mut open = true;
+        egui::Window::new(t!("ip.title")).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+            ui.label(RichText::new(t!("ip.note")).weak());
+            ui.horizontal(|ui| {
+                let l = ui.label(t!("ip.input"));
+                ui.add(theme::single_line(text).hint_text("C0A80101").desired_width(200.0)).labelled_by(l.id);
+            });
+            if text.trim().is_empty() {
+                return;
+            }
+            match urftp_core::urls::translate_ip(text) {
+                Some(ip) => {
+                    ui.horizontal(|ui| {
+                        ui.label(t!("ip.result"));
+                        ui.strong(ip.to_string());
+                        if ui.button(t!("ip.copy")).clicked() {
+                            ui.ctx().copy_text(ip.to_string());
+                        }
+                    });
+                }
+                None => {
+                    ui.colored_label(theme::colors(ui).error, format!("⚠ {}", t!("ip.invalid")));
+                }
+            }
+        });
+        if !open {
+            self.ip_tool = None;
+        }
+    }
+}

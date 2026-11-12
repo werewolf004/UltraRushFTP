@@ -179,6 +179,72 @@ pub fn expand_increments(text: &str, limit: usize) -> Vec<String> {
     out
 }
 
+/// Replaces the date tokens of a bookmark path with the local date `at` (seconds since
+/// 1970, local wall clock): `%yyyy%` `%yy%` year, `%mm%` `%m%` month, `%dd%` `%d%` day,
+/// `%ww%` `%w%` ISO week.
+pub fn expand_date_tokens(text: &str, at: i64) -> String {
+    if !text.contains('%') {
+        return text.to_owned();
+    }
+    let (y, mo, d, ..) = crate::browsing::civil(at);
+    let week = iso_week(at);
+    [
+        ("%yyyy%", format!("{y:04}")),
+        ("%yy%", format!("{:02}", y.rem_euclid(100))),
+        ("%mm%", format!("{mo:02}")),
+        ("%m%", mo.to_string()),
+        ("%dd%", format!("{d:02}")),
+        ("%d%", d.to_string()),
+        ("%ww%", format!("{week:02}")),
+        ("%w%", week.to_string()),
+    ]
+    .iter()
+    .fold(text.to_owned(), |acc, (token, value)| replace_ignore_case(&acc, token, value))
+}
+
+fn replace_ignore_case(text: &str, token: &str, value: &str) -> String {
+    let lower = text.to_ascii_lowercase();
+    let mut out = String::with_capacity(text.len());
+    let mut from = 0;
+    while let Some(i) = lower[from..].find(token).map(|i| i + from) {
+        out.push_str(&text[from..i]);
+        out.push_str(value);
+        from = i + token.len();
+    }
+    out.push_str(&text[from..]);
+    out
+}
+
+/// ISO 8601 week number (1 to 53) of a day.
+fn iso_week(at: i64) -> u32 {
+    let day = at.div_euclid(86_400);
+    // Monday = 0; 1970-01-01 was a Thursday.
+    let weekday = (day + 3).rem_euclid(7);
+    // The Thursday of the same week decides the year of the week.
+    let thursday = day - weekday + 3;
+    let (year, ..) = crate::browsing::civil(thursday * 86_400);
+    let jan1 = crate::browsing::parse_datetime(&format!("{year:04}-01-01")).unwrap_or(0).div_euclid(86_400);
+    u32::try_from((thursday - jan1) / 7 + 1).unwrap_or(1)
+}
+
+/// IP address written in hexadecimal (`C0A80101`, `0xC0A80101`) or as one number
+/// (`3232235777`), in dotted form ("IP Address Translate"). A dotted address is accepted
+/// as is.
+pub fn translate_ip(text: &str) -> Option<std::net::Ipv4Addr> {
+    let t = text.trim();
+    if let Ok(ip) = t.parse::<std::net::Ipv4Addr>() {
+        return Some(ip);
+    }
+    let hex = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X"));
+    let value = match hex {
+        Some(h) => u32::from_str_radix(h, 16).ok()?,
+        None if t.chars().all(|c| c.is_ascii_digit()) => t.parse::<u32>().ok()?,
+        None if t.len() == 8 && t.chars().all(|c| c.is_ascii_hexdigit()) => u32::from_str_radix(t, 16).ok()?,
+        None => return None,
+    };
+    Some(std::net::Ipv4Addr::from(value))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +276,28 @@ mod tests {
         assert_eq!(expand_increments("[1-2]x[1-2]", 100), ["1x1", "1x2", "2x1", "2x2"]);
         assert_eq!(expand_increments("keep[a]and[3-1]", 100), ["keep[a]and[3-1]"]);
         assert_eq!(expand_increments("n[1-1000000]", 5).len(), 5);
+    }
+
+    #[test]
+    fn date_tokens_of_bookmarks() {
+        let at = crate::browsing::parse_datetime("2004-06-09 10:00").unwrap();
+        assert_eq!(expand_date_tokens("/today/%yyyy%-%mm%-%dd%", at), "/today/2004-06-09");
+        assert_eq!(expand_date_tokens("/%YY%/%m%/%d%", at), "/04/6/9");
+        assert_eq!(expand_date_tokens("/w%ww%-%w%", at), "/w24-24");
+        assert_eq!(expand_date_tokens("/no tokens 100%", at), "/no tokens 100%");
+        // ISO weeks at the turn of the year.
+        let w = |d: &str| iso_week(crate::browsing::parse_datetime(d).unwrap());
+        assert_eq!((w("2021-01-03"), w("2021-01-04"), w("2020-12-31"), w("2026-11-12")), (53, 1, 53, 46));
+    }
+
+    #[test]
+    fn ip_translation() {
+        let ip = std::net::Ipv4Addr::new(192, 168, 1, 1);
+        for text in ["C0A80101", "0xc0a80101", "3232235777", " 192.168.1.1 "] {
+            assert_eq!(translate_ip(text), Some(ip), "{text}");
+        }
+        assert_eq!(translate_ip("12345678"), Some(std::net::Ipv4Addr::from(12_345_678)), "digits only: a number");
+        assert_eq!(translate_ip("example.com"), None);
+        assert_eq!(translate_ip("0x1FFFFFFFF"), None);
     }
 }
