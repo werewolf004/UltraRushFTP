@@ -10,6 +10,12 @@ la traduction.
 
 ## [Non publié]
 
+### Modifié
+
+- CI : les push et pull requests ne vérifient que le formatage et les dépendances ; le job
+  Windows (Clippy, tests, DLL, installeur) se lance à la demande et la release lance les
+  tests. Dependabot passe chaque mois, sans les versions majeures.
+
 ## [0.12.0] - 2026-11-12
 
 Apparence (bloc N).

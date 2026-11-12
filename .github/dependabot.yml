@@ -1,18 +1,27 @@
-# Weekly dependency updates, grouped to keep the pull-request count low.
+# Monthly dependency updates, grouped to keep the pull-request count (and the Actions
+# minutes) low. Major versions, and new minor versions of the egui family (breaking
+# changes before 1.0), are migrated by hand.
 version: 2
 updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'egui*'
+        update-types: ['version-update:semver-minor']
+      - dependency-name: 'eframe'
+        update-types: ['version-update:semver-minor']
     groups:
       cargo-minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       actions:
         patterns: ['*']

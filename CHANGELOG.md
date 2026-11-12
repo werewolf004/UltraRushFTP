@@ -9,6 +9,12 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Changed
+
+- CI: pushes and pull requests check the formatting and the dependencies only; the
+  Windows job (Clippy, tests, DLLs, installer) runs on demand and the release runs the
+  tests. Dependabot runs monthly, without major versions.
+
 ## [0.12.0] - 2026-11-12
 
 Appearance (block N).
