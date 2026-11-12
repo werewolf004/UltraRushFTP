@@ -202,6 +202,13 @@ pub struct TransferSettings {
     pub mode_z: bool,
     /// Files never compressed (`;`-separated masks).
     pub mode_z_exceptions: String,
+    /// With `MODE Z`: folder listings, downloads and uploads compressed.
+    pub mode_z_listings: bool,
+    pub mode_z_downloads: bool,
+    pub mode_z_uploads: bool,
+    /// The SFV check keeps a status folder beside the files
+    /// (`[UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE`).
+    pub sfv_status_dir: bool,
     /// Downloaded files are checked against the SFV file of their folder.
     pub check_sfv: bool,
     /// Uploads and FXP are checked with `XCRC` when the server has it.
@@ -310,6 +317,10 @@ impl Default for TransferSettings {
             xdupe: false,
             mode_z: false,
             mode_z_exceptions: DEFAULT_MODE_Z_EXCEPTIONS.into(),
+            mode_z_listings: true,
+            mode_z_downloads: true,
+            mode_z_uploads: true,
+            sfv_status_dir: false,
             check_sfv: false,
             use_xcrc: false,
             readd_bad_crc: true,

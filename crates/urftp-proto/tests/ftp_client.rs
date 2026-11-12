@@ -195,3 +195,26 @@ async fn mode_z_ascii_and_xcrc() {
     assert_eq!(got, b"x", "MODE Z not announced: plain transfer");
     assert!(!plain.received().iter().any(|l| l.starts_with("MODE")));
 }
+
+#[tokio::test]
+async fn mode_z_listings_are_compressed_or_back_in_stream_mode() {
+    use urftp_proto::ftp::DataOptions;
+    let srv = MockServer::start(MockConfig { mode_z: true, ..MockConfig::default() }).await;
+    srv.fs.lock().unwrap().files.insert("/a.bin".into(), vec![1u8; 5000]);
+    // Listings not compressed: a compressed download leaves MODE Z, the listing goes back
+    // to MODE S and reads plain text.
+    let mut c = connect(&srv).await;
+    let mut got = Vec::new();
+    c.retr_with("/a.bin", 0, &mut got, |_| {}, DataOptions { compress: true, ..DataOptions::default() }).await.unwrap();
+    let names: Vec<String> = c.list(None).await.unwrap().into_iter().map(|e| e.name).collect();
+    assert_eq!(names, ["a.bin"]);
+    assert!(srv.received().iter().any(|l| l == "MODE S"));
+    // Listings compressed.
+    let cfg = FtpConfig { compress_listings: true, ..FtpConfig::default() };
+    let mut c = FtpClient::connect("127.0.0.1", srv.addr.port(), cfg).await.unwrap();
+    c.login("test", "secret").await.unwrap();
+    let before = srv.received().iter().filter(|l| l.as_str() == "MODE Z").count();
+    let names: Vec<String> = c.list(None).await.unwrap().into_iter().map(|e| e.name).collect();
+    assert_eq!(names, ["a.bin"], "compressed listing read");
+    assert_eq!(srv.received().iter().filter(|l| l.as_str() == "MODE Z").count(), before + 1);
+}

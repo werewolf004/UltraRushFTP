@@ -52,8 +52,21 @@ enum Ask {
 type Reply = Sender<Result<Value, HostError>>;
 
 enum Msg {
-    Request { job: u64, ask: Ask, reply: Reply },
+    Request {
+        job: u64,
+        ask: Ask,
+        reply: Reply,
+    },
     Done(u64, Result<(), ScriptError>),
+    /// The logins asked by `RS_CHECKLOGIN` were tried: the call goes on, without the
+    /// sites that failed.
+    Checked {
+        job: u64,
+        name: String,
+        args: Vec<Value>,
+        reply: Reply,
+        failed: Vec<(String, String)>,
+    },
 }
 
 struct Job {
@@ -260,6 +273,11 @@ impl UltraRushApp {
                     }
                 }
                 Msg::Request { job, ask, reply } => self.answer_script(job, ask, reply, ctx),
+                Msg::Checked { job, name, args, reply, failed } => {
+                    self.checked_logins = Some(failed);
+                    self.answer_script(job, Ask::Call(name, args), reply, ctx);
+                    self.checked_logins = None;
+                }
             }
         }
         if self.scripts.running() > 0 {
@@ -278,6 +296,20 @@ impl UltraRushApp {
         }
         let origin = job.origin.clone();
         if let Ask::Call(name, args) = &ask {
+            // RS_CHECKLOGIN: the logins are tried beside the interface, then the call goes on.
+            if self.checked_logins.is_none()
+                && let Some(sites) = self.checklogin_sites(name, args)
+            {
+                let check = self.login_checks(&sites);
+                let (tx, wake) = (self.scripts.tx.clone(), ctx.clone());
+                let (name, args) = (name.clone(), args.clone());
+                self.rt.spawn(async move {
+                    let failed = check.await;
+                    let _ = tx.send(Msg::Checked { job: id, name, args, reply, failed });
+                    wake.request_repaint();
+                });
+                return;
+            }
             let arg = |i: usize| args.get(i).map(Value::to_text).unwrap_or_default();
             if name.eq_ignore_ascii_case("InputQuery") {
                 self.scripts.inputs.push_back(InputAsk { job: id, title: arg(0), prompt: arg(1), value: arg(2), reply, focused: false });

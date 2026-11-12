@@ -185,7 +185,6 @@
   "host.raw_no_target": "RAW \"{command}\": no connection targeted",
   "host.delete_empty_list": "the site list cannot be empty",
   "host.delete_no_bookmark": "Delete: bookmark \"{bookmark}\" missing on {site}",
-  "host.transfer_unsupported": "Transfer: {what} is not supported yet, ignored",
   "host.transfer_no_source": "missing source site",
   "host.transfer_no_pair": "no source/destination pair",
   "host.transfer_queued": "Transfer: {n} item(s) added to the queue",
@@ -1333,5 +1332,11 @@
   "options.nt_flash_transfers": "Flash the taskbar button while transfers run in the background",
   "pane.side_left": "Left panel",
   "pane.side_right": "Right panel",
-  "pane.side_active": " (active)"
+  "pane.side_active": " (active)",
+  "host.login_failed": "Transfer: cannot log in to {site} ({error}); its transfers are left out",
+  "options.adv_mode_z_for": "Compress:",
+  "options.adv_mode_z_listings": "Listings",
+  "options.adv_mode_z_downloads": "Downloads",
+  "options.adv_mode_z_uploads": "Uploads",
+  "options.adv_sfv_status": "Keep a status folder beside the checked files ([UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE)"
 }

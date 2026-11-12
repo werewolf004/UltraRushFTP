@@ -12,7 +12,7 @@
 //!   where they were) and keeps the idle connections until *resume*.
 //! - **Speed** limited for uploads and downloads.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -69,6 +69,9 @@ pub struct EngineOptions {
     pub rules: TransferRules,
 }
 
+/// SFV results of a folder: names (lower case) found good, found bad.
+type SfvResults = (BTreeSet<String>, BTreeSet<String>);
+
 /// Rules applied to every file transfer.
 #[derive(Debug, Clone, Default)]
 pub struct TransferRules {
@@ -91,6 +94,11 @@ pub struct TransferRules {
     pub xdupe_refresh: bool,
     /// `MODE Z` on, with the masks never compressed (`None`: off).
     pub mode_z: Option<Vec<Pattern>>,
+    /// `MODE Z` left out for the downloads / the uploads.
+    pub mode_z_skip_downloads: bool,
+    pub mode_z_skip_uploads: bool,
+    /// The SFV check keeps a status folder beside the downloaded files.
+    pub sfv_status_dir: bool,
     /// Downloads checked against the SFV file of their folder.
     pub check_sfv: bool,
     /// Uploads and FXP checked with `XCRC`.
@@ -280,6 +288,8 @@ pub struct Engine {
     wake: Notify,
     /// Dupes announced by `XDUPE`: (site, folder) → names in lower case.
     dupes: Mutex<HashMap<(String, String), HashSet<String>>>,
+    /// SFV results of each local folder: names (lower case) found good, found bad.
+    sfv_results: Mutex<HashMap<PathBuf, SfvResults>>,
 }
 
 impl Engine {
@@ -305,6 +315,7 @@ impl Engine {
             halted: AtomicBool::new(false),
             wake: Notify::new(),
             dupes: Mutex::default(),
+            sfv_results: Mutex::default(),
         })
     }
 
@@ -589,7 +600,12 @@ impl Engine {
                 TransferMode::Auto => rules.ascii_masks.iter().any(|m| m.matches(name)),
             },
         };
-        let compress = rules.mode_z.as_ref().is_some_and(|except| !except.iter().any(|m| m.matches(name)));
+        let direction = match item.kind() {
+            TransferKind::Download => !rules.mode_z_skip_downloads,
+            TransferKind::Upload => !rules.mode_z_skip_uploads,
+            TransferKind::Fxp => false,
+        };
+        let compress = direction && rules.mode_z.as_ref().is_some_and(|except| !except.iter().any(|m| m.matches(name)));
         DataOptions { ascii, compress }
     }
 
@@ -646,6 +662,7 @@ impl Engine {
                 let actual = tokio::task::spawn_blocking(move || file_crc32(&path)).await.map_err(std::io::Error::other)??;
                 let ok = actual == crc;
                 let shown = file.to_string_lossy().into_owned();
+                self.note_sfv(&dir, Some((&listed, ok)));
                 let owner = self.queue.lock().items().iter().find(|i| i.dst.path == shown).map(|i| i.id);
                 if let Some(id) = owner {
                     self.emit(EngineEvent::CrcChecked { id, path: shown.clone(), ok });
@@ -659,18 +676,52 @@ impl Engine {
                     }
                 }
             }
+            // The SFV came first: the status folder shows what is still to come.
+            self.note_sfv(&dir, None);
             return Ok(());
         }
         let Some(crc) = expected_crc(local) else { return Ok(()) };
         let path = local.to_path_buf();
         let actual = tokio::task::spawn_blocking(move || file_crc32(&path)).await.map_err(std::io::Error::other)??;
         let shown = local.to_string_lossy().into_owned();
+        if let Some(dir) = local.parent() {
+            self.note_sfv(dir, Some((&name, actual == crc)));
+        }
         self.crc_result(item, &shown, actual == crc);
         if actual != crc && readd {
             let _ = tokio::fs::remove_file(local).await;
             return Err(SessionError::BadCrc(shown));
         }
         Ok(())
+    }
+
+    /// Records an SFV result of a file of `dir` and writes the status folder of `dir`
+    /// (options).
+    fn note_sfv(&self, dir: &Path, result: Option<(&str, bool)>) {
+        if !self.opts.rules.sfv_status_dir {
+            return;
+        }
+        let Some(listed) = urftp_core::checksum::sfv_listed(dir) else { return };
+        let (ok, bad) = {
+            let mut all = self.sfv_results.lock();
+            let (good, wrong) = all.entry(dir.to_path_buf()).or_default();
+            if let Some((name, passed)) = result {
+                let name = name.to_lowercase();
+                if passed {
+                    wrong.remove(&name);
+                    good.insert(name);
+                } else {
+                    good.remove(&name);
+                    wrong.insert(name);
+                }
+            }
+            (listed.intersection(good).count(), listed.intersection(wrong).count())
+        };
+        if let Err(e) = urftp_core::checksum::write_sfv_status(dir, ok, bad, listed.len())
+            && let Some(log) = &self.opts.log
+        {
+            (log.0)(crate::ftp::LogLine::Status(format!("SFV status folder of {}: {e}", dir.display())));
+        }
     }
 
     /// Is this name a dupe announced by the target folder?

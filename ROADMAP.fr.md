@@ -167,6 +167,11 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
 - ✅ Favoris : bouton scindé, connexions rapides gardées ; clignotement pendant les
   transferts.
 
+### O — Transferts avancés
+- ✅ `MODE Z` pour les listes, les réceptions et les envois, chacun au choix.
+- ✅ Dossier d'état SFV à côté des téléchargements vérifiés.
+- ✅ `RS_CHECKLOGIN` dans `RushApp.FTP.Transfer`.
+
 ### Distribution
 - ✅ Manifeste d'application (`longPathAware`, DPI par écran), icône et ressources de
   version.

@@ -801,3 +801,34 @@ async fn folder_rules_date_same_name_empty_folders_and_fxp_zero_target() {
     assert!(!b.fs.lock().unwrap().files.contains_key("/in/missing.bin"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[tokio::test]
+async fn sfv_status_folder_follows_the_checks() {
+    use urftp_core::checksum::{sfv_status_name, write_sfv};
+    use urftp_proto::engine::TransferRules;
+    let srv = MockServer::start(MockConfig::default()).await;
+    let (a, b) = (payload(3000, 1), payload(3000, 2));
+    {
+        let mut fs = srv.fs.lock().unwrap();
+        fs.mkdir_p("/rel");
+        fs.files.insert("/rel/a.r00".into(), a.clone());
+        fs.files.insert("/rel/b.r01".into(), b.clone());
+        // c.r02 is listed but missing on the server.
+        let sfv = write_sfv(&[("a.r00".into(), crc32fast::hash(&a)), ("b.r01".into(), crc32fast::hash(&b)), ("c.r02".into(), 1)]);
+        fs.files.insert("/rel/rel.sfv".into(), sfv.into_bytes());
+    }
+    let dir = temp_dir();
+    let rules = TransferRules { check_sfv: true, sfv_status_dir: true, ..TransferRules::default() };
+    let mut q = Queue::new();
+    q.push(Endpoint::remote("A", "/rel"), Endpoint::local(local(&dir.join("rel"))), true, None, None);
+    let r = engine(q, vec![site("A", srv.addr.port(), 1)], EngineOptions { rules, ..opts() });
+    r.engine.run().await;
+    let status: Vec<String> = std::fs::read_dir(dir.join("rel"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(status, [sfv_status_name(2, 0, 3)]);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

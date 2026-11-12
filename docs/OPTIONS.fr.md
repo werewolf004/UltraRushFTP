@@ -431,11 +431,13 @@ les clés de confiance restent toujours vides. *Valeurs par défaut* remet le mo
 | XDUPE | désactivé | `SITE XDUPE 3` après la connexion ; les doublons listés dans un envoi refusé sont ignorés, et les suivants du dossier ne sont même pas essayés |
 | Relire le dossier quand XDUPE ne renvoie rien | désactivé | Un envoi refusé sans noms `X-DUPE` : si la cible existe malgré tout (`SIZE`), le fichier est ignoré comme doublon |
 | Compresser les transferts (MODE Z) | désactivé | Quand le serveur annonce `MODE Z` ; jamais pour les masques de *Jamais compressés* (archives, vidéo, images par défaut) |
+| Compresser : Listes, Réceptions, Envois | tous activés | Ce à quoi `MODE Z` s'applique |
 | Tampon d'envoi / tampon de réception des connexions de données (Kio) | 0 (système) | Réglés à part (le tampon unique d'une version précédente remplit les deux) ; un site peut remplacer chacun |
 | Recul avant de reprendre un téléchargement (Kio) | 0 | La fin d'un fichier partiel est coupée avant la reprise |
 | Espace à garder libre sur le disque local (Mio) | 0 | Un téléchargement qui en laisserait moins échoue |
 | Pas de limite de vitesse pour le réseau local | désactivé | Sites à une adresse privée, de bouclage ou de lien local |
 | Vérifier les téléchargements avec le fichier SFV | désactivé | CRC32 de chaque fichier téléchargé comparé au SFV de son dossier ; un SFV téléchargé en dernier vérifie les fichiers déjà là |
+| Tenir un dossier d'état à côté des fichiers vérifiés | désactivé | Un dossier vide `[UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE` (ou `COMPLETE`, ou `, 2 BAD … - BAD FILES`), remplacé après chaque vérification |
 | Vérifier les envois et le FXP avec XCRC | désactivé | Quand le serveur connaît `XCRC` |
 | Supprimer un fichier au CRC faux et le transférer à nouveau | activé | Sinon le CRC faux est seulement noté au journal |
 | Plusieurs fichiers SFV dans un dossier : n'en prendre aucun | désactivé | |
@@ -728,7 +730,8 @@ Drapeaux gérés : `RS_APPEND`, `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`,
 `RS_FOLDER`, `RS_FULLPATH`, `RS_GHOST`, `RS_INVERT` (`-motdepasse`), `RS_LOGIN`, `RS_LOGOUT`,
 `RS_NOCIRCLE`, `RS_NOMKD`, `RS_NOSKIP`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`, `RS_POPUP`,
 `RS_SORTDATE`, `RS_SORTDES`, `RS_SORTSIZE`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`.
-`RS_CHECKLOGIN` est reconnu mais pas encore pris en charge (un message l'indique).
+`RS_CHECKLOGIN` (les sites du transfert sont d'abord testés par une connexion, en même
+temps ; ceux qui la refusent sont laissés de côté et signalés dans le journal).
 
 `RushApp.FTP.Transfer(Handle, SrcList, SrcFolder, SrcItem, DesList, DesFolder, DesItem,
 Flag, FolderAllow, FolderSkip, FileAllow, FileSkip, CompleteFlag, RepeatCount, RetryCount,

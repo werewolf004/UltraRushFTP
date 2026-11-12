@@ -1376,6 +1376,14 @@ fn advanced_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings
     ui.checkbox(&mut t.xdupe, t!("options.adv_xdupe"));
     ui.add_enabled(t.xdupe, egui::Checkbox::new(&mut t.xdupe_refresh, t!("options.adv_xdupe_refresh")));
     ui.checkbox(&mut t.mode_z, t!("options.adv_mode_z"));
+    ui.add_enabled_ui(t.mode_z, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(t!("options.adv_mode_z_for"));
+            ui.checkbox(&mut t.mode_z_listings, t!("options.adv_mode_z_listings"));
+            ui.checkbox(&mut t.mode_z_downloads, t!("options.adv_mode_z_downloads"));
+            ui.checkbox(&mut t.mode_z_uploads, t!("options.adv_mode_z_uploads"));
+        });
+    });
     egui::Grid::new("opt-adv-data").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
         let l = ui.label(t!("options.adv_mode_z_except"));
         ui.add_enabled(t.mode_z, theme::single_line(&mut t.mode_z_exceptions).desired_width(360.0)).labelled_by(l.id);
@@ -1395,6 +1403,7 @@ fn advanced_ui(ui: &mut egui::Ui, t: &mut urftp_core::settings::TransferSettings
 
     ui.label(RichText::new(t!("options.adv_crc_section")).strong());
     ui.checkbox(&mut t.check_sfv, t!("options.adv_check_sfv"));
+    ui.add_enabled(t.check_sfv, egui::Checkbox::new(&mut t.sfv_status_dir, t!("options.adv_sfv_status")));
     ui.checkbox(&mut t.use_xcrc, t!("options.adv_xcrc"));
     ui.checkbox(&mut t.readd_bad_crc, t!("options.adv_readd_bad"));
     ui.checkbox(&mut t.one_sfv_per_folder, t!("options.adv_one_sfv"));

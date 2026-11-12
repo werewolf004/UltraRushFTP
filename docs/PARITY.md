@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (287 topics): ✅ 258 · 🟡 10 · ⬜ 1 · ➖ 18.
+Summary (287 topics): ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
 
 ## Main window and menus
 
@@ -294,14 +294,14 @@ Summary (287 topics): ✅ 258 · 🟡 10 · ⬜ 1 · ➖ 18.
 | Queue: source / destination in the transfer log | ✅ | |
 | Queue: retries per direction (upload, download, FXP) | ✅ | A site setting still wins |
 | Priority list | ✅ | |
-| Compression `MODE Z` (listing, upload, download, exceptions) | 🟡 | Uploads and downloads, with exceptions; listings are not compressed |
+| Compression `MODE Z` (listing, upload, download, exceptions) | ✅ | Listings, downloads and uploads, each chosen; masks never compressed |
 | Disk cache for downloads | ➖ | Buffered writes are handled by the runtime |
 
 ### Misc.
 
 | Topic | Status | Notes |
 |---|---|---|
-| Check SFV when downloading, CRC log and status folder, re-add bad files | 🟡 | Check and re-add; results in the log, no status folder |
+| Check SFV when downloading, CRC log and status folder, re-add bad files | ✅ | Check and re-add; results in the transfer log; status folder beside the files |
 | Use `XCRC` if available | ✅ | |
 | Enter a folder after creating it | ✅ | |
 | Remove empty folders left by a transfer | ✅ | |
@@ -367,7 +367,7 @@ Summary (287 topics): ✅ 258 · 🟡 10 · ⬜ 1 · ➖ 18.
 | `RushApp.UI.Selection` (`Prepare`, `Count`, `Items`, `IsRemoteSide`, `IsFTPConnected`, `FTPName`) | ✅ | `Date` is text |
 | `RushApp.FTP.Splitter` | ✅ | |
 | `RushApp.FTP.CWD`, `Delete`, `Login`, `Logout`, `RAW`, `RemoveQueue` | ✅ | With their flags |
-| `RushApp.FTP.Transfer` | 🟡 | Every parameter but `RS_CHECKLOGIN`; `Timeout` is unused, as in FTPRush |
+| `RushApp.FTP.Transfer` | ✅ | Every parameter, `RS_CHECKLOGIN` included; `Timeout` is unused, as in FTPRush |
 | `RushApp.FTP.EnableSite`, `DisableSite` | ✅ | |
 | Event `RushApp.UI.OnSwitchLayout` | ✅ | When a saved layout is loaded |
 | Statistics variables (`TotalDownloadSize`... `DownloadBW`) | ✅ | |

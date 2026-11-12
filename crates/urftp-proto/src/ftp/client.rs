@@ -29,6 +29,8 @@ pub struct FtpConfig {
     pub use_mlsd: bool,
     /// Listing command when `MLSD` is not used (e.g. `LIST`, `LIST -a`, `STAT -l`...).
     pub list_command: String,
+    /// Listings in `MODE Z` (compressed) when the server announces it.
+    pub compress_listings: bool,
     /// Replace the private address returned by `PASV` with the server's (badly configured NAT).
     pub pasv_fix_private_ip: bool,
     /// Maximum length of a reply line.
@@ -98,6 +100,7 @@ impl Default for FtpConfig {
             prefer_epsv: true,
             use_mlsd: true,
             list_command: "LIST".into(),
+            compress_listings: false,
             pasv_fix_private_ip: true,
             max_line_len: 64 * 1024,
             send_feat: true,
@@ -953,6 +956,8 @@ impl FtpClient {
         }
         self.protect_for(true).await?;
         self.set_type(TransferType::Ascii).await?;
+        // Also back to `MODE S` after a compressed transfer when listings are not compressed.
+        let z = self.set_mode(self.config.compress_listings).await?;
         let pending = self.prepare_data(&cmd).await?;
         if !self.start_transfer(&cmd).await? {
             return Ok((String::new(), mlsd));
@@ -970,6 +975,9 @@ impl FtpClient {
         }
         drop(data);
         self.finish_transfer(&cmd).await?;
+        if z {
+            buf = inflate_all(&buf)?;
+        }
         let mut text = self.decode(&buf);
         if self.config.trim_list_spaces && !mlsd {
             text = text.lines().map(str::trim_start).collect::<Vec<_>>().join("\n");
@@ -1307,6 +1315,16 @@ fn canonical(ip: IpAddr) -> IpAddr {
         IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(ip, IpAddr::V4),
         v4 => v4,
     }
+}
+
+/// A whole compressed listing (`MODE Z`), uncompressed.
+fn inflate_all(data: &[u8]) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut out = Vec::new();
+    flate2::read::ZlibDecoder::new(data)
+        .read_to_end(&mut out)
+        .map_err(|e| FtpError::Protocol(format!("MODE Z: invalid compressed listing ({e})")))?;
+    Ok(out)
 }
 
 #[cfg(test)]

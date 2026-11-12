@@ -10,6 +10,22 @@ la traduction.
 
 ## [Non publié]
 
+Transferts avancés (bloc O).
+
+### Ajouté
+
+- `MODE Z` aussi pour les **listes de dossiers**, et le choix de ce qui est compressé :
+  listes, réceptions, envois (Options › Transfert avancé).
+- **Dossier d'état SFV** à côté des téléchargements vérifiés, tenu à jour :
+  `[UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE` (option).
+- Scripts : `RushApp.FTP.Transfer` avec **`RS_CHECKLOGIN`** se connecte d'abord à ses sites
+  (en même temps, à côté de l'interface) et laisse de côté ceux qui refusent la connexion.
+
+### Corrigé
+
+- Après un transfert compressé, une liste sur la même connexion était lue compressée :
+  elle repasse en `MODE S` (ou lit la liste compressée).
+
 ### Modifié
 
 - CI : les push et pull requests ne vérifient que le formatage et les dépendances ; le job

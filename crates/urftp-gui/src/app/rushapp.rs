@@ -590,12 +590,28 @@ impl AppHost<'_> {
         let (up, down, is_file) = (has_flag(flags, "RS_UP"), has_flag(flags, "RS_DOWN"), has_flag(flags, "RS_FILE"));
         let (dir_src, dir_des) = (has_flag(flags, "RS_DIRSRC"), has_flag(flags, "RS_DIRDES"));
         let options = Self::transfer_options(a, flags)?;
-        if has_flag(flags, "RS_CHECKLOGIN") {
-            self.log(LogKind::Status, t!("host.transfer_unsupported", what = "RS_CHECKLOGIN"));
-        }
 
-        let srcs = self.names(&src_list);
-        let dsts = self.names(&des_list);
+        let mut srcs = self.names(&src_list);
+        let mut dsts = self.names(&des_list);
+        // RS_CHECKLOGIN: the sites that cannot log in are left out. A script of its own
+        // thread had them checked before this call (see `answer_script`); a call made on
+        // the interface thread (tests, `Invoke`) checks them now.
+        if has_flag(flags, "RS_CHECKLOGIN") {
+            let failed = match self.app.checked_logins.take() {
+                Some(f) => f,
+                None => {
+                    let names: Vec<String> = srcs.iter().chain(&dsts).cloned().collect();
+                    let check = self.app.login_checks(&names);
+                    self.app.rt.block_on(check)
+                }
+            };
+            for (site, error) in &failed {
+                self.log(LogKind::Error, t!("host.login_failed", site = site, error = error));
+            }
+            let ok = |x: &String| !failed.iter().any(|(f, _)| f.eq_ignore_ascii_case(x));
+            srcs.retain(ok);
+            dsts.retain(ok);
+        }
         // (source site, destination site, source folder, source item); None = local.
         let mut pairs: Vec<(Option<Site>, Option<Site>, String, String)> = Vec::new();
         if up {
@@ -902,6 +918,55 @@ impl Host for AppHost<'_> {
                 }
             },
             _ => Err(undocumented(name).unwrap_or_else(|| HostError::ReadOnlyProperty(name.into()))),
+        }
+    }
+}
+
+// ====================================================================== RS_CHECKLOGIN
+
+impl UltraRushApp {
+    /// Sites a `RushApp.FTP.Transfer` call asks to log in to first (`RS_CHECKLOGIN`), or
+    /// `None` when it does not ask.
+    pub(super) fn checklogin_sites(&self, name: &str, args: &[Value]) -> Option<Vec<String>> {
+        if !name.eq_ignore_ascii_case("RushApp.FTP.Transfer") || !has_flag(n(args, 7), "RS_CHECKLOGIN") {
+            return None;
+        }
+        let sep = if self.splitter.is_empty() { ";" } else { self.splitter.as_str() };
+        let mut out: Vec<String> = Vec::new();
+        for list in [s(args, 1), s(args, 4)] {
+            for x in list.split(sep).map(str::trim).filter(|x| !x.is_empty()) {
+                if !out.iter().any(|o| o.eq_ignore_ascii_case(x)) {
+                    out.push(x.to_string());
+                }
+            }
+        }
+        Some(out)
+    }
+
+    /// Logs in to each site (at the same time) and out again: the sites that failed, with
+    /// the reason. Sites unknown to the site manager are left to the call itself.
+    pub(super) fn login_checks(&self, names: &[String]) -> impl std::future::Future<Output = Vec<(String, String)>> + Send + 'static {
+        let profiles: Vec<(String, SiteProfile)> =
+            names.iter().filter_map(|n| self.sites.book.find_by_name(n).map(|s| (n.clone(), self.site_profile(s)))).collect();
+        let rt = self.rt.clone();
+        async move {
+            let checks: Vec<_> = profiles
+                .into_iter()
+                .map(|(n, p)| {
+                    let h =
+                        rt.spawn(async move { urftp_proto::session::RemoteSession::probe(&p).await.map(drop).map_err(|e| e.to_string()) });
+                    (n, h)
+                })
+                .collect();
+            let mut failed = Vec::new();
+            for (n, h) in checks {
+                match h.await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => failed.push((n, e)),
+                    Err(e) => failed.push((n, e.to_string())),
+                }
+            }
+            failed
         }
     }
 }

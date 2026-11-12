@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (287 sujets) : ✅ 258 · 🟡 10 · ⬜ 1 · ➖ 18.
+Résumé (287 sujets) : ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
 
 ## Fenêtre principale et menus
 
@@ -294,14 +294,14 @@ Résumé (287 sujets) : ✅ 258 · 🟡 10 · ⬜ 1 · ➖ 18.
 | File : source / destination dans le journal des transferts | ✅ | |
 | File : nombre d'essais par sens (envoi, réception, FXP) | ✅ | Un réglage du site l'emporte toujours |
 | Liste de priorités | ✅ | |
-| Compression `MODE Z` (listing, envoi, réception, exceptions) | 🟡 | Envois et téléchargements, avec exceptions ; les listes ne sont pas compressées |
+| Compression `MODE Z` (listing, envoi, réception, exceptions) | ✅ | Listes, réceptions et envois, chacun au choix ; masques jamais compressés |
 | Cache disque des téléchargements | ➖ | Les écritures sont tamponnées par le moteur |
 
 ### Divers
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Vérifier le SFV au téléchargement, journal CRC et dossier d'état, réajouter les fichiers défectueux | 🟡 | Vérification et remise en file ; résultats au journal, pas de dossier d'état |
+| Vérifier le SFV au téléchargement, journal CRC et dossier d'état, réajouter les fichiers défectueux | ✅ | Vérification et remise en file ; résultats au journal des transferts ; dossier d'état à côté des fichiers |
 | Utiliser `XCRC` si disponible | ✅ | |
 | Entrer dans un dossier après l'avoir créé | ✅ | |
 | Retirer les dossiers vides laissés par un transfert | ✅ | |
@@ -367,7 +367,7 @@ Résumé (287 sujets) : ✅ 258 · 🟡 10 · ⬜ 1 · ➖ 18.
 | `RushApp.UI.Selection` (`Prepare`, `Count`, `Items`, `IsRemoteSide`, `IsFTPConnected`, `FTPName`) | ✅ | `Date` est un texte |
 | `RushApp.FTP.Splitter` | ✅ | |
 | `RushApp.FTP.CWD`, `Delete`, `Login`, `Logout`, `RAW`, `RemoveQueue` | ✅ | Avec leurs drapeaux |
-| `RushApp.FTP.Transfer` | 🟡 | Tous les paramètres sauf `RS_CHECKLOGIN` ; `Timeout` n'est pas utilisé, comme dans FTPRush |
+| `RushApp.FTP.Transfer` | ✅ | Tous les paramètres, `RS_CHECKLOGIN` compris ; `Timeout` n'est pas utilisé, comme dans FTPRush |
 | `RushApp.FTP.EnableSite`, `DisableSite` | ✅ | |
 | Événement `RushApp.UI.OnSwitchLayout` | ✅ | Au chargement d'une disposition enregistrée |
 | Variables de statistiques (`TotalDownloadSize`… `DownloadBW`) | ✅ | |

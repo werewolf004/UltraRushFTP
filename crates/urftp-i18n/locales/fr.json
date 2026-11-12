@@ -185,7 +185,6 @@
   "host.raw_no_target": "RAW « {command} » : aucune connexion visée",
   "host.delete_empty_list": "la liste de sites ne peut pas être vide",
   "host.delete_no_bookmark": "Delete : signet « {bookmark} » absent de {site}",
-  "host.transfer_unsupported": "Transfer : {what} n'est pas encore pris en charge, ignoré",
   "host.transfer_no_source": "site source manquant",
   "host.transfer_no_pair": "aucune paire source/destination",
   "host.transfer_queued": "Transfer : {n} élément(s) ajouté(s) à la file",
@@ -1333,5 +1332,11 @@
   "options.nt_flash_transfers": "Faire clignoter le bouton de la barre des tâches pendant les transferts en arrière-plan",
   "pane.side_left": "Panneau gauche",
   "pane.side_right": "Panneau droit",
-  "pane.side_active": " (actif)"
+  "pane.side_active": " (actif)",
+  "host.login_failed": "Transfert : connexion impossible à {site} ({error}) ; ses transferts sont laissés de côté",
+  "options.adv_mode_z_for": "Compresser :",
+  "options.adv_mode_z_listings": "Listes",
+  "options.adv_mode_z_downloads": "Réceptions",
+  "options.adv_mode_z_uploads": "Envois",
+  "options.adv_sfv_status": "Tenir un dossier d'état à côté des fichiers vérifiés ([UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE)"
 }

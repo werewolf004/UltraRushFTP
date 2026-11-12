@@ -418,11 +418,13 @@ record). The host, the other addresses, the bookmarks and the trusted keys are a
 | XDUPE | off | `SITE XDUPE 3` after login; the dupes listed in a refused upload are skipped, and the next ones of the folder are not even tried |
 | List the folder again when XDUPE returns nothing | off | An upload refused without `X-DUPE` names: when the target exists after all (`SIZE`), the file is skipped as a dupe |
 | Compress the transfers (MODE Z) | off | When the server announces `MODE Z`; never for the masks of *Never compressed* (archives, video, pictures by default) |
+| Compress: Listings, Downloads, Uploads | all on | What `MODE Z` applies to |
 | Send buffer / receive buffer of the data connections (KiB) | 0 (system) | Set apart (the single buffer of an earlier version fills both); a site can replace each one |
 | Roll back before resuming a download (KiB) | 0 | The end of a partial file is cut off before resuming |
 | Keep free on the local disk (MiB) | 0 | A download that would leave less fails |
 | No speed limit for the local network | off | Sites on a private, loopback or link-local address |
 | Check the downloads against the SFV file | off | CRC32 of each downloaded file against the SFV of its folder; an SFV downloaded last checks the files already there |
+| Keep a status folder beside the checked files | off | An empty folder `[UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE` (or `COMPLETE`, or `, 2 BAD … - BAD FILES`), replaced after each check |
 | Check the uploads and FXP with XCRC | off | When the server knows `XCRC` |
 | Remove a file with a bad CRC and transfer it again | on | Otherwise the bad CRC is only logged |
 | Several SFV files in a folder: take none | off | |
@@ -709,8 +711,9 @@ Flags handled: `RS_APPEND`, `RS_BOOKMARK`, `RS_CHECKBM`, `RS_CURRENT`, `RS_DELEM
 `RS_DIRDES`, `RS_DIRSRC`, `RS_DOWN`, `RS_EXPR`, `RS_FAIL`, `RS_FILE`, `RS_FOLDER`,
 `RS_FULLPATH`, `RS_GHOST`, `RS_INVERT` (`-password`), `RS_LOGIN`, `RS_LOGOUT`, `RS_NOCIRCLE`,
 `RS_NOMKD`, `RS_NOSKIP`, `RS_NORMAL`, `RS_ONE`, `RS_PAIR`, `RS_POPUP`, `RS_SORTDATE`,
-`RS_SORTDES`, `RS_SORTSIZE`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`. `RS_CHECKLOGIN` is
-recognised but not supported yet (a message says so).
+`RS_SORTDES`, `RS_SORTSIZE`, `RS_TRANSFER`, `RS_UP`, `RS_WAITING`, `RS_CHECKLOGIN` (the
+sites of the transfer are logged in to first, at the same time; the ones that cannot log
+in are left out and told in the log).
 
 `RushApp.FTP.Transfer(Handle, SrcList, SrcFolder, SrcItem, DesList, DesFolder, DesItem,
 Flag, FolderAllow, FolderSkip, FileAllow, FileSkip, CompleteFlag, RepeatCount, RetryCount,

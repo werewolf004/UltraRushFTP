@@ -1374,6 +1374,9 @@ pub struct UltraRushApp {
     layout_name: Option<String>,
     /// The zoom of the options was applied (first frame).
     zoom_applied: bool,
+    /// Logins tried for `RS_CHECKLOGIN` (site, error of the failed ones), for the call that
+    /// goes on after them.
+    checked_logins: Option<Vec<(String, String)>>,
     /// Fonts installed (interface, lists, log), to install again when they change.
     fonts_applied: Option<(String, String, String)>,
     /// The password field of the quick bar takes the keyboard (quick connection history).
@@ -1568,6 +1571,7 @@ impl UltraRushApp {
             layout_name: None,
             zoom_applied: false,
             fonts_applied: None,
+            checked_logins: None,
             quick_focus_pass: false,
             unlocked: false,
             unlock: None,

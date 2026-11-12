@@ -146,6 +146,11 @@ planned work is grouped below into blocks, each ending with a release.
 - ✅ Double-click actions (log line, site, panel title, tab, queue item); panels as tabs.
 - ✅ Favourites: split button, quick connections remembered; flash while transferring.
 
+### O — Advanced transfers
+- ✅ `MODE Z` for listings, downloads and uploads, each chosen.
+- ✅ SFV status folder beside the checked downloads.
+- ✅ `RS_CHECKLOGIN` in `RushApp.FTP.Transfer`.
+
 ### Distribution
 - ✅ Application manifest (`longPathAware`, per-monitor DPI), icon and version resources.
 - 🟡 Code signing of the binaries: ready in the release workflow, waiting for a

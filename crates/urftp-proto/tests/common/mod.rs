@@ -708,11 +708,18 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 reply(&mut c, "150 Opening data connection").await?;
                 match open_data(&mut st, &sh).await {
                     Ok(mut d) => {
-                        let bytes: Vec<u8> = if sh.cfg.latin1 {
+                        let mut bytes: Vec<u8> = if sh.cfg.latin1 {
                             out.chars().map(|ch| u8::try_from(u32::from(ch)).unwrap_or(b'?')).collect()
                         } else {
                             out.into_bytes()
                         };
+                        // `MODE Z` compresses the listings too.
+                        if st.mode_z {
+                            use std::io::Write;
+                            let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+                            z.write_all(&bytes)?;
+                            bytes = z.finish()?;
+                        }
                         d.write_all(&bytes).await?;
                         finish_send(&mut d).await?;
                         reply(&mut c, "226 Transfer complete").await?;

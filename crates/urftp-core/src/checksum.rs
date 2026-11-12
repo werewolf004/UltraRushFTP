@@ -83,9 +83,81 @@ pub fn expected_crc(file: &Path) -> Option<u32> {
         .find_map(|bytes| parse_sfv(&String::from_utf8_lossy(&bytes)).get(&name).copied())
 }
 
+/// Start of the name of the SFV status folder.
+pub const SFV_STATUS_PREFIX: &str = "[UltraRushFTP] - ";
+
+/// Name of the SFV status folder: `[UltraRushFTP] - ( 7 of 10 files OK = 70% ) -
+/// INCOMPLETE`, with the bad files when there are some.
+pub fn sfv_status_name(ok: usize, bad: usize, total: usize) -> String {
+    let pct = (ok * 100).checked_div(total).unwrap_or(100);
+    let state = if bad > 0 {
+        "BAD FILES"
+    } else if ok >= total {
+        "COMPLETE"
+    } else {
+        "INCOMPLETE"
+    };
+    let bad = if bad > 0 { format!(", {bad} BAD") } else { String::new() };
+    format!("{SFV_STATUS_PREFIX}( {ok} of {total} files OK{bad} = {pct}% ) - {state}")
+}
+
+/// Names (lower case) listed by the SFV files of a folder (`None`: no SFV file).
+pub fn sfv_listed(dir: &Path) -> Option<std::collections::BTreeSet<String>> {
+    let mut found = false;
+    let mut names = std::collections::BTreeSet::new();
+    for e in std::fs::read_dir(dir).ok()?.flatten().filter(|e| is_sfv(&e.file_name().to_string_lossy())) {
+        found = true;
+        if let Ok(bytes) = std::fs::read(e.path()) {
+            names.extend(parse_sfv(&String::from_utf8_lossy(&bytes)).into_keys());
+        }
+    }
+    found.then_some(names)
+}
+
+/// Replaces the SFV status folder of `dir` (empty folders named with
+/// [`SFV_STATUS_PREFIX`]) with one named by [`sfv_status_name`].
+pub fn write_sfv_status(dir: &Path, ok: usize, bad: usize, total: usize) -> io::Result<()> {
+    let name = sfv_status_name(ok, bad, total);
+    for e in std::fs::read_dir(dir)?.flatten() {
+        let old = e.file_name().to_string_lossy().into_owned();
+        if old.starts_with(SFV_STATUS_PREFIX) && old != name && e.path().is_dir() {
+            // An emptied folder only: a folder the user filled is left alone.
+            let _ = std::fs::remove_dir(e.path());
+        }
+    }
+    let path = dir.join(name);
+    if !path.is_dir() {
+        std::fs::create_dir(path)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sfv_status_folder() {
+        assert_eq!(sfv_status_name(7, 0, 10), "[UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE");
+        assert_eq!(sfv_status_name(10, 0, 10), "[UltraRushFTP] - ( 10 of 10 files OK = 100% ) - COMPLETE");
+        assert_eq!(sfv_status_name(8, 2, 10), "[UltraRushFTP] - ( 8 of 10 files OK, 2 BAD = 80% ) - BAD FILES");
+        let dir = std::env::temp_dir().join(format!("urftp-sfv-status-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(sfv_listed(&dir).is_none());
+        std::fs::write(dir.join("rel.sfv"), "A.r00 00000001\r\na.r01 00000002\r\n").unwrap();
+        assert_eq!(sfv_listed(&dir).unwrap().into_iter().collect::<Vec<_>>(), ["a.r00", "a.r01"]);
+        write_sfv_status(&dir, 0, 0, 2).unwrap();
+        write_sfv_status(&dir, 2, 0, 2).unwrap();
+        let dirs: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(dirs, [sfv_status_name(2, 0, 2)], "the previous status folder is replaced");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn sfv_md5_round_trip_and_file_sums() {

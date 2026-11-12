@@ -1884,3 +1884,29 @@ fn fonts_large_buttons_and_progress_colour() {
     (s.font_lists, s.large_icons, s.custom_progress) = (String::new(), false, false);
     ui.app().apply_settings(&ctx);
 }
+
+#[test]
+fn checklogin_leaves_out_the_sites_that_cannot_log_in() {
+    let mut ui = Ui::start(Lang::En, true);
+    // A local port nobody listens on: the login fails quickly.
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let site = urftp_core::site::Site { name: "Closed".into(), host: "127.0.0.1".into(), port, ..Default::default() };
+    ui.app().sites.book.add_site(&[], site);
+    let ctx = ui.harness.ctx.clone();
+    let script = "begin RushApp.FTP.Transfer(0, '', 'C:\\up', 'a.bin', 'Closed', '/in', '', \
+                  RS_UP or RS_FILE or RS_DIRSRC or RS_DIRDES or RS_CHECKLOGIN, '', '', '', '', '', 0, 0, 0, 0, 0, 0, 0); end.";
+    let failed = |ui: &mut Ui| {
+        let start = t!("host.login_failed", site = "Closed", error = "\u{1}");
+        let start = start.split('\u{1}').next().unwrap_or_default().to_string();
+        ui.app().tabs.iter().flat_map(|t| t.log.iter()).filter(|e| e.text.contains(&start)).count()
+    };
+    // On the interface thread: checked at once, the pair left out.
+    assert!(ui.app().run_script(script, &ctx).is_err(), "no transfer left");
+    assert_eq!(failed(&mut ui), 1);
+    assert!(ui.app().tabs.iter().all(|t| t.queue.lock().items().is_empty()));
+    // In a script thread: checked beside the interface, then the call goes on.
+    ui.app().start_script(script.to_string(), super::scripting::Origin::Env, &ctx);
+    wait_scripts(&mut ui);
+    assert_eq!(failed(&mut ui), 2);
+    assert!(ui.app().tabs.iter().all(|t| t.queue.lock().items().is_empty()));
+}

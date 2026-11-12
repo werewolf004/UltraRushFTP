@@ -9,6 +9,22 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Advanced transfers (block O).
+
+### Added
+
+- `MODE Z` for **folder listings** too, and a choice of what is compressed: listings,
+  downloads, uploads (Options › Advanced transfer).
+- **SFV status folder** beside the checked downloads, kept up to date:
+  `[UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE` (option).
+- Scripts: `RushApp.FTP.Transfer` with **`RS_CHECKLOGIN`** first logs in to its sites (at
+  the same time, beside the interface) and leaves out the ones that cannot log in.
+
+### Fixed
+
+- After a compressed transfer, a listing on the same connection was read compressed: it
+  goes back to `MODE S` (or reads the compressed listing).
+
 ### Changed
 
 - CI: pushes and pull requests check the formatting and the dependencies only; the
