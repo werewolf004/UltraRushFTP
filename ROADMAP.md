@@ -151,6 +151,11 @@ planned work is grouped below into blocks, each ending with a release.
 - ✅ SFV status folder beside the checked downloads.
 - ✅ `RS_CHECKLOGIN` in `RushApp.FTP.Transfer`.
 
+### P — Finishing touches
+- ✅ Help window with the documentation built in, its index and a search.
+- ✅ Script console: open and save `.pas` files.
+- ✅ Stalled transfers stopped and resumed after N seconds without data.
+
 ### Distribution
 - ✅ Application manifest (`longPathAware`, per-monitor DPI), icon and version resources.
 - 🟡 Code signing of the binaries: ready in the release workflow, waiting for a

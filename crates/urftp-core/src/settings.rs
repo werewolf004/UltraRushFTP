@@ -151,6 +151,9 @@ pub struct TransferSettings {
     pub upload_limit_on: bool,
     pub connect_timeout_secs: u32,
     pub io_timeout_secs: u32,
+    /// A transfer that receives or sends nothing for so many seconds is stopped and
+    /// resumed (0: the reply timeout applies).
+    pub stall_secs: u32,
     /// Retries per direction (`None`: [`TransferSettings::retries`]).
     pub retries_download: Option<u32>,
     pub retries_upload: Option<u32>,
@@ -290,6 +293,7 @@ impl Default for TransferSettings {
             upload_limit_on: true,
             connect_timeout_secs: 30,
             io_timeout_secs: 120,
+            stall_secs: 0,
             retries_download: None,
             retries_upload: None,
             retries_fxp: None,

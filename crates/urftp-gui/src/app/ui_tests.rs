@@ -1910,3 +1910,40 @@ fn checklogin_leaves_out_the_sites_that_cannot_log_in() {
     assert_eq!(failed(&mut ui), 2);
     assert!(ui.app().tabs.iter().all(|t| t.queue.lock().items().is_empty()));
 }
+
+#[test]
+fn help_window_searches_the_documentation() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.app().open_help(1);
+    ui.run();
+    assert_all_named(&ui, "help window");
+    let search = t!("help.search");
+    let field = ui.harness.get_by_label(&search);
+    field.focus();
+    field.type_text("MODE Z");
+    ui.run();
+    assert!(ui.has_label("    Advanced transfer"), "the matching section is listed");
+    assert!(!ui.has_label("    Shortcuts"), "the others are not");
+    ui.harness.get_by_label("    Advanced transfer").click();
+    ui.run();
+    assert!(ui.harness.query_by_label_contains("Compress the transfers (MODE Z)").is_some(), "its table is shown");
+    ui.key(Key::Escape);
+    assert!(!ui.app().shortcuts_open, "Escape closes the help");
+}
+
+#[test]
+fn script_console_opens_and_saves_files() {
+    let mut ui = Ui::start(Lang::En, true);
+    let file = scratch().join("console.pas");
+    std::fs::write(&file, "begin RushApp.FTP.RAW('', 'NOOP', 0); end.").unwrap();
+    let tab = &mut ui.app().tabs[0];
+    tab.open_script(&file);
+    assert!(tab.script.contains("NOOP") && tab.script_file.as_deref() == Some(file.as_path()));
+    tab.script.push_str("\n// changed");
+    let copy = scratch().join("copy.pas");
+    tab.save_script(&copy);
+    assert_eq!(std::fs::read_to_string(&copy).unwrap(), tab.script);
+    assert_eq!(tab.script_saved, tab.script);
+    tab.open_script(&scratch().join("missing.pas"));
+    assert!(tab.script_out.last().is_some_and(|(ok, _)| !ok), "an unreadable file is told");
+}

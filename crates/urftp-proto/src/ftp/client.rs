@@ -23,6 +23,9 @@ pub struct FtpConfig {
     pub connect_timeout: Duration,
     /// Maximum wait for a reply or a data block.
     pub io_timeout: Duration,
+    /// Maximum wait for a data block during a transfer (`None`: `io_timeout`): a stalled
+    /// transfer stops sooner and is resumed.
+    pub stall_timeout: Option<Duration>,
     /// Try `EPSV` before `PASV` (automatic fallback when refused).
     pub prefer_epsv: bool,
     /// Use `MLSD` when the server announces `MLST`.
@@ -97,6 +100,7 @@ impl Default for FtpConfig {
             upnp: None,
             connect_timeout: Duration::from_secs(30),
             io_timeout: Duration::from_secs(120),
+            stall_timeout: None,
             prefer_epsv: true,
             use_mlsd: true,
             list_command: "LIST".into(),
@@ -1032,12 +1036,13 @@ impl FtpClient {
         }
         let mut data = self.complete_data(pending).await?;
         let io = self.config.io_timeout;
+        let stall = self.config.stall_timeout.unwrap_or(io);
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
         let mut last_noop = std::time::Instant::now();
         let mut inflate = z.then(|| (flate2::Decompress::new(true), vec![0u8; CHUNK * 4]));
         loop {
-            let n = timeout(io, read_data(&mut data, &mut buf)).await?;
+            let n = stalled(stall, read_data(&mut data, &mut buf)).await?;
             if n == 0 {
                 break;
             }
@@ -1122,6 +1127,7 @@ impl FtpClient {
         }
         let mut data = self.complete_data(pending).await?;
         let io = self.config.io_timeout;
+        let stall = self.config.stall_timeout.unwrap_or(io);
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
         let mut last_noop = std::time::Instant::now();
@@ -1131,7 +1137,7 @@ impl FtpClient {
             let flush = if n == 0 { flate2::FlushCompress::Finish } else { flate2::FlushCompress::None };
             match &mut deflate {
                 None if n == 0 => break,
-                None => timeout(io, data.write_all(&buf[..n])).await?,
+                None => stalled(stall, data.write_all(&buf[..n])).await?,
                 Some((c, packed)) => {
                     let mut chunk = &buf[..n];
                     loop {
@@ -1141,7 +1147,7 @@ impl FtpClient {
                             .map_err(|e| FtpError::Protocol(format!("MODE Z: compression failed ({e})")))?;
                         let used = (c.total_in() - before_in) as usize;
                         let made = (c.total_out() - before_out) as usize;
-                        timeout(io, data.write_all(&packed[..made])).await?;
+                        stalled(stall, data.write_all(&packed[..made])).await?;
                         chunk = &chunk[used..];
                         let finished = status == flate2::Status::StreamEnd;
                         if finished || (chunk.is_empty() && n > 0 && made < packed.len()) {
@@ -1238,6 +1244,14 @@ async fn timeout<T>(d: Duration, f: impl Future<Output = std::io::Result<T>>) ->
     match tokio::time::timeout(d, f).await {
         Ok(r) => Ok(r?),
         Err(_) => Err(FtpError::Timeout),
+    }
+}
+
+/// [`timeout`] on the data connection: a stalled transfer.
+async fn stalled<T>(d: Duration, f: impl Future<Output = std::io::Result<T>>) -> Result<T> {
+    match tokio::time::timeout(d, f).await {
+        Ok(r) => Ok(r?),
+        Err(_) => Err(FtpError::Stalled(d.as_secs())),
     }
 }
 

@@ -122,6 +122,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
     let t = &settings.transfer;
     let connect_timeout = Duration::from_secs(u64::from(own.connect_timeout_secs.unwrap_or(t.connect_timeout_secs)));
     let io_timeout = Duration::from_secs(u64::from(own.io_timeout_secs.unwrap_or(t.io_timeout_secs)));
+    let stall_timeout = (t.stall_secs > 0).then(|| Duration::from_secs(u64::from(t.stall_secs)));
     let retries = own.retries.unwrap_or(t.retries);
     let retry_delay_secs = own.retry_delay_secs.unwrap_or(t.retry_delay_secs);
     let tls = TlsOptions {
@@ -172,6 +173,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             proxy: proxy.clone(),
             connect_timeout,
             io_timeout,
+            stall_timeout,
             send_feat: own.send_feat,
             client_name: (!own.client_name.trim().is_empty()).then(|| own.client_name.trim().to_string()),
             ..FtpConfig::default()
@@ -187,6 +189,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
                 proxy,
                 connect_timeout,
                 io_timeout,
+                stall_timeout,
                 bind_ip: net.bind(),
                 ..SftpConfig::default()
             },

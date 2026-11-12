@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (287 sujets) : ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
+Résumé (287 sujets) : ✅ 264 · 🟡 4 · ⬜ 1 · ➖ 18.
 
 ## Fenêtre principale et menus
 
@@ -98,7 +98,7 @@ Résumé (287 sujets) : ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
 | Envoyer une commande RAW | ✅ | FTP › Envoyer une commande RAW (`Ctrl+R`) |
 | Comparer le contenu des dossiers (nom, taille, partiel, masquer les identiques) | ✅ | Menu FTP → Comparer les panneaux |
 | Voir le listing brut | ✅ | FTP : tel qu'envoyé par le serveur ; SFTP : lignes `ls -l` |
-| Concepteur de scripts | 🟡 | Console de script dans chaque onglet ; pas d'éditeur avec fichiers |
+| Concepteur de scripts | ✅ | Console de script dans chaque onglet : modifier, lancer, arrêter, ouvrir et enregistrer des fichiers `.pas` |
 | Langues | 🟡 | Anglais et français |
 | Gestionnaire de raccourcis | ✅ | Options › Raccourcis |
 | Téléchargement manuel depuis un site, liste d'URL incrémentées | ✅ | Fichier › Téléchargement manuel ; listes `[1-12]` / `[01-12]` |
@@ -116,7 +116,7 @@ Résumé (287 sujets) : ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Index de l'aide | 🟡 | `F1` liste les raccourcis ; documentation complète dans `docs/` |
+| Index de l'aide | ✅ | `F1` : la documentation intégrée, avec un index de ses sections, une recherche et les raccourcis clavier |
 | Assistant FTPRush | ➖ | Assistant de personnalisation propre à la boîte à outils Delphi |
 | Vérifier les nouvelles versions | ➖ | Pas de mise à jour en ligne dans cette phase |
 | À propos | ✅ | Aide › À propos |
@@ -272,7 +272,7 @@ Résumé (287 sujets) : ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
 | Pas de limite pour les adresses locales | ✅ | Adresses privées, de bouclage et de lien local |
 | Conversion de casse des noms | ✅ | Envois et téléchargements séparément |
 | Forcer le mode actif pour les transferts | ✅ | |
-| Arrêter et reprendre quand aucune donnée n'arrive | 🟡 | Délai de réponse puis nouvel essai avec reprise |
+| Arrêter et reprendre quand aucune donnée n'arrive | ✅ | Après N secondes sans données (FTP et SFTP), puis reprise par les tentatives |
 | Revenir en arrière à la reprise d'un téléchargement | ✅ | |
 | Garder un espace disque libre minimum | ✅ | |
 | Transferts simultanés maximum par onglet | ✅ | |

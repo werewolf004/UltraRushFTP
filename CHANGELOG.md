@@ -9,7 +9,7 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
-Advanced transfers (block O).
+Advanced transfers (block O) and finishing touches (block P).
 
 ### Added
 
@@ -19,6 +19,12 @@ Advanced transfers (block O).
   `[UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE` (option).
 - Scripts: `RushApp.FTP.Transfer` with **`RS_CHECKLOGIN`** first logs in to its sites (at
   the same time, beside the interface) and leaves out the ones that cannot log in.
+- **Help window** (`F1`, Help menu): the reference documentation built in (English or
+  French), with an index of its sections, a search, and the keyboard shortcuts.
+- Script console: **Open…**, **Save**, **Save as…** of `.pas` files; the file name shows
+  `•` while the text has changed.
+- Options › Transfers: **stop and resume after no data for N seconds** (FTP and SFTP): a
+  stalled transfer stops sooner than the reply timeout and is resumed by the retries.
 
 ### Fixed
 

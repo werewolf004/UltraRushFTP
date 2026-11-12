@@ -10,7 +10,7 @@ la traduction.
 
 ## [Non publié]
 
-Transferts avancés (bloc O).
+Transferts avancés (bloc O) et finitions (bloc P).
 
 ### Ajouté
 
@@ -20,6 +20,13 @@ Transferts avancés (bloc O).
   `[UltraRushFTP] - ( 7 of 10 files OK = 70% ) - INCOMPLETE` (option).
 - Scripts : `RushApp.FTP.Transfer` avec **`RS_CHECKLOGIN`** se connecte d'abord à ses sites
   (en même temps, à côté de l'interface) et laisse de côté ceux qui refusent la connexion.
+- **Fenêtre d'aide** (`F1`, menu Aide) : la documentation de référence intégrée (en anglais
+  ou en français), avec un index de ses sections, une recherche et les raccourcis clavier.
+- Console de script : **Ouvrir…**, **Enregistrer**, **Enregistrer sous…** de fichiers
+  `.pas` ; le nom du fichier porte `•` tant que le texte a changé.
+- Options › Transferts : **arrêter et reprendre sans données pendant N secondes** (FTP et
+  SFTP) : un transfert bloqué s'arrête avant le délai de réponse et reprend par les
+  tentatives.
 
 ### Corrigé
 

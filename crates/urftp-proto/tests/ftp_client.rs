@@ -218,3 +218,17 @@ async fn mode_z_listings_are_compressed_or_back_in_stream_mode() {
     assert_eq!(names, ["a.bin"], "compressed listing read");
     assert_eq!(srv.received().iter().filter(|l| l.as_str() == "MODE Z").count(), before + 1);
 }
+
+#[tokio::test]
+async fn a_stalled_download_stops_after_the_stall_limit() {
+    let srv = MockServer::start(MockConfig { transfer_delay: Some(std::time::Duration::from_secs(3)), ..MockConfig::default() }).await;
+    srv.fs.lock().unwrap().files.insert("/slow.bin".into(), vec![1u8; 100]);
+    let cfg = FtpConfig { stall_timeout: Some(std::time::Duration::from_secs(1)), ..FtpConfig::default() };
+    let mut c = FtpClient::connect("127.0.0.1", srv.addr.port(), cfg).await.unwrap();
+    c.login("test", "secret").await.unwrap();
+    let started = std::time::Instant::now();
+    let mut got = Vec::new();
+    let e = c.retr("/slow.bin", 0, &mut got, |_| {}).await.unwrap_err();
+    assert!(matches!(e, FtpError::Stalled(1)), "{e}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(3), "stopped before the reply timeout");
+}

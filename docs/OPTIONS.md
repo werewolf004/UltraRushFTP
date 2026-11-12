@@ -37,7 +37,8 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | View → Window list columns | FTP and Action columns of the window list |
 | View → Layouts | Apply, save or delete a layout of the panels; back to the default layout; *Panels as tabs*: both file panels in one area, their titles switch between them |
 | View → Light theme / Dark theme | Switches the theme (also stored in the options) |
-| Help → Keyboard shortcuts | Lists the shortcuts below (also `F1`) |
+| Help → Help (F1) | This documentation, built in: index of the sections, search, keyboard shortcuts |
+| Help → Keyboard shortcuts | The help on the shortcuts below |
 | Help → About UltraRushFTP | Version, build and licence |
 | `★ Favourites ▾` | Recent sites (10), quick connections (10, without their password: an anonymous one connects at once, else the password field waits), every site of the site manager, *Manual download*: connects the active panel. Split (options): `★ <last site>` connects to it, `⏷` opens the menu |
 | `➕` after Connect | Saves the quick connection as a site of the site manager (with its password) |
@@ -270,6 +271,7 @@ Saved automatically in `settings.json` one second after a change.
 | Simultaneous transfers for quick connect | 2 | Per-site limit used by quick connect |
 | Connection timeout (s) | 30 | Control and data connections |
 | Server idle timeout (s) | 120 | Maximum wait for a reply or a data block |
+| Stop and resume after no data for | 0 s (the timeout above) | A transfer that receives or sends nothing for this time is stopped and resumed by the retries (FTP and SFTP) |
 | Downloads / Uploads / FXP: own number of retries | off | Retries of that direction instead of the general value (a site setting still wins) |
 | Retry the failed items when the queue ends (rounds) | 0 | Once the queue is finished, the failed items are tried again this many times |
 | Cycle retry | off | An item to retry goes to the bottom of the queue, the others run first, without delay |
@@ -673,8 +675,9 @@ incomplete transfer), `2` invalid arguments.
 Pascal Script as in FTPRush v2, run from the *Script* console, `-s`, `URUSHFTP_SCRIPT` or
 mIRC. Each script runs beside the interface: the window stays usable, `InputQuery` opens
 an input box and waits for it, and the console shows *Script running…* with a **■ Stop**
-button (the script stops at its next call to the application). `Invoke` evaluates its
-expression at once, so an `InputQuery` in it gets no answer.
+button (the script stops at its next call to the application). **Open…**, **Save** and
+**Save as…** load and write the text of the console as a `.pas` file. `Invoke` evaluates
+its expression at once, so an `InputQuery` in it gets no answer.
 
 Supported language:
 

@@ -172,6 +172,11 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
 - ✅ Dossier d'état SFV à côté des téléchargements vérifiés.
 - ✅ `RS_CHECKLOGIN` dans `RushApp.FTP.Transfer`.
 
+### P — Finitions
+- ✅ Fenêtre d'aide avec la documentation intégrée, son index et une recherche.
+- ✅ Console de script : ouvrir et enregistrer des fichiers `.pas`.
+- ✅ Transferts bloqués arrêtés et repris après N secondes sans données.
+
 ### Distribution
 - ✅ Manifeste d'application (`longPathAware`, DPI par écran), icône et ressources de
   version.

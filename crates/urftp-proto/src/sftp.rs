@@ -78,6 +78,9 @@ pub struct SftpConfig {
     pub connect_timeout: Duration,
     /// Maximum duration of an SFTP request.
     pub io_timeout: Duration,
+    /// Maximum wait for a block during a transfer (`None`: no other limit than
+    /// `io_timeout`): a stalled transfer stops and is resumed.
+    pub stall_timeout: Option<Duration>,
     /// SSH keep-alive interval (`None`: disabled).
     pub keepalive: Option<Duration>,
     pub host_key: HostKeyPolicy,
@@ -95,6 +98,7 @@ impl Default for SftpConfig {
             max_in_flight: 16,
             connect_timeout: Duration::from_secs(30),
             io_timeout: Duration::from_secs(120),
+            stall_timeout: None,
             keepalive: Some(Duration::from_secs(30)),
             host_key: HostKeyPolicy::default(),
             proxy: None,
@@ -110,6 +114,9 @@ pub enum SftpError {
     Io(#[from] std::io::Error),
     #[error("timed out")]
     Timeout,
+    /// Nothing received or sent for this many seconds during a transfer.
+    #[error("no data for {0} s: transfer stopped")]
+    Stalled(u64),
     #[error("proxy: {0}")]
     Proxy(#[from] ProxyError),
     #[error("server key not trusted ({reason}) — fingerprint: {fingerprint}")]
@@ -187,6 +194,8 @@ pub struct SftpClient {
     cwd: String,
     fingerprint: String,
     log: Option<LogSink>,
+    /// Stall limit of the transfers (see [`SftpConfig::stall_timeout`]).
+    stall: Option<Duration>,
 }
 
 impl SftpClient {
@@ -280,7 +289,7 @@ impl SftpClient {
         sftp.set_timeout(config.io_timeout.as_secs().max(1));
         let cwd = sftp.canonicalize(".").await.map_err(op_err("REALPATH", "."))?;
         status(format!("SFTP ready, directory: {cwd}"));
-        Ok(Self { ssh, sftp, cwd, fingerprint, log })
+        Ok(Self { ssh, sftp, cwd, fingerprint, log, stall: config.stall_timeout })
     }
 
     pub fn set_logger(&mut self, log: Option<LogSink>) {
@@ -385,8 +394,9 @@ impl SftpClient {
         }
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
+        let stall = self.stall;
         loop {
-            let n = file.read(&mut buf).await?;
+            let n = stalled(stall, file.read(&mut buf)).await?;
             if n == 0 {
                 break;
             }
@@ -414,12 +424,13 @@ impl SftpClient {
         }
         let mut buf = vec![0u8; CHUNK];
         let mut total = 0u64;
+        let stall = self.stall;
         loop {
             let n = input.read(&mut buf).await?;
             if n == 0 {
                 break;
             }
-            file.write_all(&buf[..n]).await?;
+            stalled(stall, file.write_all(&buf[..n])).await?;
             total += n as u64;
             progress(total);
         }
@@ -510,6 +521,17 @@ pub fn mode_string(mode: u32) -> String {
         s.push(if bits & 1 != 0 { 'x' } else { '-' });
     }
     s
+}
+
+/// A transfer step with the stall limit (`None`: none).
+async fn stalled<T>(limit: Option<Duration>, f: impl std::future::Future<Output = std::io::Result<T>>) -> Result<T> {
+    match limit {
+        None => Ok(f.await?),
+        Some(d) => match tokio::time::timeout(d, f).await {
+            Ok(r) => Ok(r?),
+            Err(_) => Err(SftpError::Stalled(d.as_secs())),
+        },
+    }
 }
 
 #[cfg(test)]

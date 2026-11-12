@@ -37,7 +37,8 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | Affichage → Colonnes de la liste des fenêtres | Colonnes FTP et Action de la liste des fenêtres |
 | Affichage → Dispositions | Appliquer, enregistrer ou supprimer une disposition des panneaux ; revenir à celle par défaut ; *Panneaux en onglets* : les deux panneaux de fichiers dans une seule zone, leurs titres basculent de l'un à l'autre |
 | Affichage → Thème clair / Thème sombre | Change le thème (enregistré aussi dans les options) |
-| Aide → Raccourcis clavier | Liste les raccourcis ci-dessous (aussi `F1`) |
+| Aide → Aide (F1) | Cette documentation, intégrée : index des sections, recherche, raccourcis clavier |
+| Aide → Raccourcis clavier | L'aide sur les raccourcis ci-dessous |
 | Aide → À propos d'UltraRushFTP | Version, compilation et licence |
 | `★ Favoris ▾` | Sites récents (10), connexions rapides (10, sans leur mot de passe : une anonyme se connecte aussitôt, sinon le champ mot de passe attend), tous les sites du gestionnaire, *Téléchargement manuel* : connecte le panneau actif. Scindé (options) : `★ <dernier site>` s'y connecte, `⏷` ouvre le menu |
 | `➕` après Connexion | Enregistre la connexion rapide comme site du gestionnaire (avec son mot de passe) |
@@ -282,6 +283,7 @@ Enregistrée automatiquement dans `settings.json` une seconde après une modific
 | Transferts simultanés en connexion rapide | 2 | Limite par site utilisée par la connexion rapide |
 | Délai de connexion (s) | 30 | Connexions de contrôle et de données |
 | Délai sans réponse du serveur (s) | 120 | Attente maximale d'une réponse ou d'un bloc de données |
+| Arrêter et reprendre sans données pendant | 0 s (le délai ci-dessus) | Un transfert qui ne reçoit ni n'envoie rien pendant ce temps est arrêté puis repris par les tentatives (FTP et SFTP) |
 | Téléchargements / Envois / FXP : nombre de tentatives propre | désactivé | Tentatives de ce sens au lieu de la valeur générale (un réglage du site l'emporte toujours) |
 | Relancer les échecs à la fin de la file (tours) | 0 | Une fois la file terminée, les éléments en échec sont retentés ce nombre de fois |
 | Relance cyclique | désactivé | Un élément à relancer passe en bas de la file, les autres passent avant, sans délai |
@@ -690,7 +692,8 @@ Pascal Script comme dans FTPRush v2, exécuté depuis la console *Script*, `-s`,
 `URUSHFTP_SCRIPT` ou mIRC. Chaque script tourne à côté de l'interface : la fenêtre reste
 utilisable, `InputQuery` ouvre une boîte de saisie et l'attend, et la console affiche
 *Script en cours…* avec un bouton **■ Arrêter** (le script s'arrête à son prochain appel à
-l'application). `Invoke` évalue son expression aussitôt : un `InputQuery` n'y reçoit donc
+l'application). **Ouvrir…**, **Enregistrer** et **Enregistrer sous…** chargent et écrivent le
+texte de la console dans un fichier `.pas`. `Invoke` évalue son expression aussitôt : un `InputQuery` n'y reçoit donc
 pas de réponse.
 
 Langage géré :

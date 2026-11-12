@@ -256,7 +256,9 @@ impl OptionsWindow {
                     theme::grid_row(ui, t!("options.quick_transfers"), egui::DragValue::new(&mut t.quick_connect_transfers).range(0..=50));
                     theme::grid_row(ui, t!("options.connect_timeout"), egui::DragValue::new(&mut t.connect_timeout_secs).range(5..=600));
                     theme::grid_row(ui, t!("options.io_timeout"), egui::DragValue::new(&mut t.io_timeout_secs).range(10..=3600));
+                    theme::grid_row(ui, t!("options.stall"), egui::DragValue::new(&mut t.stall_secs).range(0..=3600).suffix(" s"));
                 });
+                ui.label(RichText::new(t!("options.stall_note")).weak());
                 ui.add_space(6.0);
                 ui.label(RichText::new(t!("options.timeouts_note")).weak());
                 ui.add_space(8.0);

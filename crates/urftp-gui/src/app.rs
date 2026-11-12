@@ -36,6 +36,7 @@ use urftp_proto::throttle::RateLimiter;
 mod confirm;
 mod favorites;
 mod fileops;
+mod help;
 pub(crate) mod input;
 mod logs;
 mod look;
@@ -574,6 +575,9 @@ struct Container {
     script: String,
     invoke: String,
     script_out: Vec<(bool, String)>,
+    /// File of the script console, and its text when last opened or saved.
+    script_file: Option<PathBuf>,
+    script_saved: String,
     /// Replies to raw commands (`RushApp.FTP.RAW`): (site, command, lines, success).
     raw_replies: Vec<(String, String, Vec<String>, bool)>,
     /// Selected rows of the queue, and the row a `Shift` range starts from.
@@ -700,6 +704,8 @@ impl Container {
             script: "RushApp.FTP.RAW('', 'NOOP', 0);".into(),
             invoke: "RushApp.Version".into(),
             script_out: Vec::new(),
+            script_file: None,
+            script_saved: String::new(),
             raw_replies: Vec::new(),
             queue_sel: BTreeSet::new(),
             queue_anchor: None,
@@ -724,6 +730,29 @@ impl Container {
             .chain(self.parked[1].iter().chain(self.parked[0].iter()))
             .find_map(|s| if let Side::Remote(r) = s { Some(r.profile.name.clone()) } else { None });
         remote.unwrap_or_else(|| t!("tabs.default_title", n = pos))
+    }
+
+    /// Loads a script file into the console.
+    fn open_script(&mut self, path: &Path) {
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                self.script = String::from_utf8_lossy(&bytes).into_owned();
+                self.script_saved = self.script.clone();
+                self.script_file = Some(path.to_path_buf());
+            }
+            Err(e) => self.script_out.push((false, t!("script.file_failed", file = path.display(), error = e))),
+        }
+    }
+
+    /// Writes the console text to a script file.
+    fn save_script(&mut self, path: &Path) {
+        match std::fs::write(path, &self.script) {
+            Ok(()) => {
+                self.script_saved = self.script.clone();
+                self.script_file = Some(path.to_path_buf());
+            }
+            Err(e) => self.script_out.push((false, t!("script.file_failed", file = path.display(), error = e))),
+        }
     }
 
     /// Line of the system log (see [`Container::push_ftp`], [`Container::push_transfer`]).
@@ -1342,8 +1371,10 @@ pub struct UltraRushApp {
     startup: Option<StartupOptions>,
     /// `-rx`: quit when nothing is left to transfer.
     exit_when_done: bool,
-    /// "Keyboard shortcuts" window (F1).
+    /// Help window (F1): open, section shown (0: keyboard shortcuts), search.
     shortcuts_open: bool,
+    help_section: usize,
+    help_query: String,
     /// "About" window (Help menu).
     about_open: bool,
     /// End-of-queue action waiting for its countdown: (action, when it runs).
@@ -1483,6 +1514,9 @@ enum Action {
     Checksums(usize, bool),
     /// Console: run the script of the tab / evaluate its expression / stop its script.
     RunScript,
+    /// Script console: open a file, save it (`true`: under another name).
+    ScriptOpen,
+    ScriptSave(bool),
     Invoke,
     StopScript,
     /// Window list: show / close a tab.
@@ -1554,6 +1588,8 @@ impl UltraRushApp {
             startup: Some(startup),
             // Development (screenshots): `URUSHFTP_OPEN_SHORTCUTS=1` opens the shortcuts window.
             shortcuts_open: std::env::var_os("URUSHFTP_OPEN_SHORTCUTS").is_some(),
+            help_section: 0,
+            help_query: String::new(),
             about_open: std::env::var_os("URUSHFTP_OPEN_ABOUT").is_some(),
             queue_end: None,
             power: run_power_action,
@@ -2624,8 +2660,12 @@ impl UltraRushApp {
                 }
             });
             ui.menu_button(t!("menu.help"), |ui| {
+                if ui.button(t!("menu.help_index")).clicked() {
+                    self.open_help(1);
+                    ui.close();
+                }
                 if ui.button(t!("menu.shortcuts")).clicked() {
-                    self.shortcuts_open = true;
+                    self.open_help(0);
                     ui.close();
                 }
                 ui.separator();
@@ -2785,6 +2825,26 @@ impl UltraRushApp {
         }
     }
 
+    /// Open / Save / Save as of the script console (file dialogs).
+    fn script_file_dialog(&mut self, op: Option<bool>) {
+        let a = self.active;
+        let dialog = || rfd::FileDialog::new().add_filter(t!("script.filter"), &["pas", "txt"]).add_filter(t!("sites.all_files"), &["*"]);
+        match op {
+            None => {
+                if let Some(p) = dialog().set_title(t!("script.open_title")).pick_file() {
+                    self.tabs[a].open_script(&p);
+                }
+            }
+            Some(as_new) => {
+                let current = self.tabs[a].script_file.clone().filter(|_| !as_new);
+                let target = current.or_else(|| dialog().set_title(t!("script.save_title")).set_file_name("script.pas").save_file());
+                if let Some(p) = target {
+                    self.tabs[a].save_script(&p);
+                }
+            }
+        }
+    }
+
     /// Closes a tab (the last one stays).
     fn close_tab(&mut self, i: usize) {
         if self.tabs.len() > 1 && i < self.tabs.len() {
@@ -2862,6 +2922,8 @@ impl UltraRushApp {
         let clear_on_logout = self.options.settings.transfer.clear_queue_on_logout;
         // Queue file: Some(true) = save, Some(false) = load (file dialog after the loop).
         let mut queue_file: Option<bool> = None;
+        // Script file: Some(None) = open, Some(Some(as_new)) = save (file dialog after the loop).
+        let mut script_file_op: Option<Option<bool>> = None;
         // Actions on the application (tabs, tasks), after the ones of the tab shown.
         let mut later = Vec::new();
         let tab = &mut self.tabs[self.active];
@@ -2881,6 +2943,8 @@ impl UltraRushApp {
                 Action::ManualDownload => manual = true,
                 Action::SiteCommand(i) => site_commands.push(i),
                 Action::RunScript => scripts.push(false),
+                Action::ScriptOpen => script_file_op = Some(None),
+                Action::ScriptSave(as_new) => script_file_op = Some(Some(as_new)),
                 Action::StopScript => stop_script = true,
                 Action::Invoke => scripts.push(true),
                 Action::Open(side, name) => match &mut tab.sides[side] {
@@ -3045,6 +3109,9 @@ impl UltraRushApp {
                 Action::TogglePane(p) => self.toggle_pane(p),
                 other => self.task_action(other, ctx),
             }
+        }
+        if let Some(op) = script_file_op {
+            self.script_file_dialog(op);
         }
         match queue_file {
             Some(true) => {
@@ -3233,40 +3300,6 @@ impl UltraRushApp {
             out.push(Action::Open(side, n));
         }
         out
-    }
-
-    /// "Keyboard shortcuts" window (F1, Help menu).
-    fn shortcuts_window(&mut self, ctx: &egui::Context) {
-        if !self.shortcuts_open {
-            return;
-        }
-        let chosen = self.options.settings.interface.shortcuts.clone();
-        let mut open = true;
-        egui::Window::new(t!("shortcuts.title"))
-            .id(egui::Id::new("shortcuts-window"))
-            .default_pos([240.0, 110.0])
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
-                egui::Grid::new("shortcuts").num_columns(2).spacing([24.0, 6.0]).striped(true).show(ui, |ui| {
-                    for (keys, what) in FIXED_SHORTCUTS.iter().filter(|(k, _)| *k != "shortcuts.k_f3_f4") {
-                        ui.label(RichText::new(urftp_i18n::text(keys)).monospace().strong());
-                        ui.label(urftp_i18n::text(what));
-                        ui.end_row();
-                    }
-                    for c in input::Command::ALL {
-                        let keys = input::keys_of(c, &chosen).iter().map(input::format).collect::<Vec<_>>().join(", ");
-                        ui.label(RichText::new(keys).monospace().strong());
-                        ui.label(urftp_i18n::text(&c.label_key()));
-                        ui.end_row();
-                    }
-                });
-                ui.label(RichText::new(t!("shortcuts.change_note")).weak());
-            });
-        if !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.shortcuts_open = false;
-        }
     }
 
     /// Input dialogs (new folder, rename) and confirmation (delete).
@@ -3549,6 +3582,14 @@ impl eframe::App for UltraRushApp {
                 _ => None,
             };
             let task_state = (&self.tasks.book, self.tasks.error.as_deref());
+            // Name of the script file shown in the console, `•` when changed since saved.
+            let script_name = match &tab.script_file {
+                Some(p) => {
+                    let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    if tab.script != tab.script_saved { format!("{name} •") } else { name }
+                }
+                None => t!("script.no_file"),
+            };
             let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, tools, .. } = tab;
             let mut viewer = PaneViewer {
                 sides,
@@ -3561,6 +3602,7 @@ impl eframe::App for UltraRushApp {
                 script,
                 invoke,
                 script_out,
+                script_name,
                 sites: &entries,
                 switch,
                 parked_remote,
@@ -3599,7 +3641,7 @@ impl eframe::App for UltraRushApp {
         self.watch_clipboard(&ctx);
         self.saved_queue_dialog(&ctx);
         self.trust_dialog(&ctx);
-        self.shortcuts_window(&ctx);
+        self.help_window(&ctx);
         self.about_window(&ctx);
         self.queue_edit_dialog(&ctx);
         self.task_dialog(&ctx);
@@ -3645,6 +3687,8 @@ struct PaneViewer<'a> {
     script: &'a mut String,
     invoke: &'a mut String,
     script_out: &'a [(bool, String)],
+    /// File of the script console as shown (`•`: changed since saved).
+    script_name: String,
     /// Sites of the site manager (connection button of the panels).
     sites: &'a [SiteEntry],
     /// Text of the local ⇄ remote button of each panel (`None`: nothing to switch to).
@@ -4444,6 +4488,19 @@ impl PaneViewer<'_> {
             } else if theme::primary_button(ui, t!("script.run")).clicked() {
                 self.actions.push(Action::RunScript);
             }
+        });
+        // Script designer: the console text is a `.pas` file.
+        ui.horizontal(|ui| {
+            if ui.button(t!("script.open")).clicked() {
+                self.actions.push(Action::ScriptOpen);
+            }
+            if ui.button(t!("script.save")).clicked() {
+                self.actions.push(Action::ScriptSave(false));
+            }
+            if ui.button(t!("script.save_as")).clicked() {
+                self.actions.push(Action::ScriptSave(true));
+            }
+            ui.label(RichText::new(&self.script_name).weak());
         });
         ui.add_space(4.0);
         ui.columns(2, |cols| {

@@ -34,6 +34,9 @@ pub enum FtpError {
     Io(#[from] std::io::Error),
     #[error("timed out")]
     Timeout,
+    /// Nothing received or sent on the data connection for this many seconds.
+    #[error("no data for {0} s: transfer stopped")]
+    Stalled(u64),
     #[error("connection closed by the server")]
     Closed,
     #[error("unexpected reply to \"{command}\": {reply}")]

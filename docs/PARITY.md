@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (287 topics): ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
+Summary (287 topics): ✅ 264 · 🟡 4 · ⬜ 1 · ➖ 18.
 
 ## Main window and menus
 
@@ -98,7 +98,7 @@ Summary (287 topics): ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
 | Send RAW command | ✅ | FTP › Send RAW command (`Ctrl+R`) |
 | Compare folder contents (name, size, partial, hide same) | ✅ | FTP menu → Compare the panels |
 | View raw directory | ✅ | FTP: as sent by the server; SFTP: `ls -l` lines |
-| Script designer | 🟡 | Script console in each tab; no editor with files |
+| Script designer | ✅ | Script console in each tab: edit, run, stop, open and save `.pas` files |
 | Languages | 🟡 | English and French |
 | Hotkey manager | ✅ | Options › Shortcuts |
 | Manual download from site, increment URL list | ✅ | File › Manual download; `[1-12]` / `[01-12]` lists |
@@ -116,7 +116,7 @@ Summary (287 topics): ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
 
 | Topic | Status | Notes |
 |---|---|---|
-| Help index | 🟡 | `F1` lists the shortcuts; full documentation in `docs/` |
+| Help index | ✅ | `F1`: the documentation built in, with an index of its sections, a search and the keyboard shortcuts |
 | FTPRush wizard | ➖ | Interface customisation wizard of the Delphi toolkit |
 | Check new version | ➖ | No online update in this phase |
 | About | ✅ | Help › About |
@@ -272,7 +272,7 @@ Summary (287 topics): ✅ 261 · 🟡 7 · ⬜ 1 · ➖ 18.
 | Bypass speed limit for local addresses | ✅ | Private, loopback and link-local addresses |
 | File-name case conversion | ✅ | Uploads and downloads separately |
 | Force active mode for transfers | ✅ | |
-| Stop and resume when no data is received | 🟡 | Reply timeout then retry with resume |
+| Stop and resume when no data is received | ✅ | After N seconds without data (FTP and SFTP), then resumed by the retries |
 | Roll back when resuming a download | ✅ | |
 | Keep free disk space | ✅ | |
 | Maximum simultaneous transfers per tab | ✅ | |
