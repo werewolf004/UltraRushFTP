@@ -10,6 +10,8 @@ la traduction.
 
 ## [Non publié]
 
+## [0.11.0] - 2026-11-12
+
 Confort au quotidien (bloc M).
 
 ### Ajouté
@@ -461,7 +463,8 @@ réels.
 - Alerte connue acceptée : `RUSTSEC-2023-0071` dans `rsa` (utilisée pour les clés SSH
   RSA) ; voir [SECURITY.fr.md](SECURITY.fr.md).
 
-[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.10.0...HEAD
+[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.7.0...v0.8.0
