@@ -37,9 +37,9 @@ struct Config {
     dir: Option<PathBuf>,
 }
 
-static CONFIG: RwLock<Config> = parking_lot::const_rwlock(Config { lines: 5000, dir: None });
+static CONFIG: RwLock<Config> = parking_lot::RwLock::new(Config { lines: 5000, dir: None });
 /// Lines waiting to be written to the files: (log, line).
-static PENDING: Mutex<Vec<(LogChannel, String)>> = parking_lot::const_mutex(Vec::new());
+static PENDING: Mutex<Vec<(LogChannel, String)>> = parking_lot::Mutex::new(Vec::new());
 
 /// Applies the log options.
 pub(super) fn configure(s: &InterfaceSettings) {

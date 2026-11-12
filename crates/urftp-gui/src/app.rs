@@ -664,7 +664,7 @@ fn tabbed_dock() -> DockState<Pane> {
 }
 
 /// Default download folder chosen in the options (see [`set_download_dir`]).
-static DOWNLOAD_DIR: parking_lot::RwLock<Option<PathBuf>> = parking_lot::const_rwlock(None);
+static DOWNLOAD_DIR: parking_lot::RwLock<Option<PathBuf>> = parking_lot::RwLock::new(None);
 
 /// Records the default download folder of the options (empty: the user folder).
 fn set_download_dir(dir: &str) {

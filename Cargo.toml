@@ -28,7 +28,7 @@ urftp-sys = { path = "crates/urftp-sys" }
 urftp-i18n = { path = "crates/urftp-i18n" }
 tokio = { version = "1", features = ["net", "io-util", "time", "rt", "sync", "macros", "fs"] }
 thiserror = "2"
-parking_lot = "0.12"
+parking_lot = "0.13"
 
 # Quality gates shared by every crate except `urftp-sys` (the only one allowed `unsafe`,
 # with its own stricter rules in its manifest).

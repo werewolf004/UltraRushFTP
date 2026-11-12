@@ -802,7 +802,7 @@ fn queue_file_round_trip_and_information_window() {
 }
 
 /// Last end-of-queue action asked from the system by the tests (never really run).
-static POWER_ASKED: parking_lot::Mutex<Option<urftp_core::settings::QueueEnd>> = parking_lot::const_mutex(None);
+static POWER_ASKED: parking_lot::Mutex<Option<urftp_core::settings::QueueEnd>> = parking_lot::Mutex::new(None);
 
 fn fake_power(action: urftp_core::settings::QueueEnd) -> Result<(), String> {
     *POWER_ASKED.lock() = Some(action);

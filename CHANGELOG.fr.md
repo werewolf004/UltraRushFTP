@@ -38,6 +38,7 @@ Transferts avancés (bloc O) et finitions (bloc P).
 - CI : les push et pull requests ne vérifient que le formatage et les dépendances ; le job
   Windows (Clippy, tests, DLL, installeur) se lance à la demande et la release lance les
   tests. Dependabot passe chaque mois, sans les versions majeures.
+- parking_lot 0.13.
 
 ## [0.12.0] - 2026-11-12
 
