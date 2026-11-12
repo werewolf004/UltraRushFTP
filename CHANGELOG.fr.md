@@ -10,6 +10,22 @@ la traduction.
 
 ## [Non publié]
 
+Fenêtres, onglets et tâches (bloc L).
+
+### Ajouté
+
+- **Fenêtre des tâches** (menu Affichage) : files et Pascal Scripts lancés une fois, toutes
+  les N minutes ou certains jours de la semaine à une heure ; **Planifier la file en
+  tâche…** dans le menu ⋯ de la file (la file se lance dans un nouvel onglet, qui peut se
+  fermer seul à la fin) ; lancer tout de suite, activer / désactiver ; les heures manquées
+  pendant que l'application était fermée sont signalées, pas rattrapées (`tasks.json`).
+- **Liste des fenêtres** (menu Affichage) : une ligne par onglet avec ses panneaux, ses
+  connexions (FTP) et ce que fait sa file (Action) ; un clic affiche l'onglet.
+- **Nouvel onglet à partir de l'actuel** (menu Fichier, `Ctrl+Maj+T`, clic droit sur un
+  onglet) : même disposition, mêmes dossiers locaux et mêmes connexions.
+- Options › Général › **Les deux panneaux pour des sites** : une deuxième connexion va dans
+  le panneau gauche avant d'ouvrir un nouvel onglet.
+
 ## [0.9.0] - 2026-11-11
 
 Distribution.

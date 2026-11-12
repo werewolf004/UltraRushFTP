@@ -16,6 +16,7 @@ Every setting of UltraRushFTP, with its default value. Contents:
 |---|---|
 | File → Site manager | Opens the site manager |
 | File → New tab | New empty tab (also `+` next to the tabs) |
+| File → New tab of current | New tab with the layout, the local folders and the connections (same sites, same folders) of the tab shown, without its queue (`Ctrl+Shift+T`, or right-click on a tab) |
 | File → Options… | Opens the Options window (also `⚙`) |
 | File → Manual download… | See *Manual download* |
 | File → Back up the configuration / Restore a backup | See *Backups* |
@@ -30,6 +31,9 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | FTP → Space used, Export the directory tree, Find files at sites, Compare the panels | See *Folder tools* |
 | FTP → Clear the cache of this site / every cache, Files being edited | See *Folder tools* |
 | FTP → Send RAW command (`Ctrl+R`), Site commands | See *RAW commands* |
+| FTP → Restart UPnP service | Searches the router again (Options › Connection) |
+| View → Window list / Task window | Shows or hides that pane in the tab shown (next to the queue); see *Window list and Task window* |
+| View → Window list columns | FTP and Action columns of the window list |
 | View → Layouts | Apply, save or delete a layout of the panels; back to the default layout |
 | View → Light theme / Dark theme | Switches the theme (also stored in the options) |
 | Help → Keyboard shortcuts | Lists the shortcuts below (also `F1`) |
@@ -37,7 +41,7 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | `★ Favourites ▾` | Recent sites (10), every site of the site manager, *Manual download*: connects the active panel |
 | `➕` after Connect | Saves the quick connection as a site of the site manager (with its password) |
 | Quick connect | Protocol (FTP, FTPS explicit, FTPS implicit, SFTP), host, port, user, password, **Connect**: opens the site in the right panel of the current tab (or in a new tab, see *General*) |
-| Tabs | One tab per site container; `✕` closes it, the title is the host or "Tab n"; `Ctrl+T` new, `Ctrl+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` next / previous |
+| Tabs | One tab per site container; `✕` closes it, the title is the host or "Tab n"; `Ctrl+T` new, `Ctrl+Shift+T` new of current, `Ctrl+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` next / previous |
 
 ### File panels
 
@@ -174,7 +178,7 @@ queues and starts, **Add to queue** only queues.
 Buttons: **Start** (**Resume** after a pause), **Pause**, **Stop all**, **Retry failed**,
 **Remove finished**, and the **⋯ Queue** menu: *Queue information…*, *Mark all as failed*,
 *Remove the failed items*, *Clear the queue (except running)*, *Load a queue file…*, *Save
-the queue to a file…*.
+the queue to a file…*, *Schedule queue to task…* (see *Window list and Task window*).
 
 - **Pause** interrupts the running transfers: they wait again and resume from their partial
   file on *Resume*. **Stop all** stops the running items and ends the queue; the others
@@ -203,6 +207,33 @@ failed, done and skipped ones are dropped. **Start** resumes the queue; a partia
 resumed according to the *Existing file* rules. The items must use sites of the site
 manager: a quick connection is not kept.
 
+### Window list and Task window
+
+![Window list and Task window](images/tasks.en.png)
+
+Two panes added from the **View** menu, in the tab shown (they can be moved like the other
+panes and are kept by the saved layouts).
+
+**Window list**: one row per tab: its number and title, what each panel shows (local
+folder, or `site:folder`), and the optional columns **FTP** (connections of the tab:
+*2 connected*, *1 of 2 connected*) and **Action** (*Transferring (3 running, 12 waiting)*,
+*Paused*, *5 waiting*, *Idle*), chosen in View → Window list columns. A click on a row
+shows that tab; `✕` closes it (with the confirmation of a busy tab).
+
+**Task window**: the scheduled tasks, with their state (on / off), what they do, when, the
+next and the last run. `▶` runs a task now, `✎` opens its dialog.
+
+| Task setting | Values |
+|---|---|
+| Name, On | Free text; an inactive task keeps its settings and never runs |
+| When | **Once** at a date and time (`YYYY-MM-DD HH:MM`); **Every N minutes** (1 to 10,080) from a first time; **Days of the week** at a time (`HH:MM`), on the days ticked |
+| Queue task | Created by ⋯ Queue › *Schedule queue to task…* with the unfinished items of the tab; when it runs, the queue opens in a **new tab** and starts (the tab shown does not change); *Close the tab once the queue is finished* |
+| Script task | **New script task…**: Pascal Script run like the console (`ShellExecuteCommand` follows Options › Security) |
+
+Times are those of the computer clock. A time that passes while UltraRushFTP is closed is
+**not run late**: the task shows *Missed* and waits for its next time (a one-time task turns
+off). The tasks are saved in `tasks.json`.
+
 ## Options window
 
 Saved automatically in `settings.json` one second after a change.
@@ -216,6 +247,7 @@ Saved automatically in `settings.json` one second after a change.
 | Dark theme | on | Dark or light theme |
 | Language | Windows language | Windows language, English or Français; applied immediately |
 | Open a new tab when the right panel is already connected | on | Otherwise the new connection replaces the current one |
+| Both panels for sites | off | A second connection goes to the left panel (when it shows a local folder) before a new tab is opened: two sites face to face for FXP |
 | E-mail for anonymous logins | `urftp@` | Password sent by the sites set to *anonymous* |
 | Default download folder | user folder | Folder the local panels start in, and come back to on disconnection; the user folder when it does not exist |
 | Unfinished queue at startup | Ask | Ask, Load it or Discard it (see *Queue*) |
@@ -706,6 +738,7 @@ does not create a second one and says so in the log.
 | `URUSHFTP_SITE_SETTINGS` | Development: keeps the site form scrolled to the settings of the site |
 | `URUSHFTP_OPEN_OPTIONS` | Development: opens the Options window on this page (0 to 16) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Development: opens the keyboard shortcuts window |
+| `URUSHFTP_SHOW_PANES` | Development: `windows,tasks` adds the window list and the Task window to the first tab |
 | `URUSHFTP_OPEN_ABOUT` | Development: opens the About window |
 
 ## Files
@@ -720,5 +753,6 @@ In the data folder (`%APPDATA%\UltraRushFTP` by default):
 | `queue.json` | Unfinished queue of every tab (removed when nothing is left to do) |
 | `*.urq` | Queue files saved by hand (anywhere), same format as `queue.json` |
 | `layouts.json` | Saved layouts of the panels |
+| `tasks.json` | Scheduled tasks (Task window) |
 | `logs\` | Log files (when written to disk) |
 | `backup\` | Backups of the configuration |

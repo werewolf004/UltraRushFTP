@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (287 topics: ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18). The
+[docs/PARITY.md](docs/PARITY.md) (287 topics: ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -126,6 +126,12 @@ planned work is grouped below into blocks, each ending with a release.
 - ✅ Scripts run in a thread of their own: interactive `InputQuery`, a Stop button;
   `MatchExpr`, `MatchString`; `ShellExecuteCommand` asked each time by default.
 - ✅ Screen readers: the row under the file-list cursor is told by a live region.
+
+### L — Windows, tabs and tasks
+- ✅ New tab of current (layout, folders and connections), both panels for sites.
+- ✅ Window list pane with FTP and Action columns.
+- ✅ Task window: queues and scripts scheduled once, every N minutes or on days of the
+  week; Schedule queue to task.
 
 ### Distribution
 - ✅ Application manifest (`longPathAware`, per-monitor DPI), icon and version resources.

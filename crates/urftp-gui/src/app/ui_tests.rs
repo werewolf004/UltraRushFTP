@@ -12,9 +12,10 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
 use urftp_i18n::{Lang, t};
 
-use super::{Side, UltraRushApp};
+use super::{Action, Pane, Side, UltraRushApp, tasks};
 use crate::cmdline::StartupOptions;
 use urftp_core::queue::{Endpoint, ItemState, Queue};
+use urftp_proto::session::SiteProfile;
 
 /// Local panels start here (see `home_dir`).
 pub(crate) static HOME: OnceLock<PathBuf> = OnceLock::new();
@@ -51,6 +52,8 @@ impl Ui {
         scratch();
         // A queue saved by a previous test would be offered at startup.
         let _ = std::fs::remove_file(urftp_core::queuestore::SavedQueues::default_path());
+        // Tasks of a previous test would run or be listed.
+        let _ = std::fs::remove_file(urftp_core::tasks::TaskBook::default_path());
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
         let mut app = UltraRushApp::new(rt.handle().clone(), StartupOptions::default());
         app.ipc_enabled = false;
@@ -1480,4 +1483,125 @@ fn scripts_read_the_selection_match_texts_and_answer_the_layout_event() {
     assert_eq!(ui.app().splitter, "layout");
     ui.app().run_script("RushApp.UI.OnSwitchLayout := nil;", &ctx).unwrap();
     assert!(ui.app().scripts.on_switch_layout.is_none());
+}
+
+/// A site of the site manager on a local port nobody listens on.
+fn unreachable_profile(ui: &mut Ui, name: &str) -> SiteProfile {
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let site = urftp_core::site::Site { name: name.into(), host: "127.0.0.1".into(), port, ..Default::default() };
+    ui.app().site_profile(&site)
+}
+
+#[test]
+fn new_tab_of_current_keeps_the_connections_and_folders() {
+    let mut ui = Ui::start(Lang::En, true);
+    let id = connect_left_panel(&mut ui, "Dup site");
+    let right = match &ui.app().tabs[0].sides[1] {
+        Side::Local(l) => l.path.clone(),
+        Side::Remote(_) => panic!("right panel local"),
+    };
+    ui.key_with(Modifiers::COMMAND | Modifiers::SHIFT, Key::T);
+    assert_eq!((ui.app().tabs.len(), ui.app().active), (2, 1));
+    let copy = &ui.app().tabs[1];
+    assert!(matches!(&copy.sides[0], Side::Remote(r) if r.site_id == Some(id) && r.profile.name == "Dup site"));
+    assert!(matches!(&copy.sides[1], Side::Local(l) if l.path == right));
+    assert!(ui.app().tabs[1].queue.lock().items().is_empty(), "the queue is not copied");
+}
+
+#[test]
+fn window_list_shows_the_tabs_and_switches_to_one() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.key_with(Modifiers::COMMAND, Key::T);
+    assert_eq!(ui.app().active, 1);
+    ui.harness.get_by_label(&t!("menu.view")).click();
+    ui.run();
+    ui.harness.get_by_label(&t!("pane.windows")).click();
+    ui.run();
+    assert!(ui.app().pane_shown(Pane::Windows));
+    let first = t!("tabs.default_title", n = 1);
+    assert!(ui.has_label(&t!("windows.action_idle")));
+    ui.harness.get_by_label(&t!("windows.show_named", title = first)).click();
+    ui.run();
+    assert_eq!(ui.app().active, 0);
+    assert!(!ui.app().pane_shown(Pane::Windows), "the first tab has its own layout");
+    ui.app().toggle_pane(Pane::Tasks);
+    assert!(ui.app().pane_shown(Pane::Tasks));
+    ui.run();
+    assert!(ui.has_label(&t!("tasks.none")));
+    ui.app().toggle_pane(Pane::Tasks);
+    assert!(!ui.app().pane_shown(Pane::Tasks));
+}
+
+#[test]
+fn a_scheduled_queue_runs_in_a_new_tab_when_its_time_comes() {
+    use urftp_core::tasks::LastResult;
+    let mut ui = Ui::start(Lang::En, true);
+    // An item whose site does not exist: it fails at once, without network.
+    ui.app().tabs[0].queue.lock().append([(
+        Endpoint { site: Some("Nowhere".into()), path: "/a.bin".into() },
+        Endpoint::local("C:/nowhere/a.bin"),
+        false,
+        Some(10),
+        None,
+        ItemState::Waiting,
+    )]);
+    let ctx = ui.harness.ctx.clone();
+    ui.app().task_action(Action::ScheduleQueue, &ctx);
+    ui.run();
+    assert!(ui.has_label(&t!("tasks.new_title")));
+    ui.harness.get_by_label(&t!("common.ok")).click();
+    ui.run();
+    assert!(!ui.app().task_dialog_open());
+    let task = ui.app().tasks.book.tasks.first().cloned().unwrap();
+    assert!(task.enabled && task.next_run.is_some());
+    assert!(matches!(&task.action, urftp_core::tasks::TaskAction::Queue { queue, close_tab: true } if queue.items.len() == 1));
+
+    // Its time comes.
+    let now = tasks::now_local();
+    ui.app().tasks.book.tasks[0].next_run = Some(now - 5);
+    ui.run();
+    assert_eq!((ui.app().tabs.len(), ui.app().active), (2, 0), "a new tab, the tab shown does not change");
+    assert_eq!(ui.app().tabs[1].queue.lock().items().len(), 1);
+    let task = &ui.app().tasks.book.tasks[0];
+    assert_eq!((task.enabled, task.last_result.clone(), task.next_run), (false, Some(LastResult::Started), None));
+    let saved = urftp_core::tasks::TaskBook::load(&urftp_core::tasks::TaskBook::default_path()).unwrap();
+    assert_eq!(saved.tasks.len(), 1, "written to tasks.json");
+}
+
+#[test]
+fn both_panels_remote_puts_the_second_site_on_the_left() {
+    let mut ui = Ui::start(Lang::En, true);
+    ui.app().options.settings.new_tab_both_remote = true;
+    let ctx = ui.harness.ctx.clone();
+    for name in ["First", "Second", "Third"] {
+        let p = unreachable_profile(&mut ui, name);
+        ui.app().connect_profile(p, None, None, &ctx);
+        ui.run();
+    }
+    let tab = &ui.app().tabs[0];
+    assert!(matches!(&tab.sides[1], Side::Remote(r) if r.profile.name == "First"));
+    assert!(matches!(&tab.sides[0], Side::Remote(r) if r.profile.name == "Second"));
+    assert_eq!(ui.app().tabs.len(), 2, "both panels busy: a new tab");
+    assert!(matches!(&ui.app().tabs[1].sides[1], Side::Remote(r) if r.profile.name == "Third"));
+}
+
+#[test]
+fn window_list_task_window_and_task_dialog_controls_are_named() {
+    use urftp_core::tasks::{Schedule, Task, TaskAction};
+    let mut ui = Ui::start(Lang::Fr, false);
+    let now = tasks::now_local();
+    let task = Task::new("Nightly", Schedule::Daily { minute: 120, days: 0b001_1111 }, TaskAction::Script { source: "x := 1;".into() });
+    let id = ui.app().tasks.book.add(task, now);
+    ui.key_with(Modifiers::COMMAND, Key::T);
+    ui.app().toggle_pane(Pane::Windows);
+    ui.app().toggle_pane(Pane::Tasks);
+    ui.run();
+    assert!(ui.has_label("Nightly"));
+    assert_all_named(&ui, "window list and task window");
+    let ctx = ui.harness.ctx.clone();
+    ui.app().task_action(Action::TaskEdit(id), &ctx);
+    ui.run();
+    assert_all_named(&ui, "task dialog");
+    ui.key(Key::Escape);
+    assert!(!ui.app().task_dialog_open());
 }

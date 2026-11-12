@@ -26,6 +26,8 @@ pub(super) enum Origin {
     Env,
     /// Handler of an event (`OnSwitchLayout`).
     Event(&'static str),
+    /// Scheduled task with this name.
+    Task(String),
 }
 
 impl Origin {
@@ -36,6 +38,7 @@ impl Origin {
             Origin::Startup(p) => p.display().to_string(),
             Origin::Env => "URUSHFTP_SCRIPT".into(),
             Origin::Event(e) => (*e).into(),
+            Origin::Task(name) => t!("tasks.origin", name = name),
         }
     }
 }
@@ -378,6 +381,13 @@ impl UltraRushApp {
             Origin::Event(name) => match r {
                 Ok(()) => return,
                 Err(e) => (false, t!("script.event_failed", event = name, error = e)),
+            },
+            Origin::Task(name) => match r {
+                Ok(()) => (true, t!("tasks.script_done", name = name)),
+                Err(e) => {
+                    self.task_script_failed(name, &e.to_string());
+                    (false, t!("tasks.script_failed", name = name, error = e))
+                }
             },
         };
         let tab = match origin {

@@ -501,6 +501,9 @@ pub struct Settings {
     pub language: LanguageSetting,
     /// A connection opens a new tab when the right panel is already connected.
     pub new_tab_when_busy: bool,
+    /// Both panels of a tab are for sites: a second connection goes to the left panel
+    /// before a new tab is opened.
+    pub new_tab_both_remote: bool,
     pub transfer: TransferSettings,
     /// "Existing file" rules per direction.
     pub exists: ExistsSet,
@@ -731,6 +734,9 @@ pub struct InterfaceSettings {
     pub tabs_bottom: bool,
     /// Saved layout given to new tabs (empty: the default layout).
     pub default_layout: String,
+    /// Optional columns of the window list.
+    pub window_list_ftp: bool,
+    pub window_list_action: bool,
 }
 
 /// Colour of the names matching masks, for each theme (`#RRGGBB`).
@@ -786,6 +792,8 @@ impl Default for InterfaceSettings {
             sort_desc_first: false,
             tabs_bottom: false,
             default_layout: String::new(),
+            window_list_ftp: true,
+            window_list_action: true,
         }
     }
 }
@@ -943,6 +951,7 @@ impl Default for Settings {
             dark_theme: true,
             language: LanguageSetting::System,
             new_tab_when_busy: true,
+            new_tab_both_remote: false,
             transfer: TransferSettings::default(),
             exists: ExistsSet::default(),
             skiplist: SkipSettings::default(),

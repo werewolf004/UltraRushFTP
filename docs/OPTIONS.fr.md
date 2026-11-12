@@ -16,6 +16,7 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 |---|---|
 | Fichier → Gestionnaire de sites | Ouvre le gestionnaire de sites |
 | Fichier → Nouvel onglet | Nouvel onglet vide (aussi `+` à côté des onglets) |
+| Fichier → Nouvel onglet à partir de l'actuel | Nouvel onglet avec la disposition, les dossiers locaux et les connexions (mêmes sites, mêmes dossiers) de l'onglet affiché, sans sa file (`Ctrl+Maj+T`, ou clic droit sur un onglet) |
 | Fichier → Options… | Ouvre la fenêtre Options (aussi `⚙`) |
 | Fichier → Téléchargement manuel… | Voir *Téléchargement manuel* |
 | Fichier → Sauvegarder la configuration / Restaurer une sauvegarde | Voir *Sauvegardes* |
@@ -30,6 +31,8 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | FTP → Espace utilisé, Exporter l'arborescence, Chercher sur les sites, Comparer les panneaux | Voir *Outils de dossier* |
 | FTP → Vider le cache de ce site / tous les caches, Fichiers en cours de modification | Voir *Outils de dossier* |
 | FTP → Envoyer une commande RAW (`Ctrl+R`), Commandes de site | Voir *Commandes RAW* |
+| Affichage → Liste des fenêtres / Fenêtre des tâches | Affiche ou masque ce volet dans l'onglet affiché (à côté de la file) ; voir *Liste des fenêtres et fenêtre des tâches* |
+| Affichage → Colonnes de la liste des fenêtres | Colonnes FTP et Action de la liste des fenêtres |
 | Affichage → Dispositions | Appliquer, enregistrer ou supprimer une disposition des panneaux ; revenir à celle par défaut |
 | Affichage → Thème clair / Thème sombre | Change le thème (enregistré aussi dans les options) |
 | Aide → Raccourcis clavier | Liste les raccourcis ci-dessous (aussi `F1`) |
@@ -37,7 +40,7 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | `★ Favoris ▾` | Sites récents (10), tous les sites du gestionnaire, *Téléchargement manuel* : connecte le panneau actif |
 | `➕` après Connexion | Enregistre la connexion rapide comme site du gestionnaire (avec son mot de passe) |
 | Connexion rapide | Protocole (FTP, FTPS explicite, FTPS implicite, SFTP), hôte, port, utilisateur, mot de passe, **Connexion** : ouvre le site dans le panneau droit de l'onglet courant (ou dans un nouvel onglet, voir *Général*) |
-| Onglets | Un onglet par conteneur de sites ; `✕` le ferme, le titre est l'hôte ou « Onglet n » ; `Ctrl+T` nouveau, `Ctrl+W` fermer, `Ctrl+Tab` / `Ctrl+Maj+Tab` suivant / précédent |
+| Onglets | Un onglet par conteneur de sites ; `✕` le ferme, le titre est l'hôte ou « Onglet n » ; `Ctrl+T` nouveau, `Ctrl+Maj+T` à partir de l'actuel, `Ctrl+W` fermer, `Ctrl+Tab` / `Ctrl+Maj+Tab` suivant / précédent |
 
 ### Panneaux de fichiers
 
@@ -179,7 +182,8 @@ file.
 Boutons : **Démarrer** (**Reprendre** après une pause), **Pause**, **Tout arrêter**,
 **Relancer les échecs**, **Retirer les terminés**, et le menu **⋯ File** : *Informations
 sur la file…*, *Tout marquer en échec*, *Retirer les échecs*, *Vider la file (sauf en
-cours)*, *Charger un fichier de file…*, *Enregistrer la file dans un fichier…*.
+cours)*, *Charger un fichier de file…*, *Enregistrer la file dans un fichier…*, *Planifier
+la file en tâche…* (voir *Liste des fenêtres et fenêtre des tâches*).
 
 - **Pause** interrompt les transferts en cours : ils attendent à nouveau et reprennent
   depuis leur fichier partiel avec *Reprendre*. **Tout arrêter** arrête les éléments en
@@ -210,6 +214,36 @@ ignorés disparaissent. **Démarrer** reprend la file ; un fichier partiel est r
 règles *Fichier existant*. Les éléments doivent utiliser des sites du gestionnaire de
 sites : une connexion rapide n'est pas gardée.
 
+### Liste des fenêtres et fenêtre des tâches
+
+![Liste des fenêtres et fenêtre des tâches](images/tasks.fr.png)
+
+Deux volets ajoutés par le menu **Affichage**, dans l'onglet affiché (ils se déplacent comme
+les autres volets et sont gardés par les dispositions enregistrées).
+
+**Liste des fenêtres** : une ligne par onglet : son numéro et son titre, ce que montre
+chaque panneau (dossier local, ou `site:dossier`), et les colonnes facultatives **FTP**
+(connexions de l'onglet : *2 connecté(s)*, *1 sur 2 connecté(s)*) et **Action**
+(*Transfert (3 en cours, 12 en attente)*, *En pause*, *5 en attente*, *Inactif*), choisies
+dans Affichage → Colonnes de la liste des fenêtres. Un clic sur une ligne affiche cet
+onglet ; `✕` le ferme (avec la confirmation d'un onglet occupé).
+
+**Fenêtre des tâches** : les tâches planifiées, avec leur état (active ou non), ce qu'elles
+font, quand, la prochaine et la dernière fois. `▶` lance une tâche tout de suite, `✎` ouvre
+sa boîte de dialogue.
+
+| Réglage d'une tâche | Valeurs |
+|---|---|
+| Nom, Active | Texte libre ; une tâche inactive garde ses réglages et ne se lance jamais |
+| Quand | **Une fois** à une date et une heure (`AAAA-MM-JJ HH:MM`) ; **Toutes les N minutes** (1 à 10 080) à partir d'une première fois ; **Jours de la semaine** à une heure (`HH:MM`), les jours cochés |
+| Tâche de file | Créée par ⋯ File › *Planifier la file en tâche…* avec les éléments non terminés de l'onglet ; à son heure, la file s'ouvre dans un **nouvel onglet** et démarre (l'onglet affiché ne change pas) ; *Fermer l'onglet une fois la file terminée* |
+| Tâche de script | **Nouvelle tâche de script…** : Pascal Script lancé comme la console (`ShellExecuteCommand` suit Options › Sécurité) |
+
+Les heures sont celles de l'horloge de l'ordinateur. Une heure passée pendant
+qu'UltraRushFTP est fermé **n'est pas rattrapée** : la tâche affiche *Manquée* et attend sa
+prochaine fois (une tâche unique se désactive). Les tâches sont enregistrées dans
+`tasks.json`.
+
 ## Fenêtre Options
 
 Enregistrée automatiquement dans `settings.json` une seconde après une modification.
@@ -223,6 +257,7 @@ Enregistrée automatiquement dans `settings.json` une seconde après une modific
 | Thème sombre | oui | Thème sombre ou clair |
 | Langue | Langue de Windows | Langue de Windows, English ou Français ; appliquée tout de suite |
 | Ouvrir un nouvel onglet quand le panneau droit est déjà connecté | oui | Sinon la nouvelle connexion remplace la connexion en cours |
+| Les deux panneaux pour des sites | non | Une deuxième connexion va dans le panneau gauche (s'il montre un dossier local) avant d'ouvrir un onglet : deux sites face à face pour le FXP |
 | E-mail des connexions anonymes | `urftp@` | Mot de passe envoyé par les sites réglés en *anonyme* |
 | Dossier de téléchargement par défaut | dossier de l'utilisateur | Dossier où démarrent les panneaux locaux, et où ils reviennent à la déconnexion ; le dossier de l'utilisateur quand il n'existe pas |
 | File non terminée au démarrage | Demander | Demander, La charger ou L'abandonner (voir *File d'attente*) |
@@ -722,6 +757,7 @@ UltraRushFTP n'en crée pas une seconde et le signale dans le journal.
 | `URUSHFTP_SITE_SETTINGS` | Développement : garde la fiche du site défilée sur les réglages du site |
 | `URUSHFTP_OPEN_OPTIONS` | Développement : ouvre la fenêtre Options sur cette page (0 à 16) |
 | `URUSHFTP_OPEN_SHORTCUTS` | Développement : ouvre la fenêtre des raccourcis clavier |
+| `URUSHFTP_SHOW_PANES` | Développement : `windows,tasks` ajoute la liste des fenêtres et la fenêtre des tâches au premier onglet |
 | `URUSHFTP_OPEN_ABOUT` | Développement : ouvre la fenêtre À propos |
 
 ## Fichiers
@@ -736,5 +772,6 @@ Dans le dossier des données (`%APPDATA%\UltraRushFTP` par défaut) :
 | `queue.json` | File non terminée de chaque onglet (supprimé quand il ne reste rien à faire) |
 | `*.urq` | Fichiers de file enregistrés à la main (n'importe où), même format que `queue.json` |
 | `layouts.json` | Dispositions des panneaux enregistrées |
+| `tasks.json` | Tâches planifiées (fenêtre des tâches) |
 | `logs\` | Fichiers journaux (quand ils sont écrits sur disque) |
 | `backup\` | Sauvegardes de la configuration |

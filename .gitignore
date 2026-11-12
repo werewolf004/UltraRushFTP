@@ -33,3 +33,6 @@ Desktop.ini
 
 # Packages written by scripts/package.ps1
 /dist/
+
+# Scheduled tasks of the application
+tasks.json

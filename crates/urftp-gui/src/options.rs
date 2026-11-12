@@ -204,6 +204,7 @@ impl OptionsWindow {
                 ui.checkbox(&mut s.dark_theme, t!("options.dark_theme"));
                 language_combo(ui, &mut s.language);
                 ui.checkbox(&mut s.new_tab_when_busy, t!("options.new_tab_when_busy"));
+                ui.checkbox(&mut s.new_tab_both_remote, t!("options.new_tab_both_remote"));
                 ui.add_space(6.0);
                 egui::Grid::new("opt-general").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                     theme::grid_row(

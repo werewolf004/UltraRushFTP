@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (287 topics): ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
+Summary (287 topics): ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 
 ## Main window and menus
 
@@ -17,7 +17,7 @@ Summary (287 topics): ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 | Topic | Status | Notes |
 |---|---|---|
 | New window | ✅ | New tab (`+`, `Ctrl+T`) |
-| New window of current | ⬜ | Duplicate a tab with its connections |
+| New window of current | ✅ | File › New tab of current (`Ctrl+Shift+T`, right-click on a tab): same layout, folders and connections |
 | Close current window | ✅ | `✕`, `Ctrl+W` (disconnects) |
 | Minimize to system tray | ✅ | Options › Notifications; a click on the icon brings the window back |
 | Lock to system tray | ✅ | File › Lock, with the master password (Options › Security) |
@@ -43,14 +43,14 @@ Summary (287 topics): ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 | Topic | Status | Notes |
 |---|---|---|
 | Refresh | ✅ | `F5` |
-| Window list | 🟡 | Tab strip only; no list with connection and action columns |
+| Window list | ✅ | View › Window list: a pane with one row per tab, its panels, connections and queue |
 | Queue window | ✅ | Dock panel |
 | System log, transfer log, FTP log | ✅ | FTP, transfer and system logs of each tab, with times |
-| Task window | ⬜ | Scheduled tasks |
+| Task window | ✅ | View › Task window: queues and scripts once, every N minutes or on days of the week |
 | Remote columns size / date | ✅ | |
 | Remote columns attributes / user / group | ✅ | Remote panels; local panels show the Windows attributes |
 | Local columns size / date | ✅ | |
-| Window list columns | ⬜ | |
+| Window list columns | ✅ | FTP and Action (View › Window list columns) |
 | Grid lines | ➖ | Striped rows instead |
 | Columns auto size | 🟡 | Columns resizable, no automatic fit |
 | Current edit files | ✅ | FTP menu → Files being edited |
@@ -84,7 +84,7 @@ Summary (287 topics): ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 | Mark selected / all as failed | ✅ | Right-click on the selection, or ⋯ Queue |
 | Queue information | ✅ | Counts, sizes, time left |
 | Restore queue, load / save queue file | ✅ | Unfinished queue at startup; `.urq` files by hand |
-| Schedule queue to task | ⬜ | |
+| Schedule queue to task | ✅ | ⋯ Queue › Schedule queue to task: the queue runs in a new tab at its time |
 | Limit upload / download speed toggles | 🟡 | Limits in the options; no one-click toggle |
 
 ### Tools → other
@@ -125,7 +125,7 @@ Summary (287 topics): ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 
 | Topic | Status | Notes |
 |---|---|---|
-| Main interface layout (panels, logs, queue, status bar) | 🟡 | Dock with panels, queue, three logs, script; saved layouts; no task window |
+| Main interface layout (panels, logs, queue, status bar) | ✅ | Dock with panels, queue, three logs, script, window list, Task window; saved layouts |
 | Side indicator | 🟡 | `▸` on the active panel |
 | Connect to FTP from the favourites menu | ✅ | `★ Favourites ▾` in the toolbar |
 | Disconnect from site | ✅ | |
@@ -309,7 +309,7 @@ Summary (287 topics): ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 | One SFV per folder, skip all SFV if several | ✅ | |
 | Keep the server date on downloaded files | ✅ | |
 | Remove the 0-byte target file when an FXP source refuses | ✅ | |
-| New tab: both sides remote | ⬜ | |
+| New tab: both sides remote | ✅ | Options › General › Both panels for sites: the second site goes to the left panel |
 | New tab for quick connect / favourites | ✅ | "Open a new tab when the panel is busy" |
 
 ### Display

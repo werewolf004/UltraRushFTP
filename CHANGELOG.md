@@ -9,6 +9,21 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Windows, tabs and tasks (block L).
+
+### Added
+
+- **Task window** (View menu): queues and Pascal Scripts run once, every N minutes or on
+  chosen days of the week at a time; **Schedule queue to task…** in the ⋯ menu of the queue
+  (the queue runs in a new tab, which can close itself when done); run now, turn on / off;
+  times missed while the application was closed are shown, not run late (`tasks.json`).
+- **Window list** (View menu): one row per tab with its panels, its connections (FTP) and
+  what its queue does (Action); a click shows the tab.
+- **New tab of current** (File menu, `Ctrl+Shift+T`, right-click on a tab): same layout,
+  local folders and connections.
+- Options › General › **Both panels for sites**: a second connection goes to the left panel
+  before a new tab is opened.
+
 ## [0.9.0] - 2026-11-11
 
 Distribution.

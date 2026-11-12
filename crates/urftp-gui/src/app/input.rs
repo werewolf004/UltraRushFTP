@@ -10,6 +10,7 @@ use eframe::egui::{Key, Modifiers};
 pub(crate) enum Command {
     Help,
     NewTab,
+    DuplicateTab,
     CloseTab,
     Raw,
     SwitchPanel,
@@ -31,9 +32,10 @@ pub(crate) enum Command {
 }
 
 impl Command {
-    pub(crate) const ALL: [Command; 20] = [
+    pub(crate) const ALL: [Command; 21] = [
         Command::Help,
         Command::NewTab,
+        Command::DuplicateTab,
         Command::CloseTab,
         Command::Raw,
         Command::SwitchPanel,
@@ -59,6 +61,7 @@ impl Command {
         match self {
             Command::Help => "help",
             Command::NewTab => "new_tab",
+            Command::DuplicateTab => "duplicate_tab",
             Command::CloseTab => "close_tab",
             Command::Raw => "raw",
             Command::SwitchPanel => "switch_panel",
@@ -87,13 +90,14 @@ impl Command {
 
     /// Works everywhere outside dialogs (the others need the file list to have the keys).
     pub(crate) fn global(self) -> bool {
-        matches!(self, Command::Help | Command::NewTab | Command::CloseTab | Command::Raw)
+        matches!(self, Command::Help | Command::NewTab | Command::DuplicateTab | Command::CloseTab | Command::Raw)
     }
 
     pub(crate) fn default_keys(self) -> &'static str {
         match self {
             Command::Help => "F1",
             Command::NewTab => "Ctrl+T",
+            Command::DuplicateTab => "Ctrl+Shift+T",
             Command::CloseTab => "Ctrl+W",
             Command::Raw => "Ctrl+R",
             Command::SwitchPanel => "F6, Shift+F6",

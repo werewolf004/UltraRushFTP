@@ -48,6 +48,8 @@ mod rushapp;
 mod scripting;
 #[cfg(test)]
 mod shots;
+mod tasks;
+mod windows;
 
 use fileops::{ListState, Op, Parts};
 use logs::LogChannel;
@@ -65,6 +67,10 @@ enum Pane {
     TransferLog,
     SystemLog,
     Script,
+    /// List of the tabs (Window list of FTPRush).
+    Windows,
+    /// Scheduled tasks.
+    Tasks,
 }
 
 #[derive(Clone)]
@@ -1271,6 +1277,8 @@ pub struct UltraRushApp {
     /// Router (UPnP): what was last applied, and the state the background task fills.
     upnp_applied: Option<(bool, Option<u16>)>,
     upnp: Arc<Mutex<UpnpState>>,
+    /// Scheduled tasks and their dialog.
+    tasks: tasks::TasksState,
     /// Statistics (stored totals, session, rates) for `RushApp.*` and the status bar.
     stats: rushapp::Stats,
     /// Separator of the site lists in scripts (`RushApp.FTP.Splitter`).
@@ -1425,6 +1433,19 @@ enum Action {
     RunScript,
     Invoke,
     StopScript,
+    /// Window list: show / close a tab.
+    ActivateTab(usize),
+    CloseTab(usize),
+    /// "New window of current".
+    DuplicateTab,
+    /// View menu: show or hide a pane in the tab shown.
+    TogglePane(Pane),
+    /// Task window.
+    ScheduleQueue,
+    TaskNewScript,
+    TaskEdit(u64),
+    TaskToggle(u64),
+    TaskRunNow(u64),
 }
 
 impl UltraRushApp {
@@ -1464,6 +1485,7 @@ impl UltraRushApp {
             ident_applied: None,
             upnp_applied: None,
             upnp: Arc::default(),
+            tasks: tasks::TasksState::load(),
             stats: rushapp::Stats::load(),
             splitter: ";".into(),
             startup_script_done: false,
@@ -1498,6 +1520,13 @@ impl UltraRushApp {
         // The URUSHFTP_THEME variable wins over the stored option.
         app.dark = if std::env::var_os("URUSHFTP_THEME").is_some() { theme::start_dark() } else { app.options.settings.dark_theme };
         app.load_saved_queue();
+        // Development (screenshots): `URUSHFTP_SHOW_PANES=windows,tasks` adds these panes.
+        let panes = std::env::var("URUSHFTP_SHOW_PANES").unwrap_or_default();
+        for (name, pane) in [("windows", Pane::Windows), ("tasks", Pane::Tasks)] {
+            if panes.split(',').any(|p| p.trim() == name) {
+                app.toggle_pane(pane);
+            }
+        }
         app
     }
 
@@ -1781,6 +1810,16 @@ impl UltraRushApp {
     /// Opens a connection in the right panel of the active tab (a new tab when that panel
     /// is already connected), then changes to `start_dir`.
     fn connect_profile(&mut self, profile: SiteProfile, site_id: Option<u64>, start_dir: Option<String>, ctx: &egui::Context) {
+        // "Both panels remote": the second site goes to the left panel (FXP between them).
+        let tab = &self.tabs[self.active];
+        if self.options.settings.new_tab_both_remote
+            && matches!(tab.sides[1], Side::Remote(_))
+            && matches!(tab.sides[0], Side::Local(_))
+            && !matches!(tab.parked[0], Some(Side::Remote(_)))
+        {
+            self.open_remote(self.active, 0, profile, site_id, start_dir, ctx);
+            return;
+        }
         if self.options.settings.new_tab_when_busy && matches!(self.tabs[self.active].sides[1], Side::Remote(_)) {
             self.new_tab();
         }
@@ -2375,6 +2414,10 @@ impl UltraRushApp {
                     self.new_tab();
                     ui.close();
                 }
+                if ui.button(t!("menu.duplicate_tab")).clicked() {
+                    actions.push(Action::DuplicateTab);
+                    ui.close();
+                }
                 if ui.button(t!("fav.manual")).clicked() {
                     actions.push(Action::ManualDownload);
                     ui.close();
@@ -2426,6 +2469,22 @@ impl UltraRushApp {
                 }
             });
             ui.menu_button(t!("menu.view"), |ui| {
+                for (pane, label) in [(Pane::Windows, t!("pane.windows")), (Pane::Tasks, t!("pane.tasks"))] {
+                    let mut shown = self.pane_shown(pane);
+                    if ui.checkbox(&mut shown, label).clicked() {
+                        actions.push(Action::TogglePane(pane));
+                        ui.close();
+                    }
+                }
+                ui.menu_button(t!("menu.window_columns"), |ui| {
+                    let i = &mut self.options.settings.interface;
+                    let a = ui.checkbox(&mut i.window_list_ftp, t!("windows.col_ftp")).changed();
+                    let b = ui.checkbox(&mut i.window_list_action, t!("windows.col_action")).changed();
+                    if a || b {
+                        self.options.touch(ui.ctx());
+                    }
+                });
+                ui.separator();
                 self.layouts_menu(ui);
                 ui.separator();
                 if ui.button(if self.dark { t!("menu.light_theme") } else { t!("menu.dark_theme") }).clicked() {
@@ -2542,13 +2601,21 @@ impl UltraRushApp {
 
     fn tab_strip(&mut self, ui: &mut egui::Ui) {
         let mut close = None;
+        let mut duplicate = None;
         ui.horizontal(|ui| {
             for (i, tab) in self.tabs.iter().enumerate() {
                 let busy = tab.engine_events.is_some();
                 let text = format!("{}{}", if busy { "⟳ " } else { "" }, tab.title(i + 1));
-                if ui.selectable_label(i == self.active, text).clicked() {
+                let r = ui.selectable_label(i == self.active, text);
+                if r.clicked() {
                     self.active = i;
                 }
+                r.context_menu(|ui| {
+                    if ui.button(t!("menu.duplicate_tab")).clicked() {
+                        duplicate = Some(i);
+                        ui.close();
+                    }
+                });
                 if self.tabs.len() > 1 {
                     let r = theme::icon_button(ui, "✕", t!("tabs.close"));
                     theme::name(&r, t!("tabs.close_named", title = tab.title(i + 1)));
@@ -2564,6 +2631,10 @@ impl UltraRushApp {
         });
         if let Some(i) = close {
             self.request_close_tab(i);
+        }
+        if let Some(i) = duplicate {
+            self.active = i;
+            self.duplicate_tab(ui.ctx());
         }
     }
 
@@ -2631,9 +2702,20 @@ impl UltraRushApp {
         let clear_on_logout = self.options.settings.transfer.clear_queue_on_logout;
         // Queue file: Some(true) = save, Some(false) = load (file dialog after the loop).
         let mut queue_file: Option<bool> = None;
+        // Actions on the application (tabs, tasks), after the ones of the tab shown.
+        let mut later = Vec::new();
         let tab = &mut self.tabs[self.active];
         for a in actions {
             match a {
+                Action::ActivateTab(_)
+                | Action::CloseTab(_)
+                | Action::DuplicateTab
+                | Action::TogglePane(_)
+                | Action::ScheduleQueue
+                | Action::TaskNewScript
+                | Action::TaskEdit(_)
+                | Action::TaskToggle(_)
+                | Action::TaskRunNow(_) => later.push(a),
                 Action::Op(side, op) => ops.push((side, op)),
                 Action::RawDialog => raw_dialog = true,
                 Action::ManualDownload => manual = true,
@@ -2795,6 +2877,15 @@ impl UltraRushApp {
         for i in site_commands {
             self.site_command(i);
         }
+        for a in later {
+            match a {
+                Action::ActivateTab(i) if i < self.tabs.len() => self.active = i,
+                Action::CloseTab(i) => self.request_close_tab(i),
+                Action::DuplicateTab => self.duplicate_tab(ctx),
+                Action::TogglePane(p) => self.toggle_pane(p),
+                other => self.task_action(other, ctx),
+            }
+        }
         match queue_file {
             Some(true) => {
                 let name = format!("{}.urq", self.tabs[self.active].title(self.active + 1));
@@ -2878,7 +2969,13 @@ impl UltraRushApp {
     fn keyboard(&mut self, ctx: &egui::Context) -> Vec<Action> {
         use input::Command as C;
         let tab = &self.tabs[self.active];
-        if tab.prompt.is_some() || tab.trust.is_some() || self.confirm.is_some() || self.unlock.is_some() || self.scripts.asking() {
+        if tab.prompt.is_some()
+            || tab.trust.is_some()
+            || self.confirm.is_some()
+            || self.unlock.is_some()
+            || self.scripts.asking()
+            || self.task_dialog_open()
+        {
             return Vec::new();
         }
         use egui::{Key, Modifiers};
@@ -2887,6 +2984,10 @@ impl UltraRushApp {
         let hit = |c: input::Command| keys.iter().filter(|(k, _)| *k == c).any(|(_, b)| ctx.input_mut(|i| i.consume_key(b.mods, b.key)));
         if hit(C::Help) {
             self.shortcuts_open = !self.shortcuts_open;
+        }
+        // Before `NewTab`: `Ctrl+T` would also take `Ctrl+Shift+T` (extra Shift ignored).
+        if hit(C::DuplicateTab) {
+            self.duplicate_tab(ctx);
         }
         if hit(C::NewTab) {
             self.new_tab();
@@ -2945,7 +3046,7 @@ impl UltraRushApp {
                         out.push(Action::Op(side, if *cmd == C::View { Op::View(name) } else { Op::Edit(name) }));
                     }
                 }
-                C::Help | C::NewTab | C::CloseTab | C::Raw => {}
+                C::Help | C::NewTab | C::DuplicateTab | C::CloseTab | C::Raw => {}
             }
         }
         for (key, m) in [
@@ -3224,6 +3325,7 @@ impl eframe::App for UltraRushApp {
         }
         let restart = std::mem::take(&mut self.options.upnp_restart);
         self.sync_upnp(restart);
+        self.tasks_tick(&ctx);
         self.options.upnp_status = self.upnp.lock().status.clone();
         if std::mem::take(&mut self.autoconnect) {
             self.quick_connect(&ctx);
@@ -3258,6 +3360,8 @@ impl eframe::App for UltraRushApp {
         // Sites whose logs always show their name ("Display" of the site record).
         let named_sites: Vec<String> =
             self.sites.book.all_sites().into_iter().map(|(_, s)| s).filter(|s| s.log_site_name).map(|s| s.name.clone()).collect();
+        let window_rows: Vec<windows::WindowRow> = self.tabs.iter().enumerate().map(|(i, t)| t.window_row(i + 1)).collect();
+        let active_tab = self.active;
         egui::CentralPanel::default().show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
             let running = tab.engine.is_some();
@@ -3271,6 +3375,8 @@ impl eframe::App for UltraRushApp {
             let highlights = look::highlights(ui_opts, dark);
             let log_look = (look::log_colors(ui_opts, dark), ui_opts.log_text_size);
             let script_running = self.scripts.console_running(tab.id);
+            let window_cols = (ui_opts.window_list_ftp, ui_opts.window_list_action);
+            let task_state = (&self.tasks.book, self.tasks.error.as_deref());
             let Container { id, dock, sides, queue, progress, log, focus, script, invoke, script_out, queue_sel, tools, .. } = tab;
             let mut viewer = PaneViewer {
                 sides,
@@ -3295,6 +3401,10 @@ impl eframe::App for UltraRushApp {
                 highlights: &highlights,
                 log_look,
                 script_running,
+                windows: &window_rows,
+                active_tab,
+                window_cols,
+                tasks: task_state,
             };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
@@ -3318,6 +3428,7 @@ impl eframe::App for UltraRushApp {
         self.shortcuts_window(&ctx);
         self.about_window(&ctx);
         self.queue_edit_dialog(&ctx);
+        self.task_dialog(&ctx);
         self.queue_info_window(&ctx);
         self.queue_end_dialog(&ctx);
         self.conditional_dialog(&ctx);
@@ -3383,6 +3494,12 @@ struct PaneViewer<'a> {
     log_look: (Option<[egui::Color32; 4]>, u32),
     /// A script of the console of this tab is running.
     script_running: bool,
+    /// Rows of the window list, the tab shown, and its optional columns (FTP, Action).
+    windows: &'a [windows::WindowRow],
+    active_tab: usize,
+    window_cols: (bool, bool),
+    /// Tasks for the Task window, with the error of their file.
+    tasks: (&'a urftp_core::tasks::TaskBook, Option<&'a str>),
 }
 
 /// A site of the site manager, for the connection menus.
@@ -3444,6 +3561,8 @@ impl TabViewer for PaneViewer<'_> {
             Pane::TransferLog => t!("pane.transfer_log").into(),
             Pane::SystemLog => t!("pane.system_log").into(),
             Pane::Script => t!("pane.script").into(),
+            Pane::Windows => t!("pane.windows").into(),
+            Pane::Tasks => t!("pane.tasks").into(),
         }
     }
 
@@ -3460,6 +3579,8 @@ impl TabViewer for PaneViewer<'_> {
             Pane::TransferLog => self.log_pane(ui, LogChannel::Transfer),
             Pane::SystemLog => self.log_pane(ui, LogChannel::System),
             Pane::Script => self.script_pane(ui),
+            Pane::Windows => windows::windows_pane(ui, self.windows, self.active_tab, self.window_cols, self.actions),
+            Pane::Tasks => tasks::tasks_pane(ui, self.tasks, self.actions),
         }
     }
 }
@@ -3839,7 +3960,11 @@ impl PaneViewer<'_> {
                     }
                 }
                 ui.separator();
-                for (label, action) in [(t!("queue.load_file"), Action::QueueLoadFile), (t!("queue.save_file"), Action::QueueSaveFile)] {
+                for (label, action) in [
+                    (t!("queue.load_file"), Action::QueueLoadFile),
+                    (t!("queue.save_file"), Action::QueueSaveFile),
+                    (t!("tasks.schedule_queue"), Action::ScheduleQueue),
+                ] {
                     if ui.button(label).clicked() {
                         actions.push(action);
                         ui.close();

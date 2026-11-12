@@ -30,6 +30,7 @@ pub mod settings;
 pub mod site;
 pub mod sitestore;
 pub mod skiplist;
+pub mod tasks;
 pub mod urls;
 
 /// Ident (RFC 1413) name answered to FTP servers by default.

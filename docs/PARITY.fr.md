@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (287 sujets) : ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
+Résumé (287 sujets) : ✅ 238 · 🟡 23 · ⬜ 8 · ➖ 18.
 
 ## Fenêtre principale et menus
 
@@ -17,7 +17,7 @@ Résumé (287 sujets) : ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 | Sujet | État | Remarques |
 |---|---|---|
 | Nouvelle fenêtre | ✅ | Nouvel onglet (`+`, `Ctrl+T`) |
-| Nouvelle fenêtre à partir de l'actuelle | ⬜ | Dupliquer un onglet avec ses connexions |
+| Nouvelle fenêtre à partir de l'actuelle | ✅ | Fichier › Nouvel onglet à partir de l'actuel (`Ctrl+Maj+T`, clic droit sur un onglet) : même disposition, dossiers et connexions |
 | Fermer la fenêtre courante | ✅ | `✕`, `Ctrl+W` (déconnecte) |
 | Réduire dans la zone de notification | ✅ | Options › Notifications ; un clic sur l'icône ramène la fenêtre |
 | Verrouiller dans la zone de notification | ✅ | Fichier › Verrouiller, avec le mot de passe maître (Options › Sécurité) |
@@ -43,14 +43,14 @@ Résumé (287 sujets) : ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 | Sujet | État | Remarques |
 |---|---|---|
 | Actualiser | ✅ | `F5` |
-| Liste des fenêtres | 🟡 | Barre d'onglets seulement ; pas de liste avec colonnes connexion et action |
+| Liste des fenêtres | ✅ | Affichage › Liste des fenêtres : un volet avec une ligne par onglet, ses panneaux, connexions et file |
 | Fenêtre de file d'attente | ✅ | Panneau du dock |
 | Journal système, journal des transferts, journal FTP | ✅ | Journaux FTP, transferts et système de chaque onglet, avec l'heure |
-| Fenêtre des tâches | ⬜ | Tâches planifiées |
+| Fenêtre des tâches | ✅ | Affichage › Fenêtre des tâches : files et scripts une fois, toutes les N minutes ou certains jours |
 | Colonnes distantes taille / date | ✅ | |
 | Colonnes distantes attributs / utilisateur / groupe | ✅ | Panneaux distants ; les panneaux locaux montrent les attributs Windows |
 | Colonnes locales taille / date | ✅ | |
-| Colonnes de la liste des fenêtres | ⬜ | |
+| Colonnes de la liste des fenêtres | ✅ | FTP et Action (Affichage › Colonnes de la liste des fenêtres) |
 | Lignes de grille | ➖ | Lignes alternées à la place |
 | Ajustement automatique des colonnes | 🟡 | Colonnes redimensionnables, sans ajustement automatique |
 | Fichiers en cours d'édition | ✅ | Menu FTP → Fichiers en cours de modification |
@@ -84,7 +84,7 @@ Résumé (287 sujets) : ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 | Marquer la sélection / tout en échec | ✅ | Clic droit sur la sélection, ou ⋯ File |
 | Informations sur la file | ✅ | Nombres, tailles, temps restant |
 | Restaurer la file, charger / enregistrer un fichier de file | ✅ | File non terminée au démarrage ; fichiers `.urq` à la main |
-| Planifier la file en tâche | ⬜ | |
+| Planifier la file en tâche | ✅ | ⋯ File › Planifier la file en tâche : la file se lance dans un nouvel onglet à son heure |
 | Bascules de limite de vitesse d'envoi / de réception | 🟡 | Limites dans les options ; pas de bascule en un clic |
 
 ### Outils → autres
@@ -125,7 +125,7 @@ Résumé (287 sujets) : ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Disposition principale (panneaux, journaux, file, barre d'état) | 🟡 | Dock avec panneaux, file, trois journaux, script ; dispositions enregistrées ; pas de fenêtre des tâches |
+| Disposition principale (panneaux, journaux, file, barre d'état) | ✅ | Dock avec panneaux, file, trois journaux, script, liste des fenêtres, fenêtre des tâches ; dispositions enregistrées |
 | Indicateur de côté | 🟡 | `▸` sur le panneau actif |
 | Se connecter depuis le menu des favoris | ✅ | `★ Favoris ▾` dans la barre d'outils |
 | Se déconnecter d'un site | ✅ | |
@@ -309,7 +309,7 @@ Résumé (287 sujets) : ✅ 231 · 🟡 25 · ⬜ 13 · ➖ 18.
 | Un seul SFV par dossier, ignorer tous les SFV s'il y en a plusieurs | ✅ | |
 | Garder la date du serveur sur les fichiers téléchargés | ✅ | |
 | Retirer le fichier cible de 0 octet quand la source FXP refuse | ✅ | |
-| Nouvel onglet : les deux côtés distants | ⬜ | |
+| Nouvel onglet : les deux côtés distants | ✅ | Options › Général › Les deux panneaux pour des sites : le deuxième site va dans le panneau gauche |
 | Nouvel onglet pour la connexion rapide / les favoris | ✅ | « Ouvrir un nouvel onglet quand le panneau est occupé » |
 
 ### Affichage

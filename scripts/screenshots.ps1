@@ -111,6 +111,16 @@ try {
         Shot "$images/site-manager.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SITES = '1' }) 3
         Shot "$images/site-settings.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SITES = '1'; URUSHFTP_SITE_SETTINGS = '1' }) 3
         Shot "$images/shortcuts.$lang.png" $base ($common + @{ URUSHFTP_OPEN_SHORTCUTS = '1' }) 3
+        # Window list and Task window, with two demo tasks (none runs during the capture).
+        $queue = @{ title = 'Local demo'; items = @((& $item 'Local demo' '/pub/Releases/UltraRush.Demo-2026/demo.r00' $null "$local\Downloads\demo.r00" 1048576)) }
+        @{ version = 1; next_id = 3; tasks = @(
+                @{ id = 1; name = 'Nightly releases'; enabled = $true; schedule = @{ kind = 'daily'; minute = 120; days = 31 }
+                    action = @{ kind = 'queue'; queue = $queue; close_tab = $true }; next_run = $null },
+                @{ id = 2; name = 'Keep the site alive'; enabled = $false; schedule = @{ kind = 'every'; minutes = 30; from = 1893456000 }
+                    action = @{ kind = 'script'; source = "RushApp.FTP.RAW('Local demo', 'NOOP', 0);" }; next_run = $null }) } |
+            ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8NoBOM "$data/tasks.json"
+        Shot "$images/tasks.$lang.png" $base ($common + @{ URUSHFTP_SHOW_PANES = 'windows,tasks' }) 3
+        Remove-Item -Force "$data/tasks.json" -ErrorAction SilentlyContinue
         $pages = @{ 0 = 'general'; 1 = 'transfers'; 3 = 'existing-file'; 4 = 'skiplist'; 6 = 'proxy'; 7 = 'ident'; 8 = 'keep-alive'; 9 = 'connection'; 10 = 'new-site'; 11 = 'advanced'; 12 = 'browse'; 13 = 'interface'; 14 = 'shortcuts'; 15 = 'notifications'; 16 = 'security' }
         foreach ($page in $pages.Keys | Sort-Object) {
             Shot "$images/options-$($pages[$page]).$lang.png" $base ($common + @{ URUSHFTP_OPEN_OPTIONS = "$page" }) 3
