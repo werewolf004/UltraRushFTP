@@ -140,6 +140,12 @@ planned work is grouped below into blocks, each ending with a release.
 - ✅ Date tokens in bookmarks, IP address translate, Windows Explorer menu in the local
   panels.
 
+### N — Appearance
+- ✅ Fonts of the interface, the file lists and the logs; tabs on several lines and their
+  width; large toolbar buttons; links listed apart; colour of the progress bars.
+- ✅ Double-click actions (log line, site, panel title, tab, queue item); panels as tabs.
+- ✅ Favourites: split button, quick connections remembered; flash while transferring.
+
 ### Distribution
 - ✅ Application manifest (`longPathAware`, per-monitor DPI), icon and version resources.
 - 🟡 Code signing of the binaries: ready in the release workflow, waiting for a

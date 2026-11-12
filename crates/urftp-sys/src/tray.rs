@@ -292,6 +292,18 @@ pub fn flash(hwnd: isize) {
     unsafe { FlashWindowEx(&info) };
 }
 
+/// Stops the flashing of the taskbar button of a window.
+pub fn flash_stop(hwnd: isize) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{FLASHW_STOP, FLASHWINFO, FlashWindowEx};
+    if hwnd == 0 {
+        return;
+    }
+    let info =
+        FLASHWINFO { cbSize: std::mem::size_of::<FLASHWINFO>() as u32, hwnd: hwnd as HWND, dwFlags: FLASHW_STOP, uCount: 0, dwTimeout: 0 };
+    // SAFETY: `info` is fully initialised.
+    unsafe { FlashWindowEx(&info) };
+}
+
 /// Plays a sound: a `.wav` file, or else the Windows "notification" sound.
 pub fn play_sound(file: Option<&std::path::Path>) {
     use windows_sys::Win32::Media::Audio::{PlaySoundW, SND_ALIAS, SND_ASYNC, SND_FILENAME, SND_NODEFAULT};

@@ -35,11 +35,11 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | FTP → Restart UPnP service | Searches the router again (Options › Connection) |
 | View → Window list / Task window | Shows or hides that pane in the tab shown (next to the queue); see *Window list and Task window* |
 | View → Window list columns | FTP and Action columns of the window list |
-| View → Layouts | Apply, save or delete a layout of the panels; back to the default layout |
+| View → Layouts | Apply, save or delete a layout of the panels; back to the default layout; *Panels as tabs*: both file panels in one area, their titles switch between them |
 | View → Light theme / Dark theme | Switches the theme (also stored in the options) |
 | Help → Keyboard shortcuts | Lists the shortcuts below (also `F1`) |
 | Help → About UltraRushFTP | Version, build and licence |
-| `★ Favourites ▾` | Recent sites (10), every site of the site manager, *Manual download*: connects the active panel |
+| `★ Favourites ▾` | Recent sites (10), quick connections (10, without their password: an anonymous one connects at once, else the password field waits), every site of the site manager, *Manual download*: connects the active panel. Split (options): `★ <last site>` connects to it, `⏷` opens the menu |
 | `➕` after Connect | Saves the quick connection as a site of the site manager (with its password) |
 | Quick connect | Protocol (FTP, FTPS explicit, FTPS implicit, SFTP), host, port, user, password, **Connect**: opens the site in the right panel of the current tab (or in a new tab, see *General*) |
 | Tabs | One tab per site container; `✕` closes it, the title is the host or "Tab n"; `Ctrl+T` new, `Ctrl+Shift+T` new of current, `Ctrl+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` next / previous |
@@ -462,17 +462,29 @@ downloaded program.
 | Size of the interface | 100 % | Everything, text and controls |
 | Text size of the logs | 0 (theme) | |
 | Layout of the new tabs | — | Name of a saved layout (View → Layouts) |
+| Interface / file list / log font | Font of the theme | A TrueType or OpenType font of the Windows fonts folder, by its name; a font that cannot be read is told in the system log and the theme's font stays |
 | Tabs below the panels | off | |
+| Tabs on several lines when they do not fit | off | |
+| Least width of a tab | 0 (its title) | In points |
+| Large buttons in the toolbars | off | Top bar, panel bars, queue bar |
+| Split Favourites button | off | Its main part connects to the last site |
 | File sizes | Dynamic | **Bytes** (`1,234,567 B`), **KB** (`1,206 KB`, rounded up) or **Dynamic** (B, KB, MB, GB…) in the file lists |
 | Show hidden files and folders in the local panels | on | Items with the Windows *hidden* attribute |
 | Right-click in a local panel: Windows Explorer menu | off | The menu of Windows for the selection (Open with, Send to, Properties…); the menu of UltraRushFTP stays in the Edit and FTP menus, and its *Windows Explorer menu…* item gives the menu of Windows when this is off |
 | Read the folder of a running download again every | 0 s (never) | The local panel showing the folder of a running download is listed again, to follow the size of the file |
 | Columns sized to their content: Local, Remote, Queue | off | Size, date and attribute columns fitted to what they show |
 | Folders before the files | on | |
+| List the links apart | off | Links (🔗) between the folders and the files |
 | Size and date: largest / newest first | off | First click on these columns |
 | Highlighted names | — | Masks and a colour per theme; the contrast against the list backgrounds is shown (4.5:1 at least is advised) |
 | My own colours for the log lines | off | Command, reply, status, error, per theme, with their contrast |
+| Own colour of the progress bars | off | Per theme, with its contrast |
 | Double-click on a file | Transfer | Or view it (remote files), or nothing |
+| Double-click on a log line | Copy the line | Or nothing |
+| Double-click on a site of the site manager | Connect | Or nothing |
+| Double-click on the title of a file panel | Nothing | Refresh, parent folder, or switch between local and remote |
+| Double-click on a tab | Nothing | New tab of the same sites, or close the tab |
+| Double-click on a queue item | Nothing | Edit, try again (failed or stopped item) or remove it |
 | Confirmations | exit, close a busy tab: on; remove queue items: off | Quitting while items are still to transfer; closing a tab with connections or a queue; removing queue items |
 | Site commands | `SITE HELP`, `SITE WHO`, `SITE NEW`, `SITE SEARCH %1`, `SITE STAT`, `SYST` + `FEAT` | Name and commands (one per line) of the FTP › Site commands menu |
 
@@ -494,6 +506,7 @@ given to several commands are listed. `F1` shows the keys in use. The arrows, `E
 | Always show the icon | off | Icon in the notification area; a click shows the window |
 | Minimizing hides the window there | off | |
 | Flash the taskbar button when a queue ends in the background | on | |
+| Flash the taskbar button while transfers run in the background | off | Stops when they end or when the window comes forward |
 | Events: sound, pop-up | queue finished and new items: Windows sound and pop-up; transfer failed: pop-up | Sound: empty, `system` or a `.wav` file (`▶` plays it); pop-ups above the icon, or in a corner of the window without it; every event also goes to the system log |
 | Monitored folders | — | Site (name in the site manager), folder, interval; each check lists the folder on a connection of its own and the new names are notified (the first listing only takes note) |
 

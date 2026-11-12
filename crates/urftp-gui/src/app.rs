@@ -77,6 +77,8 @@ enum Pane {
 struct FileRow {
     name: String,
     is_dir: bool,
+    /// A link (symbolic link).
+    is_link: bool,
     size: u64,
     modified: String,
     /// Sort key of the date.
@@ -94,6 +96,7 @@ impl FileRow {
         Self {
             name: e.name.clone(),
             is_dir: e.is_dir(),
+            is_link: e.kind == urftp_proto::ftp::EntryKind::Link,
             size: e.size,
             modified: e.modified.map(fmt_time).unwrap_or_default(),
             mtime: e.modified.map(time_key).unwrap_or(0),
@@ -171,9 +174,16 @@ fn time_key(t: FtpTime) -> i64 {
 
 fn sort_rows(rows: &mut [FileRow], s: Sort) {
     let dirs_first = look::dirs_first();
+    let links_apart = look::links_apart();
+    // Groups: folders first (when chosen), then the links (when apart), then the rest.
+    let group = |f: &FileRow| match (links_apart && f.is_link, dirs_first) {
+        (true, _) => 1,
+        (false, true) if f.is_dir => 0,
+        (false, true) => 2,
+        (false, false) => 0,
+    };
     rows.sort_by(|a, b| {
-        let dirs = if dirs_first { b.is_dir.cmp(&a.is_dir) } else { std::cmp::Ordering::Equal };
-        dirs.then_with(|| {
+        group(a).cmp(&group(b)).then_with(|| {
             let o = match s.col {
                 SortCol::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
                 SortCol::Size => a.size.cmp(&b.size),
@@ -286,6 +296,7 @@ impl LocalView {
                         Some(FileRow {
                             name: e.file_name().to_string_lossy().into_owned(),
                             is_dir: meta.is_dir(),
+                            is_link: e.file_type().is_ok_and(|t| t.is_symlink()),
                             size: meta.len(),
                             modified: t.map(fmt_time).unwrap_or_default(),
                             mtime: t.map(time_key).unwrap_or(0),
@@ -634,6 +645,17 @@ fn default_dock() -> DockState<Pane> {
     let [top, _] =
         surface.split_below(NodeIndex::root(), 0.66, vec![Pane::Queue, Pane::Log, Pane::TransferLog, Pane::SystemLog, Pane::Script]);
     surface.split_right(top, 0.5, vec![Pane::Right]);
+    dock
+}
+
+/// Both file panels as tabs of one area (one shown at a time), the queue and logs below.
+fn tabbed_dock() -> DockState<Pane> {
+    let mut dock = DockState::new(vec![Pane::Left, Pane::Right]);
+    dock.main_surface_mut().split_below(
+        NodeIndex::root(),
+        0.66,
+        vec![Pane::Queue, Pane::Log, Pane::TransferLog, Pane::SystemLog, Pane::Script],
+    );
     dock
 }
 
@@ -1352,6 +1374,10 @@ pub struct UltraRushApp {
     layout_name: Option<String>,
     /// The zoom of the options was applied (first frame).
     zoom_applied: bool,
+    /// Fonts installed (interface, lists, log), to install again when they change.
+    fonts_applied: Option<(String, String, String)>,
+    /// The password field of the quick bar takes the keyboard (quick connection history).
+    quick_focus_pass: bool,
     /// The master password was given in this session.
     unlocked: bool,
     /// Master password dialog (site manager, options, locked window).
@@ -1541,6 +1567,8 @@ impl UltraRushApp {
             layouts: look::load_layouts(),
             layout_name: None,
             zoom_applied: false,
+            fonts_applied: None,
+            quick_focus_pass: false,
             unlocked: false,
             unlock: None,
         };
@@ -1871,7 +1899,32 @@ impl UltraRushApp {
     /// Connects the right panel of the active tab (like the v2 quick-connect bar).
     fn quick_connect(&mut self, ctx: &egui::Context) {
         let Some(profile) = self.quick_profile() else { return };
+        // Kept for the Favourites menu, without the password.
+        if let Some(site) = self.quick_site() {
+            let c = urftp_core::settings::QuickConnection {
+                protocol: site.protocol,
+                host: site.host,
+                port: site.port,
+                user: self.quick.user.trim().to_string(),
+            };
+            urftp_core::settings::QuickConnection::remember(&mut self.options.settings.quick_history, c);
+            self.options.touch(ctx);
+        }
         self.connect_profile(profile, None, None, ctx);
+    }
+
+    /// Installs the fonts chosen in the options when they changed.
+    fn apply_fonts(&mut self, ctx: &egui::Context) {
+        let i = &self.options.settings.interface;
+        if self.fonts_applied.as_ref().is_some_and(|(a, l, g)| *a == i.font_app && *l == i.font_lists && *g == i.font_log) {
+            return;
+        }
+        let fonts = (i.font_app.clone(), i.font_lists.clone(), i.font_log.clone());
+        for f in theme::install_fonts_with(ctx, &fonts.0, &fonts.1, &fonts.2) {
+            let a = self.active;
+            self.tabs[a].push_log(0, LogKind::Error, t!("look.font_failed", font = f));
+        }
+        self.fonts_applied = Some(fonts);
     }
 
     /// Opens a connection in the right panel of the active tab (a new tab when that panel
@@ -2583,6 +2636,7 @@ impl UltraRushApp {
         });
         ui.add_space(4.0);
         ui.horizontal(|ui| {
+            look::toolbar_style(ui);
             if ui.button(t!("quick.sites")).on_hover_text(t!("quick.sites_hint")).clicked() {
                 self.sites.open = !self.sites.open;
             }
@@ -2616,6 +2670,9 @@ impl UltraRushApp {
                 let label = urftp_i18n::text(key);
                 let r = ui.add(theme::single_line(value).hint_text(label).password(password).desired_width(width));
                 theme::name(&r, label);
+                if password && std::mem::take(&mut self.quick_focus_pass) {
+                    r.request_focus();
+                }
                 enter |= password && r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             }
             if theme::primary_button(ui, t!("quick.connect")).clicked() || enter {
@@ -2671,15 +2728,25 @@ impl UltraRushApp {
     }
 
     fn tab_strip(&mut self, ui: &mut egui::Ui) {
+        use urftp_core::settings::TabDoubleClick as D;
         let mut close = None;
         let mut duplicate = None;
-        ui.horizontal(|ui| {
+        let opts = &self.options.settings.interface;
+        let (multiline, min_width, double) = (opts.tabs_multiline, opts.tab_min_width as f32, opts.double_click_tab);
+        let strip = |ui: &mut egui::Ui| {
             for (i, tab) in self.tabs.iter().enumerate() {
                 let busy = tab.engine_events.is_some();
                 let text = format!("{}{}", if busy { "⟳ " } else { "" }, tab.title(i + 1));
-                let r = ui.selectable_label(i == self.active, text);
+                let r = ui.add(egui::Button::selectable(i == self.active, text).min_size(egui::vec2(min_width, 0.0)));
                 if r.clicked() {
                     self.active = i;
+                }
+                if r.double_clicked() {
+                    match double {
+                        D::Duplicate => duplicate = Some(i),
+                        D::Close if self.tabs.len() > 1 => close = Some(i),
+                        D::Close | D::Nothing => {}
+                    }
                 }
                 r.context_menu(|ui| {
                     if ui.button(t!("menu.duplicate_tab")).clicked() {
@@ -2699,7 +2766,12 @@ impl UltraRushApp {
             if theme::icon_button(ui, "+", t!("tabs.new")).clicked() {
                 self.new_tab();
             }
-        });
+        };
+        if multiline {
+            ui.horizontal_wrapped(strip);
+        } else {
+            ui.horizontal(strip);
+        }
         if let Some(i) = close {
             self.request_close_tab(i);
         }
@@ -2761,7 +2833,12 @@ impl UltraRushApp {
                     let text = logs::status_text(&self.options.settings.interface.status_format, &st, rate);
                     let fraction = st.done_bytes as f32 / st.total_bytes as f32;
                     ui.separator();
-                    let bar = ui.add(egui::ProgressBar::new(fraction.clamp(0.0, 1.0)).text(text.clone()).desired_width(320.0));
+                    let bar = ui.add(
+                        egui::ProgressBar::new(fraction.clamp(0.0, 1.0))
+                            .text(text.clone())
+                            .desired_width(320.0)
+                            .fill(look::progress_fill(self.dark).unwrap_or(ui.visuals().selection.bg_fill)),
+                    );
                     theme::name(&bar, text);
                 }
             });
@@ -3396,6 +3473,7 @@ impl eframe::App for UltraRushApp {
         if !std::mem::replace(&mut self.zoom_applied, true) {
             ctx.set_zoom_factor(self.options.settings.interface.zoom_percent.clamp(50, 300) as f32 / 100.0);
         }
+        self.apply_fonts(&ctx);
         self.check_exit(&ctx);
         self.notify_ui(&ctx);
         // Starts Ident on the first frame, then whenever its settings change.
@@ -3690,6 +3768,34 @@ impl TabViewer for PaneViewer<'_> {
         egui::Id::new(*tab as u8)
     }
 
+    /// Name of the title for screen readers; double-click on the title of a file panel
+    /// (side indicator).
+    fn on_tab_button(&mut self, tab: &mut Pane, response: &egui::Response) {
+        use urftp_core::settings::SideDoubleClick as D;
+        let side = match tab {
+            Pane::Left => 0,
+            Pane::Right => 1,
+            _ => {
+                let title = self.title(tab).text().to_string();
+                theme::name(response, title);
+                return;
+            }
+        };
+        // "Left panel: Local (active)": apart from the buttons named after the panel.
+        let which = if side == 0 { t!("pane.side_left") } else { t!("pane.side_right") };
+        let active = if self.focus == side { t!("pane.side_active") } else { String::new() };
+        theme::name(response, format!("{which}: {}{active}", self.sides[side].title()));
+        if !response.double_clicked() {
+            return;
+        }
+        match look::side_double_click() {
+            D::Refresh => self.actions.push(Action::Refresh(side)),
+            D::Parent => self.actions.push(Action::Up(side)),
+            D::Switch if self.switch[side].is_some() => self.actions.push(Action::SwitchSide(side)),
+            D::Switch | D::Nothing => {}
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Pane) {
         match tab {
             Pane::Left => self.file_pane(ui, 0),
@@ -3711,6 +3817,7 @@ impl PaneViewer<'_> {
         let p = theme::colors(ui);
         // Connection bar of the panel (FTPRush: toolbar of each window).
         ui.horizontal(|ui| {
+            look::toolbar_style(ui);
             let sites = self.sites;
             let actions = &mut *self.actions;
             ui.menu_button(t!("conn.connect"), |ui| connection_menu(ui, sites, side, actions))
@@ -3734,6 +3841,7 @@ impl PaneViewer<'_> {
             fileops::bookmarks_menu(ui, side, &self.bookmarks[side], self.actions);
         });
         ui.horizontal(|ui| {
+            look::toolbar_style(ui);
             if theme::icon_button(ui, "⬆", t!("files.parent")).clicked() {
                 self.actions.push(Action::Up(side));
             }
@@ -3843,6 +3951,9 @@ impl PaneViewer<'_> {
         // The whole list is a drop zone: files dragged from the other panel are
         // transferred into it.
         let (zone, dropped) = ui.dnd_drop_zone::<DragFiles, ()>(egui::Frame::new(), |ui| {
+            // The texts of the rows do not take the clicks: the row is selected, opened or
+            // transferred wherever it is clicked.
+            ui.style_mut().interaction.selectable_labels = false;
             let painter = ui.painter().clone();
             let mut table = TableBuilder::new(ui);
             if cursor.scroll
@@ -3888,8 +3999,14 @@ impl PaneViewer<'_> {
                         row.set_selected(selected.contains(&i));
                         let marked = marks.contains(&f.name);
                         row.col(|ui| {
-                            let icon = if f.is_dir { "📁" } else { "📄" };
-                            let mut text = RichText::new(format!("{icon} {}", f.name));
+                            let icon = if f.is_link {
+                                "🔗"
+                            } else if f.is_dir {
+                                "📁"
+                            } else {
+                                "📄"
+                            };
+                            let mut text = theme::lists_text(format!("{icon} {}", f.name));
                             if let Some((_, c)) = self.highlights.iter().find(|(m, _)| urftp_core::browsing::mask_matches(m, &f.name)) {
                                 text = text.color(*c);
                             }
@@ -3903,10 +4020,10 @@ impl PaneViewer<'_> {
                             ui.label(if marked { text.strong().underline() } else { text });
                         });
                         row.col(|ui| {
-                            ui.label(if f.is_dir { String::new() } else { look::size_text(f.size) });
+                            ui.label(theme::lists_text(if f.is_dir { String::new() } else { look::size_text(f.size) }));
                         });
                         row.col(|ui| {
-                            ui.label(RichText::new(&f.modified).weak());
+                            ui.label(theme::lists_text(&f.modified).weak());
                         });
                         row.col(|ui| {
                             ui.label(RichText::new(&f.perms).monospace().weak());
@@ -3929,6 +4046,9 @@ impl PaneViewer<'_> {
                         } else {
                             format!("{}, {size}, {}", f.name, f.modified)
                         };
+                        if f.is_link {
+                            spoken.push_str(&format!(", {}", t!("files.link")));
+                        }
                         if skipped(f) {
                             spoken.push_str(&format!(", {}", t!("files.skipped")));
                         }
@@ -4095,6 +4215,7 @@ impl PaneViewer<'_> {
         let failed = items.iter().filter(|i| matches!(i.state, ItemState::Failed(_) | ItemState::Stopped)).count();
         let paused = self.paused;
         ui.horizontal(|ui| {
+            look::toolbar_style(ui);
             if ui.button(if paused { t!("queue.resume") } else { t!("queue.start") }).clicked() {
                 self.actions.push(Action::StartQueue);
             }
@@ -4142,6 +4263,8 @@ impl PaneViewer<'_> {
         ui.separator();
         let running = self.running;
         let mut menu: Vec<Action> = Vec::new();
+        // The texts of the rows do not take the clicks (see `file_pane`).
+        ui.style_mut().interaction.selectable_labels = false;
         TableBuilder::new(ui)
             .id_salt("queue")
             .striped(true)
@@ -4196,8 +4319,12 @@ impl PaneViewer<'_> {
                             (_, Some(t)) if t > 0 => done as f32 / t as f32,
                             _ => 0.0,
                         };
-                        let bar =
-                            ui.add(egui::ProgressBar::new(frac.clamp(0.0, 1.0)).fill(p.accent_fill).show_percentage().corner_radius(6));
+                        let bar = ui.add(
+                            egui::ProgressBar::new(frac.clamp(0.0, 1.0))
+                                .fill(look::progress_fill(ui.visuals().dark_mode).unwrap_or(p.accent_fill))
+                                .show_percentage()
+                                .corner_radius(6),
+                        );
                         theme::name(&bar, t!("queue.col_progress"));
                     });
                     row.col(|ui| {
@@ -4232,6 +4359,16 @@ impl PaneViewer<'_> {
                         targets.iter().any(|i| matches!(i.state, ItemState::Waiting | ItemState::Stopped | ItemState::NeedsConfirmation));
                     let fxp = targets.iter().any(|i| i.kind() == urftp_core::TransferKind::Fxp && i.state != ItemState::Running);
                     let editable = targets.len() == 1 && !any_running;
+                    if response.double_clicked() {
+                        use urftp_core::settings::QueueDoubleClick as Q;
+                        let again = matches!(it.state, ItemState::Failed(_) | ItemState::Stopped | ItemState::NeedsConfirmation);
+                        match look::queue_double_click() {
+                            Q::Edit if it.state != ItemState::Running => menu.push(Action::QueueEdit(id)),
+                            Q::Retry if again => menu.push(Action::QueueRetry(id)),
+                            Q::Remove if it.state != ItemState::Running => menu.push(Action::QueueRemove(id)),
+                            _ => {}
+                        }
+                    }
                     response.context_menu(|ui| {
                         if ui.add_enabled(running && any_running, egui::Button::new(t!("queue.stop"))).clicked() {
                             menu.extend(targets.iter().filter(|i| i.state == ItemState::Running).map(|i| Action::QueueStop(i.id)));
@@ -4340,11 +4477,15 @@ impl PaneViewer<'_> {
                     LogKind::Error => 3,
                 };
                 let color = custom.map_or([p.command, p.success, p.status, p.error][k], |c| c[k]);
-                let mut text = RichText::new(logs::line_text(e, names || named.contains(&e.site), times)).monospace().color(color);
+                let line = logs::line_text(e, names || named.contains(&e.site), times);
+                let mut text = RichText::new(&line).monospace().color(color);
                 if size > 0 {
                     text = text.size(size as f32);
                 }
-                ui.label(text);
+                let r = ui.add(egui::Label::new(text).sense(Sense::click()));
+                if r.double_clicked() && look::log_copy() {
+                    ui.ctx().copy_text(line);
+                }
             }
         });
     }

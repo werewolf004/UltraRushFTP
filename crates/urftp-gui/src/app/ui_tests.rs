@@ -1709,3 +1709,178 @@ fn columns_sized_to_their_content_keep_the_panels_usable() {
     (s.autosize_local, s.autosize_remote, s.autosize_queue) = (false, false, false);
     ui.app().apply_settings(&ctx);
 }
+
+impl Ui {
+    /// Double-click at the centre of the control named `label`.
+    fn double_click(&mut self, label: &str) {
+        // Idle frames first: windows still settling move their content.
+        self.harness.run_steps(12);
+        let pos = self.harness.get_by_label(label).rect().center();
+        self.double_click_at(pos);
+    }
+
+    /// Each event of the harness takes a frame of 0.25 s: the double-click delay is
+    /// lengthened meanwhile, after three idle seconds (no triple click with earlier clicks).
+    fn double_click_at(&mut self, pos: egui::Pos2) {
+        self.harness.run_steps(12);
+        self.harness.ctx.options_mut(|o| o.input_options.max_double_click_delay = 1.0);
+        self.harness.hover_at(pos);
+        for pressed in [true, false, true, false] {
+            self.harness.event(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::default(),
+            });
+        }
+        self.run();
+        self.harness.ctx.options_mut(|o| o.input_options.max_double_click_delay = 0.3);
+    }
+}
+
+#[test]
+fn double_click_on_a_site_connects() {
+    let mut ui = Ui::start(Lang::En, true);
+    // A local port nobody listens on: no network access.
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let site = urftp_core::site::Site { name: "Twice".into(), host: "127.0.0.1".into(), port, ..Default::default() };
+    let id = ui.app().sites.book.add_site(&[], site);
+    ui.app().sites.open = true;
+    ui.run();
+    ui.double_click("🌐 Twice");
+    assert!(!ui.app().sites.open, "the site manager closes on the connection");
+    let connected = ui.app().tabs.iter().flat_map(|t| t.sides.iter()).any(|s| matches!(s, Side::Remote(r) if r.site_id == Some(id)));
+    assert!(connected);
+}
+
+#[test]
+fn tabs_wrap_and_a_double_click_duplicates_one() {
+    use urftp_core::settings::TabDoubleClick;
+    let mut ui = Ui::start(Lang::En, true);
+    let s = &mut ui.app().options.settings.interface;
+    (s.tabs_multiline, s.tab_min_width, s.double_click_tab) = (true, 240, TabDoubleClick::Duplicate);
+    for _ in 0..5 {
+        ui.key_with(Modifiers::COMMAND, Key::T);
+    }
+    assert_eq!(ui.app().tabs.len(), 6);
+    // Six tabs of 240 points do not fit in one line of the window.
+    let tops: std::collections::BTreeSet<i32> =
+        (1..=6).map(|n| ui.harness.get_by_label(&t!("tabs.default_title", n = n)).rect().top().round() as i32).collect();
+    assert!(tops.len() > 1, "{tops:?}");
+    ui.double_click(&t!("tabs.default_title", n = 1));
+    assert_eq!(ui.app().tabs.len(), 7);
+    assert_all_named(&ui, "tabs on several lines");
+}
+
+#[test]
+fn double_click_on_a_queue_item_or_a_panel_title() {
+    use urftp_core::settings::{QueueDoubleClick, SideDoubleClick};
+    let mut ui = Ui::start(Lang::En, true);
+    let ctx = ui.harness.ctx.clone();
+    let s = &mut ui.app().options.settings.interface;
+    (s.double_click_queue, s.double_click_side) = (QueueDoubleClick::Edit, SideDoubleClick::Parent);
+    ui.app().apply_settings(&ctx);
+    let id = ui.app().tabs[0].queue.lock().push(
+        Endpoint::remote("Demo", "/pub/twice.bin"),
+        Endpoint::local(r"C:\dl\twice.bin"),
+        false,
+        Some(5),
+        None,
+    );
+    ui.run();
+    ui.double_click("twice.bin");
+    assert_eq!(ui.app().tabs[0].queue_edit.as_ref().map(|e| e.id), Some(id));
+    ui.key(Key::Escape);
+    let before = ui.left_path();
+    ui.double_click(&format!("{}: {}{}", t!("pane.side_left"), t!("pane.local"), t!("pane.side_active")));
+    assert_eq!(Some(ui.left_path().as_path()), before.parent());
+    let s = &mut ui.app().options.settings.interface;
+    (s.double_click_queue, s.double_click_side) = (QueueDoubleClick::Nothing, SideDoubleClick::Nothing);
+    ui.app().apply_settings(&ctx);
+}
+
+#[test]
+fn links_are_listed_apart() {
+    let _ui = Ui::start(Lang::En, true);
+    let row = |name: &str, is_dir: bool, is_link: bool| super::FileRow {
+        name: name.into(),
+        is_dir,
+        is_link,
+        size: 0,
+        modified: String::new(),
+        mtime: 0,
+        epoch: None,
+        perms: String::new(),
+        owner: String::new(),
+        group: String::new(),
+    };
+    let mut rows = vec![row("b.txt", false, false), row("link", false, true), row("dir", true, false), row("a.txt", false, false)];
+    let names = |rows: &[super::FileRow]| rows.iter().map(|r| r.name.clone()).collect::<Vec<_>>();
+    super::sort_rows(&mut rows, super::Sort::default());
+    assert_eq!(names(&rows), ["dir", "a.txt", "b.txt", "link"]);
+    let mut s = urftp_core::settings::InterfaceSettings { links_apart: true, ..Default::default() };
+    super::look::configure(&s);
+    super::sort_rows(&mut rows, super::Sort::default());
+    assert_eq!(names(&rows), ["dir", "link", "a.txt", "b.txt"]);
+    s.dirs_first = false;
+    super::look::configure(&s);
+    super::sort_rows(&mut rows, super::Sort::default());
+    assert_eq!(names(&rows), ["a.txt", "b.txt", "dir", "link"]);
+    super::look::configure(&urftp_core::settings::InterfaceSettings::default());
+}
+
+#[test]
+fn quick_connections_are_remembered_without_their_password() {
+    let mut ui = Ui::start(Lang::En, true);
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let ctx = ui.harness.ctx.clone();
+    let app = ui.app();
+    app.options.settings.quick_history.clear();
+    (app.quick.host, app.quick.port, app.quick.user, app.quick.pass) =
+        ("127.0.0.1".into(), port.to_string(), "bob".into(), "secret".into());
+    app.quick_connect(&ctx);
+    let history = app.options.settings.quick_history.clone();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].label(), format!("bob@127.0.0.1:{port}"));
+    assert!(!serde_json::to_string(&app.options.settings).unwrap().contains("secret"));
+    // Chosen again: the fields are filled, the password field waits for the password.
+    app.quick.host.clear();
+    app.quick.pass = "other".into();
+    app.use_quick(history[0].clone(), &ctx);
+    assert_eq!((app.quick.host.as_str(), app.quick.user.as_str(), app.quick.pass.as_str()), ("127.0.0.1", "bob", ""));
+    ui.run();
+    assert_eq!(ui.focused_label().as_deref(), Some(t!("common.password").as_str()));
+    // Split Favourites button: one click connects to the last site.
+    let site = urftp_core::site::Site { name: "Last".into(), host: "127.0.0.1".into(), port, ..Default::default() };
+    let id = ui.app().sites.book.add_site(&[], site);
+    ui.app().options.settings.recent_sites = vec![id];
+    ui.app().options.settings.interface.favorites_split = true;
+    ui.run();
+    ui.harness.get_by_label(&t!("fav.split_connect", site = "Last")).click();
+    ui.run();
+    let connected = ui.app().tabs.iter().flat_map(|t| t.sides.iter()).any(|s| matches!(s, Side::Remote(r) if r.site_id == Some(id)));
+    assert!(connected);
+    assert_all_named(&ui, "split Favourites button");
+    ui.app().options.settings.interface.favorites_split = false;
+}
+
+#[test]
+fn fonts_large_buttons_and_progress_colour() {
+    let mut ui = Ui::start(Lang::Fr, false);
+    let ctx = ui.harness.ctx.clone();
+    assert!(!crate::theme::system_fonts().is_empty(), "the Windows fonts folder is read");
+    let s = &mut ui.app().options.settings.interface;
+    (s.font_lists, s.large_icons, s.custom_progress) = ("no-such-font.ttf".into(), true, true);
+    s.progress_light = "#AA0000".into();
+    ui.app().apply_settings(&ctx);
+    ui.run();
+    let failed = t!("look.font_failed", font = "no-such-font.ttf");
+    assert!(ui.app().tabs[0].log.iter().any(|e| e.text == failed), "an unreadable font is told");
+    assert_eq!(super::look::progress_fill(false), Some(egui::Color32::from_rgb(0xAA, 0, 0)));
+    assert_eq!(super::look::progress_fill(true), crate::theme::parse_color("#2F6FDB"));
+    assert_all_named(&ui, "large buttons");
+    assert_targets(&ui, "large buttons");
+    let s = &mut ui.app().options.settings.interface;
+    (s.font_lists, s.large_icons, s.custom_progress) = (String::new(), false, false);
+    ui.app().apply_settings(&ctx);
+}

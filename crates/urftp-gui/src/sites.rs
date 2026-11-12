@@ -251,14 +251,24 @@ impl SiteManager {
                         let scroll = if self.list_mode { egui::ScrollArea::both() } else { egui::ScrollArea::vertical() };
                         scroll.id_salt("site-tree").max_height(ui.available_height() - 4.0).show(ui, |ui| {
                             let mut clicked = None;
+                            let mut double = None;
                             if self.list_mode {
-                                self.list(ui, &mut clicked);
+                                self.list(ui, &mut clicked, &mut double);
                             } else {
                                 let probes = self.probes.lock().clone();
-                                tree(ui, &self.book.root, &mut Vec::new(), &self.selection, &probes, &mut clicked);
+                                tree(ui, &self.book.root, &mut Vec::new(), &self.selection, &probes, &mut clicked, &mut double);
                             }
                             if let Some(sel) = clicked {
                                 self.selection = sel;
+                            }
+                            // Double-click on a site: connect (options).
+                            if let Some(id) = double
+                                && settings.interface.double_click_site == urftp_core::settings::SiteDoubleClick::Connect
+                                && self.book.find(id).is_some_and(|s| s.enabled && !s.host.trim().is_empty())
+                            {
+                                self.save();
+                                self.connect = Some((id, LoginVariant::from_modifiers(ui.input(|i| i.modifiers))));
+                                self.open = false;
                             }
                         });
                     });
@@ -302,9 +312,11 @@ impl SiteManager {
                     self.mark_dirty(ui);
                 }
             }
-            if let Selection::Site(id) = self.selection
-                && ui.button(t!("sites.duplicate")).clicked()
-                && let Some(new) = self.book.duplicate(id)
+            // Duplicate and Connect are always there (disabled without a site): the
+            // toolbar keeps its rows, the tree does not move under a double-click.
+            let site = if let Selection::Site(id) = self.selection { Some(id) } else { None };
+            if ui.add_enabled(site.is_some(), egui::Button::new(t!("sites.duplicate"))).clicked()
+                && let Some(new) = site.and_then(|id| self.book.duplicate(id))
             {
                 self.selection = Selection::Site(new);
                 self.mark_dirty(ui);
@@ -377,15 +389,16 @@ impl SiteManager {
                 ui.end_row();
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if let Selection::Site(id) = self.selection {
-                    let enabled = self.book.find(id).is_some_and(|s| s.enabled && !s.host.trim().is_empty());
-                    let p = theme::colors(ui);
-                    let btn = egui::Button::new(RichText::new(t!("sites.connect")).color(p.on_accent)).fill(p.accent_fill);
-                    if ui.add_enabled(enabled, btn).on_hover_text(t!("sites.connect_hint")).clicked() {
-                        self.save();
-                        self.connect = Some((id, LoginVariant::from_modifiers(ui.input(|i| i.modifiers))));
-                        self.open = false;
-                    }
+                let site = if let Selection::Site(id) = self.selection { Some(id) } else { None };
+                let enabled = site.and_then(|id| self.book.find(id)).is_some_and(|s| s.enabled && !s.host.trim().is_empty());
+                let p = theme::colors(ui);
+                let btn = egui::Button::new(RichText::new(t!("sites.connect")).color(p.on_accent)).fill(p.accent_fill);
+                if ui.add_enabled(enabled, btn).on_hover_text(t!("sites.connect_hint")).clicked()
+                    && let Some(id) = site
+                {
+                    self.save();
+                    self.connect = Some((id, LoginVariant::from_modifiers(ui.input(|i| i.modifiers))));
+                    self.open = false;
                 }
                 ui.label(RichText::new(count).weak());
             });
@@ -418,7 +431,7 @@ impl SiteManager {
     }
 
     /// Every site in one list (list mode), sortable by clicking a column.
-    fn list(&mut self, ui: &mut egui::Ui, clicked: &mut Option<Selection>) {
+    fn list(&mut self, ui: &mut egui::Ui, clicked: &mut Option<Selection>, double: &mut Option<u64>) {
         let mut rows: Vec<(String, Site)> = self.book.all_sites().into_iter().map(|(g, s)| (g.join(" / "), s.clone())).collect();
         let key = |r: &(String, Site)| match self.list_sort {
             1 => r.1.host.to_lowercase(),
@@ -441,8 +454,12 @@ impl SiteManager {
             ui.end_row();
             for (folder, s) in &rows {
                 let selected = self.selection == Selection::Site(s.id);
-                if ui.selectable_label(selected, &s.name).clicked() {
+                let r = ui.push_id(("site", s.id), |ui| ui.selectable_label(selected, &s.name)).inner;
+                if r.clicked() {
                     *clicked = Some(Selection::Site(s.id));
+                }
+                if r.double_clicked() {
+                    *double = Some(s.id);
                 }
                 ui.label(format!("{}:{}", s.host, s.port));
                 ui.label(proto_label(s.protocol));
@@ -587,6 +604,7 @@ fn tree(
     sel: &Selection,
     probes: &HashMap<u64, Probe>,
     clicked: &mut Option<Selection>,
+    double: &mut Option<u64>,
 ) {
     let title = if path.is_empty() { t!("sites.all_sites") } else { format!("📁 {}", g.name) };
     let header = egui::CollapsingHeader::new(RichText::new(title).strong())
@@ -595,7 +613,7 @@ fn tree(
         .show(ui, |ui| {
             for (i, child) in g.groups.iter().enumerate() {
                 path.push(i);
-                tree(ui, child, path, sel, probes, clicked);
+                tree(ui, child, path, sel, probes, clicked, double);
                 path.pop();
             }
             for s in &g.sites {
@@ -612,19 +630,27 @@ fn tree(
                 if !s.enabled {
                     text = text.weak().strikethrough();
                 }
-                ui.horizontal(|ui| {
-                    let hover = if s.description.trim().is_empty() {
-                        format!("{}:{}", s.host, s.port)
-                    } else {
-                        format!("{}\n{}:{}", s.description.trim(), s.host, s.port)
-                    };
-                    if ui.selectable_label(*sel == Selection::Site(s.id), text).on_hover_text(hover).clicked() {
-                        *clicked = Some(Selection::Site(s.id));
-                    }
-                    if let Some(p) = probes.get(&s.id) {
-                        let (mark, detail) = probe_mark(ui, p);
-                        ui.label(mark).on_hover_text(detail);
-                    }
+                // Own id: the clicks of a double-click reach the same item although the
+                // toolbar above changed with the first one.
+                ui.push_id(("site", s.id), |ui| {
+                    ui.horizontal(|ui| {
+                        let hover = if s.description.trim().is_empty() {
+                            format!("{}:{}", s.host, s.port)
+                        } else {
+                            format!("{}\n{}:{}", s.description.trim(), s.host, s.port)
+                        };
+                        let r = ui.selectable_label(*sel == Selection::Site(s.id), text).on_hover_text(hover);
+                        if r.clicked() {
+                            *clicked = Some(Selection::Site(s.id));
+                        }
+                        if r.double_clicked() {
+                            *double = Some(s.id);
+                        }
+                        if let Some(p) = probes.get(&s.id) {
+                            let (mark, detail) = probe_mark(ui, p);
+                            ui.label(mark).on_hover_text(detail);
+                        }
+                    });
                 });
             }
         });

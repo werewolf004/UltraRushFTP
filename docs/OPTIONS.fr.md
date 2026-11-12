@@ -35,11 +35,11 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | FTP → Relancer le service UPnP | Recherche à nouveau le routeur (Options › Connexion) |
 | Affichage → Liste des fenêtres / Fenêtre des tâches | Affiche ou masque ce volet dans l'onglet affiché (à côté de la file) ; voir *Liste des fenêtres et fenêtre des tâches* |
 | Affichage → Colonnes de la liste des fenêtres | Colonnes FTP et Action de la liste des fenêtres |
-| Affichage → Dispositions | Appliquer, enregistrer ou supprimer une disposition des panneaux ; revenir à celle par défaut |
+| Affichage → Dispositions | Appliquer, enregistrer ou supprimer une disposition des panneaux ; revenir à celle par défaut ; *Panneaux en onglets* : les deux panneaux de fichiers dans une seule zone, leurs titres basculent de l'un à l'autre |
 | Affichage → Thème clair / Thème sombre | Change le thème (enregistré aussi dans les options) |
 | Aide → Raccourcis clavier | Liste les raccourcis ci-dessous (aussi `F1`) |
 | Aide → À propos d'UltraRushFTP | Version, compilation et licence |
-| `★ Favoris ▾` | Sites récents (10), tous les sites du gestionnaire, *Téléchargement manuel* : connecte le panneau actif |
+| `★ Favoris ▾` | Sites récents (10), connexions rapides (10, sans leur mot de passe : une anonyme se connecte aussitôt, sinon le champ mot de passe attend), tous les sites du gestionnaire, *Téléchargement manuel* : connecte le panneau actif. Scindé (options) : `★ <dernier site>` s'y connecte, `⏷` ouvre le menu |
 | `➕` après Connexion | Enregistre la connexion rapide comme site du gestionnaire (avec son mot de passe) |
 | Connexion rapide | Protocole (FTP, FTPS explicite, FTPS implicite, SFTP), hôte, port, utilisateur, mot de passe, **Connexion** : ouvre le site dans le panneau droit de l'onglet courant (ou dans un nouvel onglet, voir *Général*) |
 | Onglets | Un onglet par conteneur de sites ; `✕` le ferme, le titre est l'hôte ou « Onglet n » ; `Ctrl+T` nouveau, `Ctrl+Maj+T` à partir de l'actuel, `Ctrl+W` fermer, `Ctrl+Tab` / `Ctrl+Maj+Tab` suivant / précédent |
@@ -475,17 +475,29 @@ pourrait lancer un programme téléchargé.
 | Taille de l'interface | 100 % | Tout, texte et contrôles |
 | Taille du texte des journaux | 0 (thème) | |
 | Disposition des nouveaux onglets | — | Nom d'une disposition enregistrée (Affichage → Dispositions) |
+| Police de l'interface / des listes de fichiers / des journaux | Police du thème | Une police TrueType ou OpenType du dossier des polices de Windows, par son nom ; une police illisible est signalée dans le journal système et la police du thème reste |
 | Onglets sous les panneaux | désactivé | |
+| Onglets sur plusieurs lignes quand ils ne tiennent pas | désactivé | |
+| Largeur minimale d'un onglet | 0 (son titre) | En points |
+| Grands boutons dans les barres d'outils | désactivé | Barre du haut, barres des panneaux, barre de la file |
+| Bouton Favoris scindé | désactivé | Sa partie principale se connecte au dernier site |
 | Tailles des fichiers | Dynamique | **Octets** (`1 234 567 o`), **Ko** (`1 206 Ko`, arrondi au-dessus) ou **Dynamique** (o, Ko, Mo, Go…) dans les listes de fichiers |
 | Afficher les fichiers et dossiers cachés dans les panneaux locaux | activé | Éléments avec l'attribut Windows *caché* |
 | Clic droit dans un panneau local : menu de l'Explorateur Windows | désactivé | Le menu de Windows pour la sélection (Ouvrir avec, Envoyer vers, Propriétés…) ; le menu d'UltraRushFTP reste dans les menus Édition et FTP, et son entrée *Menu de l'Explorateur Windows…* donne le menu de Windows quand l'option est désactivée |
 | Relire le dossier d'un téléchargement en cours toutes les | 0 s (jamais) | Le panneau local qui montre le dossier d'un téléchargement en cours est relu, pour suivre la taille du fichier |
 | Colonnes ajustées à leur contenu : Local, Distant, File | désactivé | Colonnes taille, date et attributs ajustées à ce qu'elles montrent |
 | Dossiers avant les fichiers | activé | |
+| Lister les liens à part | désactivé | Liens (🔗) entre les dossiers et les fichiers |
 | Taille et date : plus grand / plus récent d'abord | désactivé | Premier clic sur ces colonnes |
 | Noms surlignés | — | Masques et une couleur par thème ; le contraste contre les fonds des listes est affiché (4,5:1 au moins est conseillé) |
 | Mes propres couleurs pour les lignes des journaux | désactivé | Commande, réponse, état, erreur, par thème, avec leur contraste |
+| Couleur propre des barres de progression | désactivé | Par thème, avec son contraste |
 | Double-clic sur un fichier | Le transférer | Ou l'afficher (fichiers distants), ou rien |
+| Double-clic sur une ligne de journal | Copier la ligne | Ou rien |
+| Double-clic sur un site du gestionnaire | Se connecter | Ou rien |
+| Double-clic sur le titre d'un panneau de fichiers | Rien | Actualiser, dossier parent, ou basculer entre local et distant |
+| Double-clic sur un onglet | Rien | Nouvel onglet des mêmes sites, ou fermer l'onglet |
+| Double-clic sur un élément de la file | Rien | Le modifier, le réessayer (élément en échec ou arrêté) ou le retirer |
 | Confirmations | quitter, fermer un onglet occupé : activé ; retirer de la file : désactivé | Quitter quand des éléments restent à transférer ; fermer un onglet avec des connexions ou une file ; retirer des éléments de la file |
 | Commandes de site | `SITE HELP`, `SITE WHO`, `SITE NEW`, `SITE SEARCH %1`, `SITE STAT`, `SYST` + `FEAT` | Nom et commandes (une par ligne) du menu FTP › Commandes de site |
 
@@ -508,6 +520,7 @@ montre les touches en vigueur. Les flèches, `Entrée`, `Échap`, `Tab`, `Ctrl+T
 | Toujours afficher l'icône | désactivé | Icône dans la zone de notification ; un clic affiche la fenêtre |
 | Réduire y cache la fenêtre | désactivé | |
 | Faire clignoter le bouton de la barre des tâches à la fin d'une file en arrière-plan | activé | |
+| Faire clignoter le bouton de la barre des tâches pendant les transferts en arrière-plan | désactivé | S'arrête à leur fin ou quand la fenêtre revient au premier plan |
 | Événements : son, bulle | file terminée et nouveautés : son Windows et bulle ; échec d'un transfert : bulle | Son : vide, `system` ou un fichier `.wav` (`▶` l'écoute) ; bulles au-dessus de l'icône, ou dans un coin de la fenêtre sans elle ; chaque événement va aussi dans le journal système |
 | Dossiers surveillés | — | Site (nom du gestionnaire), dossier, intervalle ; chaque vérification liste le dossier sur sa propre connexion et les nouveaux noms sont signalés (la première lecture ne fait que noter) |
 

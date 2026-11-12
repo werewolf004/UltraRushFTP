@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (287 topics): ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
+Summary (287 topics): ✅ 258 · 🟡 10 · ⬜ 1 · ➖ 18.
 
 ## Main window and menus
 
@@ -126,7 +126,7 @@ Summary (287 topics): ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
 | Topic | Status | Notes |
 |---|---|---|
 | Main interface layout (panels, logs, queue, status bar) | ✅ | Dock with panels, queue, three logs, script, window list, Task window; saved layouts |
-| Side indicator | 🟡 | `▸` on the active panel |
+| Side indicator | ✅ | `▸` on the active panel, its title named for screen readers ("Left panel: Local (active)"); double-click action in the options |
 | Connect to FTP from the favourites menu | ✅ | `★ Favourites ▾` in the toolbar |
 | Disconnect from site | ✅ | |
 | Lock / unlock toolbar and dock | ➖ | The dock is rearranged by dragging; no toolbar to lock |
@@ -316,23 +316,23 @@ Summary (287 topics): ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
 
 | Topic | Status | Notes |
 |---|---|---|
-| System tray: minimize, flash while transferring, always show | 🟡 | Minimize and always show; the button flashes when a queue ends, not during the transfers |
+| System tray: minimize, flash while transferring, always show | ✅ | Minimize, always show; the taskbar button flashes when a queue ends and, as an option, while transfers run in the background |
 | Local window: full path in the address bar | ✅ | |
 | Local window: show hidden files | ✅ | Options › Interface |
 | File size display: bytes / KB / dynamic | ✅ | Options › Interface › File sizes |
 | Flash the window when transfers end | ✅ | When the window is in the background |
 | Refresh the size of a file being downloaded | ✅ | Options › Interface: the local folder of a running download is read again every N seconds |
-| Favourites menu: split, history, quick connect entry, recent sites | 🟡 | Recent sites and every site; no split menu, no history of quick connections |
+| Favourites menu: split, history, quick connect entry, recent sites | ✅ | Recent sites, quick connections (10, without their password), every site; split button connecting to the last site |
 | Gradient side indicator, hide selection without focus, name separator | ➖ | Cosmetic options of the Delphi interface |
 | Language | 🟡 | English and French |
 | Sort: remote and local modes | ✅ | Click on a column |
-| Sort: links apart, descending by default for date and size | 🟡 | Largest / newest first, folders first or not; links are not apart |
+| Sort: links apart, descending by default for date and size | ✅ | Largest / newest first, folders first or not, links apart (🔗) between folders and files |
 | Highlights (coloured masks) | ✅ | A colour per theme, contrast shown |
-| Fonts (application, lists, log) | 🟡 | Size of the whole interface and of the logs; no choice of font |
-| Colours (rows, log, progress bar), colour themes | 🟡 | Themes checked for contrast; own log and highlight colours with their contrast; no progress bar colour |
-| Layout: tabs, several lines, tabs at the bottom, width | 🟡 | Tabs above or below; one line |
+| Fonts (application, lists, log) | ✅ | Fonts of Windows by name for the interface, the file lists and the logs; size of the interface and of the logs |
+| Colours (rows, log, progress bar), colour themes | ✅ | Themes checked for contrast; own log, highlight and progress bar colours per theme, with their contrast |
+| Layout: tabs, several lines, tabs at the bottom, width | ✅ | Tabs above or below, on several lines, least width |
 | Layout: caption areas of dock panels | ➖ | egui_dock tabs |
-| Layout: tab switching for remote/local, large icons | ⬜ | |
+| Layout: tab switching for remote/local, large icons | ✅ | View › Layouts › Panels as tabs; large buttons in the toolbars |
 | Layout: performance options | ➖ | Not relevant with the GPU renderer |
 | Style (XP theme, flat, Office 2003...) | ➖ | Delphi toolkit styles |
 | Status bar: queue times, progress bar format (`%p`, `%s`, `%e`, `%c`) | ✅ | `%p` `%b` `%s` `%e` `%c` |
@@ -341,7 +341,7 @@ Summary (287 topics): ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
 
 | Topic | Status | Notes |
 |---|---|---|
-| Double-click actions (file, log, site, side indicator, tab, queue item) | 🟡 | Double-click on a file: transfer, view or nothing; the others are fixed |
+| Double-click actions (file, log, site, side indicator, tab, queue item) | ✅ | Each chosen in Options › Interface |
 | Drag from Explorer to a remote panel | ✅ | Into the folder of the remote panel under the pointer |
 | Paste local files into a remote panel (`Ctrl+V`) | ✅ | |
 | Explorer context menu in the local panel | ✅ | Options › Interface (right-click), or *Windows Explorer menu…* of the panel menu |

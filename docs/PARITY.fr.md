@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (287 sujets) : ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
+Résumé (287 sujets) : ✅ 258 · 🟡 10 · ⬜ 1 · ➖ 18.
 
 ## Fenêtre principale et menus
 
@@ -126,7 +126,7 @@ Résumé (287 sujets) : ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
 | Sujet | État | Remarques |
 |---|---|---|
 | Disposition principale (panneaux, journaux, file, barre d'état) | ✅ | Dock avec panneaux, file, trois journaux, script, liste des fenêtres, fenêtre des tâches ; dispositions enregistrées |
-| Indicateur de côté | 🟡 | `▸` sur le panneau actif |
+| Indicateur de côté | ✅ | `▸` sur le panneau actif, son titre nommé pour les lecteurs d'écran (« Panneau gauche : Local (actif) ») ; action du double-clic dans les options |
 | Se connecter depuis le menu des favoris | ✅ | `★ Favoris ▾` dans la barre d'outils |
 | Se déconnecter d'un site | ✅ | |
 | Verrouiller / déverrouiller barre d'outils et dock | ➖ | Le dock se réorganise par glisser ; pas de barre d'outils à verrouiller |
@@ -316,23 +316,23 @@ Résumé (287 sujets) : ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Zone de notification : réduire, clignoter pendant les transferts, toujours afficher | 🟡 | Réduire et toujours afficher ; le bouton clignote à la fin d'une file, pas pendant les transferts |
+| Zone de notification : réduire, clignoter pendant les transferts, toujours afficher | ✅ | Réduire, toujours afficher ; le bouton de la barre des tâches clignote à la fin d'une file et, en option, pendant les transferts en arrière-plan |
 | Fenêtre locale : chemin complet dans la barre d'adresse | ✅ | |
 | Fenêtre locale : afficher les fichiers cachés | ✅ | Options › Interface |
 | Affichage des tailles : octets / Ko / dynamique | ✅ | Options › Interface › Tailles des fichiers |
 | Faire clignoter la fenêtre à la fin des transferts | ✅ | Quand la fenêtre est en arrière-plan |
 | Actualiser la taille d'un fichier en cours de téléchargement | ✅ | Options › Interface : le dossier local d'un téléchargement en cours est relu toutes les N secondes |
-| Menu des favoris : découpage, historique, entrée connexion rapide, sites récents | 🟡 | Sites récents et tous les sites ; pas de menu scindé, pas d'historique des connexions rapides |
+| Menu des favoris : découpage, historique, entrée connexion rapide, sites récents | ✅ | Sites récents, connexions rapides (10, sans leur mot de passe), tous les sites ; bouton scindé qui se connecte au dernier site |
 | Indicateur de côté en dégradé, masquer la sélection sans focus, séparateur de noms | ➖ | Options cosmétiques de l'interface Delphi |
 | Langue | 🟡 | Anglais et français |
 | Tri : modes distant et local | ✅ | Clic sur une colonne |
-| Tri : liens à part, décroissant par défaut pour date et taille | 🟡 | Plus grand / plus récent d'abord, dossiers d'abord ou non ; les liens ne sont pas à part |
+| Tri : liens à part, décroissant par défaut pour date et taille | ✅ | Plus grand / plus récent d'abord, dossiers d'abord ou non, liens à part (🔗) entre dossiers et fichiers |
 | Surlignage (masques colorés) | ✅ | Une couleur par thème, contraste affiché |
-| Polices (application, listes, journal) | 🟡 | Taille de toute l'interface et des journaux ; pas de choix de police |
-| Couleurs (lignes, journal, barre de progression), thèmes de couleurs | 🟡 | Thèmes vérifiés pour le contraste ; couleurs des journaux et du surlignage avec leur contraste ; pas de couleur de la barre de progression |
-| Disposition : onglets, plusieurs lignes, onglets en bas, largeur | 🟡 | Onglets en haut ou en bas ; une ligne |
+| Polices (application, listes, journal) | ✅ | Polices de Windows par leur nom pour l'interface, les listes de fichiers et les journaux ; taille de l'interface et des journaux |
+| Couleurs (lignes, journal, barre de progression), thèmes de couleurs | ✅ | Thèmes vérifiés pour le contraste ; couleurs des journaux, du surlignage et des barres de progression par thème, avec leur contraste |
+| Disposition : onglets, plusieurs lignes, onglets en bas, largeur | ✅ | Onglets en haut ou en bas, sur plusieurs lignes, largeur minimale |
 | Disposition : barres de titre des panneaux du dock | ➖ | Onglets egui_dock |
-| Disposition : bascule par onglets distant/local, grandes icônes | ⬜ | |
+| Disposition : bascule par onglets distant/local, grandes icônes | ✅ | Affichage › Dispositions › Panneaux en onglets ; grands boutons dans les barres d'outils |
 | Disposition : options de performance | ➖ | Sans objet avec le rendu GPU |
 | Style (thème XP, plat, Office 2003…) | ➖ | Styles de la boîte à outils Delphi |
 | Barre d'état : durées de la file, format de la barre de progression (`%p`, `%s`, `%e`, `%c`) | ✅ | `%p` `%b` `%s` `%e` `%c` |
@@ -341,7 +341,7 @@ Résumé (287 sujets) : ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18.
 
 | Sujet | État | Remarques |
 |---|---|---|
-| Actions du double-clic (fichier, journal, site, indicateur de côté, onglet, élément de file) | 🟡 | Double-clic sur un fichier : transférer, afficher ou rien ; les autres sont fixes |
+| Actions du double-clic (fichier, journal, site, indicateur de côté, onglet, élément de file) | ✅ | Chacune choisie dans Options › Interface |
 | Glisser depuis l'Explorateur vers un panneau distant | ✅ | Dans le dossier du panneau distant sous le pointeur |
 | Coller des fichiers locaux dans un panneau distant (`Ctrl+V`) | ✅ | |
 | Menu contextuel de l'Explorateur dans le panneau local | ✅ | Options › Interface (clic droit), ou *Menu de l'Explorateur Windows…* du menu du panneau |

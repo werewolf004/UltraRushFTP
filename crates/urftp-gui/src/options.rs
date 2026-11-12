@@ -805,26 +805,81 @@ pub(crate) fn interface_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::Inte
     display_ui(ui, s);
     ui.add_space(8.0);
     ui.label(RichText::new(t!("options.ui_mouse_section")).strong());
-    ui.horizontal(|ui| {
-        use urftp_core::settings::FileDoubleClick as D;
-        let label = |d: D| match d {
-            D::Transfer => t!("options.ui_dbl_transfer"),
-            D::View => t!("options.ui_dbl_view"),
-            D::Nothing => t!("options.ui_dbl_nothing"),
-        };
-        let l = ui.label(t!("options.ui_double_click"));
-        let combo = egui::ComboBox::from_id_salt("opt-dbl").selected_text(label(s.double_click_file)).width(220.0).show_ui(ui, |ui| {
-            for d in [D::Transfer, D::View, D::Nothing] {
-                ui.selectable_value(&mut s.double_click_file, d, label(d));
-            }
-        });
-        combo.response.labelled_by(l.id);
-    });
+    double_click_ui(ui, s);
     ui.add_space(8.0);
     ui.label(RichText::new(t!("options.ui_confirm_section")).strong());
     ui.checkbox(&mut s.confirm_exit, t!("options.ui_confirm_exit"));
     ui.checkbox(&mut s.confirm_close_tab, t!("options.ui_confirm_close_tab"));
     ui.checkbox(&mut s.confirm_queue_remove, t!("options.ui_confirm_queue"));
+}
+
+/// A choice among values in a drop-down list, with its label.
+fn choice<T: PartialEq + Copy>(ui: &mut egui::Ui, id: &str, label: &str, value: &mut T, items: &[(T, String)]) {
+    ui.horizontal(|ui| {
+        let l = ui.label(label);
+        let current = items.iter().find(|(v, _)| v == value).map(|(_, t)| t.clone()).unwrap_or_default();
+        let combo = egui::ComboBox::from_id_salt(id).selected_text(current).width(220.0).show_ui(ui, |ui| {
+            for (v, t) in items {
+                ui.selectable_value(value, *v, t.clone());
+            }
+        });
+        combo.response.labelled_by(l.id);
+    });
+}
+
+/// What the double-clicks do: file, log line, site, side indicator, tab, queue item.
+fn double_click_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettings) {
+    use urftp_core::settings::{
+        FileDoubleClick as F, LogDoubleClick as L, QueueDoubleClick as Q, SideDoubleClick as D, SiteDoubleClick as S, TabDoubleClick as T,
+    };
+    let nothing = t!("options.ui_dbl_nothing");
+    let items = [(F::Transfer, t!("options.ui_dbl_transfer")), (F::View, t!("options.ui_dbl_view")), (F::Nothing, nothing.clone())];
+    choice(ui, "opt-dbl", &t!("options.ui_double_click"), &mut s.double_click_file, &items);
+    let items = [(L::Copy, t!("options.ui_dbl_log_copy")), (L::Nothing, nothing.clone())];
+    choice(ui, "opt-dbl-log", &t!("options.ui_dbl_log"), &mut s.double_click_log, &items);
+    let items = [(S::Connect, t!("options.ui_dbl_site_connect")), (S::Nothing, nothing.clone())];
+    choice(ui, "opt-dbl-site", &t!("options.ui_dbl_site"), &mut s.double_click_site, &items);
+    let items = [
+        (D::Nothing, nothing.clone()),
+        (D::Refresh, t!("options.ui_dbl_side_refresh")),
+        (D::Parent, t!("options.ui_dbl_side_parent")),
+        (D::Switch, t!("options.ui_dbl_side_switch")),
+    ];
+    choice(ui, "opt-dbl-side", &t!("options.ui_dbl_side"), &mut s.double_click_side, &items);
+    let items =
+        [(T::Nothing, nothing.clone()), (T::Duplicate, t!("options.ui_dbl_tab_duplicate")), (T::Close, t!("options.ui_dbl_tab_close"))];
+    choice(ui, "opt-dbl-tab", &t!("options.ui_dbl_tab"), &mut s.double_click_tab, &items);
+    let items = [
+        (Q::Nothing, nothing),
+        (Q::Edit, t!("options.ui_dbl_queue_edit")),
+        (Q::Retry, t!("options.ui_dbl_queue_retry")),
+        (Q::Remove, t!("options.ui_dbl_queue_remove")),
+    ];
+    choice(ui, "opt-dbl-queue", &t!("options.ui_dbl_queue"), &mut s.double_click_queue, &items);
+}
+
+/// Fonts of the interface, the file lists and the logs.
+fn fonts_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettings) {
+    egui::Grid::new("opt-fonts").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+        for (key, value, id) in [
+            ("options.look_font_app", &mut s.font_app, "opt-font-app"),
+            ("options.look_font_lists", &mut s.font_lists, "opt-font-lists"),
+            ("options.look_font_log", &mut s.font_log, "opt-font-log"),
+        ] {
+            let l = ui.label(urftp_i18n::text(key));
+            let shown = if value.trim().is_empty() { t!("options.look_font_theme") } else { theme::font_label(value.trim()) };
+            // The fonts folder is read when a list is first opened.
+            let combo = egui::ComboBox::from_id_salt(id).selected_text(shown).width(260.0).height(320.0).show_ui(ui, |ui| {
+                ui.selectable_value(value, String::new(), t!("options.look_font_theme"));
+                for (file, name) in theme::system_fonts() {
+                    ui.selectable_value(value, file.clone(), name);
+                }
+            });
+            combo.response.labelled_by(l.id);
+            ui.end_row();
+        }
+    });
+    ui.label(RichText::new(t!("options.look_font_note")).weak());
 }
 
 /// "Security" page: master password, single instance, daily backup.
@@ -930,6 +985,7 @@ fn notifications_ui(ui: &mut egui::Ui, n: &mut urftp_core::settings::NotifySetti
     ui.checkbox(&mut n.tray_always, t!("options.nt_tray_always"));
     ui.checkbox(&mut n.minimize_to_tray, t!("options.nt_minimize"));
     ui.checkbox(&mut n.flash_on_queue_end, t!("options.nt_flash"));
+    ui.checkbox(&mut n.flash_while_transferring, t!("options.nt_flash_transfers"));
     ui.add_space(8.0);
     ui.label(RichText::new(t!("options.nt_events_section")).strong());
     for e in NotifyEvent::ALL {
@@ -1052,7 +1108,16 @@ fn display_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettings
         theme::grid_row(ui, t!("options.look_log_size"), egui::DragValue::new(&mut s.log_text_size).range(0..=40));
         theme::grid_row(ui, t!("options.look_default_layout"), theme::single_line(&mut s.default_layout).desired_width(160.0));
     });
+    fonts_ui(ui, s);
     ui.checkbox(&mut s.tabs_bottom, t!("options.look_tabs_bottom"));
+    ui.checkbox(&mut s.tabs_multiline, t!("options.look_tabs_multiline"));
+    ui.horizontal(|ui| {
+        let l = ui.label(t!("options.look_tab_width"));
+        ui.add(egui::DragValue::new(&mut s.tab_min_width).range(0..=400)).labelled_by(l.id);
+        ui.label(RichText::new(t!("options.look_tab_width_auto")).weak());
+    });
+    ui.checkbox(&mut s.large_icons, t!("options.look_large_icons"));
+    ui.checkbox(&mut s.favorites_split, t!("options.look_favorites_split"));
     ui.horizontal(|ui| {
         use urftp_core::settings::SizeDisplay;
         ui.label(t!("options.look_sizes"));
@@ -1074,6 +1139,7 @@ fn display_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettings
         ui.checkbox(&mut s.autosize_queue, t!("options.look_autosize_queue"));
     });
     ui.checkbox(&mut s.dirs_first, t!("options.look_dirs_first"));
+    ui.checkbox(&mut s.links_apart, t!("options.look_links_apart"));
     ui.checkbox(&mut s.sort_desc_first, t!("options.look_desc_first"));
     ui.add_space(6.0);
     ui.label(RichText::new(t!("options.look_highlights")).strong());
@@ -1121,6 +1187,19 @@ fn display_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettings
                 color_field(ui, &mut s.log_colors_light[i], false, &format!("{label} ({})", t!("options.look_light")));
                 ui.end_row();
             }
+        });
+    }
+    ui.add_space(6.0);
+    ui.checkbox(&mut s.custom_progress, t!("options.look_progress"));
+    if s.custom_progress {
+        egui::Grid::new("opt-progress").num_columns(4).spacing([8.0, 6.0]).show(ui, |ui| {
+            let name = t!("options.look_progress");
+            ui.label(t!("options.look_dark"));
+            color_field(ui, &mut s.progress_dark, true, &format!("{name} ({})", t!("options.look_dark")));
+            ui.end_row();
+            ui.label(t!("options.look_light"));
+            color_field(ui, &mut s.progress_light, false, &format!("{name} ({})", t!("options.look_light")));
+            ui.end_row();
         });
     }
 }

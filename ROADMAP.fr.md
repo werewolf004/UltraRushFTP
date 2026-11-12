@@ -158,6 +158,15 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
 - ✅ Jetons de date dans les signets, traduction d'adresse IP, menu de l'Explorateur
   Windows dans les panneaux locaux.
 
+### N — Apparence
+- ✅ Polices de l'interface, des listes de fichiers et des journaux ; onglets sur plusieurs
+  lignes et leur largeur ; grands boutons ; liens listés à part ; couleur des barres de
+  progression.
+- ✅ Actions du double-clic (ligne de journal, site, titre de panneau, onglet, élément de
+  la file) ; panneaux en onglets.
+- ✅ Favoris : bouton scindé, connexions rapides gardées ; clignotement pendant les
+  transferts.
+
 ### Distribution
 - ✅ Manifeste d'application (`longPathAware`, DPI par écran), icône et ressources de
   version.

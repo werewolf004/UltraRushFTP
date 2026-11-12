@@ -9,6 +9,35 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+Appearance (block N).
+
+### Added
+
+- Options › Interface: **fonts** of the interface, of the file lists and of the logs (the
+  TrueType / OpenType fonts of Windows, by name); **tabs on several lines** and a **least
+  width of a tab**; **large buttons** in the toolbars; **links listed apart**, between the
+  folders and the files (🔗); **own colour of the progress bars**, per theme, with its
+  contrast; a **split Favourites button** whose main part connects to the last site.
+- **Double-click actions**: on a log line (copy it), on a site of the site manager
+  (connect), on the title of a file panel (refresh, parent folder, switch local / remote),
+  on a tab (new tab of the same sites, close) and on a queue item (edit, try again,
+  remove).
+- Favourites: **quick connections** remembered (ten, never their password); one connects
+  again at once when anonymous, else the password field waits for the password.
+- View › Layouts › **Panels as tabs**: both file panels in one area, their titles switch
+  between them.
+- Options › Notifications: **flash the taskbar button while transfers run** in the
+  background.
+
+### Fixed
+
+- A click on the name of a file or of a queue item selects it (the text took the click):
+  double-clicking a name transfers or opens it again.
+- Site manager: the toolbar keeps its size when a site is selected, so the tree does not
+  move under the pointer.
+- The titles of the file panels have a name for screen readers ("Left panel: Local
+  (active)").
+
 ## [0.11.0] - 2026-11-12
 
 Everyday comfort (block M).

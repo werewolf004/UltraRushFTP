@@ -562,6 +562,8 @@ pub struct Settings {
     pub site_commands: Vec<SiteCommand>,
     /// Sites of the site manager last connected, most recent first.
     pub recent_sites: Vec<u64>,
+    /// Quick connections last made, most recent first (never their password).
+    pub quick_history: Vec<QuickConnection>,
     pub notify: NotifySettings,
     /// A second start shows the window already open instead.
     pub single_instance: bool,
@@ -597,6 +599,8 @@ pub struct NotifySettings {
     pub minimize_to_tray: bool,
     /// The taskbar button flashes when a queue ends while the window is in the background.
     pub flash_on_queue_end: bool,
+    /// The taskbar button flashes while transfers run with the window in the background.
+    pub flash_while_transferring: bool,
     /// What each event does (see [`NotifyEvent`]).
     pub events: Vec<EventSetting>,
     /// Remote folders checked for new items.
@@ -609,6 +613,7 @@ impl Default for NotifySettings {
             tray_always: false,
             minimize_to_tray: false,
             flash_on_queue_end: true,
+            flash_while_transferring: false,
             events: NotifyEvent::ALL.iter().map(|&e| EventSetting::default_for(e)).collect(),
             monitors: Vec::new(),
         }
@@ -778,6 +783,91 @@ pub struct InterfaceSettings {
     /// A right-click in a local panel shows the Windows Explorer menu instead of the menu
     /// of UltraRushFTP.
     pub local_explorer_menu: bool,
+    /// Fonts of the interface, of the file lists and of the logs: a file of the Windows
+    /// fonts folder (`arial.ttf`) or a full path (empty: the font of the theme).
+    pub font_app: String,
+    pub font_lists: String,
+    pub font_log: String,
+    /// The tabs of the window wrap on several lines instead of one.
+    pub tabs_multiline: bool,
+    /// Least width of a tab, in points (0: the width of its title).
+    pub tab_min_width: u32,
+    /// Larger buttons in the toolbars.
+    pub large_icons: bool,
+    /// Links are listed apart, between the folders and the files.
+    pub links_apart: bool,
+    /// The colours below replace the colour of the progress bars.
+    pub custom_progress: bool,
+    pub progress_dark: String,
+    pub progress_light: String,
+    /// Double-click on a log line, on a site of the site manager, on the side indicator
+    /// (title of a file panel), on a tab and on a queue item.
+    pub double_click_log: LogDoubleClick,
+    pub double_click_site: SiteDoubleClick,
+    pub double_click_side: SideDoubleClick,
+    pub double_click_tab: TabDoubleClick,
+    pub double_click_queue: QueueDoubleClick,
+    /// The Favourites button is split: its main part connects to the last site, its arrow
+    /// opens the menu.
+    pub favorites_split: bool,
+}
+
+/// What a double-click on a log line does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum LogDoubleClick {
+    /// The line goes to the clipboard.
+    #[default]
+    Copy,
+    Nothing,
+}
+
+/// What a double-click on a site of the site manager does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SiteDoubleClick {
+    /// Connect (FTPRush).
+    #[default]
+    Connect,
+    Nothing,
+}
+
+/// What a double-click on the title of a file panel does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SideDoubleClick {
+    #[default]
+    Nothing,
+    /// Read the folder again.
+    Refresh,
+    /// Go to the parent folder.
+    Parent,
+    /// Switch the panel between local and remote.
+    Switch,
+}
+
+/// What a double-click on a tab does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TabDoubleClick {
+    #[default]
+    Nothing,
+    /// A new tab of the same sites.
+    Duplicate,
+    Close,
+}
+
+/// What a double-click on a queue item does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum QueueDoubleClick {
+    #[default]
+    Nothing,
+    /// The item editor.
+    Edit,
+    /// Try a failed or stopped item again.
+    Retry,
+    Remove,
 }
 
 /// How the file lists show sizes.
@@ -805,6 +895,32 @@ pub struct Highlight {
 impl Default for Highlight {
     fn default() -> Self {
         Self { masks: "*.nfo;*.sfv".into(), dark: "#E8B33C".into(), light: "#7A5200".into() }
+    }
+}
+
+/// A quick connection remembered by the Favourites menu (no password kept).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuickConnection {
+    pub protocol: crate::site::SiteProtocol,
+    pub host: String,
+    pub port: u16,
+    pub user: String,
+}
+
+impl QuickConnection {
+    /// Quick connections remembered.
+    pub const KEPT: usize = 10;
+
+    /// Puts `c` first in `list` (an older one to the same place is dropped).
+    pub fn remember(list: &mut Vec<QuickConnection>, c: QuickConnection) {
+        list.retain(|x| !(x.protocol == c.protocol && x.host.eq_ignore_ascii_case(&c.host) && x.port == c.port && x.user == c.user));
+        list.insert(0, c);
+        list.truncate(Self::KEPT);
+    }
+
+    /// `user@host:port`.
+    pub fn label(&self) -> String {
+        if self.user.is_empty() { format!("{}:{}", self.host, self.port) } else { format!("{}@{}:{}", self.user, self.host, self.port) }
     }
 }
 
@@ -855,6 +971,22 @@ impl Default for InterfaceSettings {
             autosize_remote: false,
             autosize_queue: false,
             local_explorer_menu: false,
+            font_app: String::new(),
+            font_lists: String::new(),
+            font_log: String::new(),
+            tabs_multiline: false,
+            tab_min_width: 0,
+            large_icons: false,
+            links_apart: false,
+            custom_progress: false,
+            progress_dark: "#2F6FDB".into(),
+            progress_light: "#1F56C2".into(),
+            double_click_log: LogDoubleClick::Copy,
+            double_click_site: SiteDoubleClick::Connect,
+            double_click_side: SideDoubleClick::Nothing,
+            double_click_tab: TabDoubleClick::Nothing,
+            double_click_queue: QueueDoubleClick::Nothing,
+            favorites_split: false,
         }
     }
 }
@@ -1034,6 +1166,7 @@ impl Default for Settings {
             interface: InterfaceSettings::default(),
             site_commands: default_site_commands(),
             recent_sites: Vec::new(),
+            quick_history: Vec::new(),
             notify: NotifySettings::default(),
             single_instance: false,
             backup_daily: false,
@@ -1262,5 +1395,25 @@ mod tests {
         s.save(&p).unwrap();
         assert_eq!(Settings::load(&p).unwrap(), s);
         std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn quick_history_keeps_ten_without_doubles() {
+        use crate::site::SiteProtocol;
+        let mut list = Vec::new();
+        for i in 0..12u16 {
+            QuickConnection::remember(
+                &mut list,
+                QuickConnection { protocol: SiteProtocol::Ftp, host: format!("h{i}.example"), port: 21, user: String::new() },
+            );
+        }
+        assert_eq!(list.len(), QuickConnection::KEPT);
+        assert_eq!(list[0].host, "h11.example");
+        let again = QuickConnection { protocol: SiteProtocol::Ftp, host: "H5.EXAMPLE".into(), port: 21, user: String::new() };
+        QuickConnection::remember(&mut list, again);
+        assert_eq!(list.len(), QuickConnection::KEPT);
+        assert_eq!(list[0].host, "H5.EXAMPLE");
+        assert_eq!(list.iter().filter(|c| c.host.eq_ignore_ascii_case("h5.example")).count(), 1);
+        assert_eq!(list[0].label(), "H5.EXAMPLE:21");
     }
 }

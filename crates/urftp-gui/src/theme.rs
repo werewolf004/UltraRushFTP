@@ -184,7 +184,31 @@ pub fn start_dark() -> bool {
 /// Uses Windows' Segoe UI (text) and Segoe UI Symbol (arrows, symbols) when present;
 /// egui's embedded fonts stay as a fallback (emojis, icons).
 pub fn install_fonts(ctx: &egui::Context) {
-    let dir = std::env::var_os("WINDIR").map(std::path::PathBuf::from).unwrap_or_else(|| "C:\\Windows".into()).join("Fonts");
+    let _ = install_fonts_with(ctx, "", "", "");
+}
+
+/// A font is chosen for the file lists (see [`lists_text`]).
+static LISTS_FONT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Font family of the file lists.
+const LISTS: &str = "lists";
+
+/// Fonts folder of Windows.
+fn fonts_dir() -> std::path::PathBuf {
+    std::env::var_os("WINDIR").map(std::path::PathBuf::from).unwrap_or_else(|| "C:\\Windows".into()).join("Fonts")
+}
+
+/// File of a font chosen in the options: a full path, or a file of the fonts folder.
+fn font_path(name: &str) -> std::path::PathBuf {
+    let p = std::path::Path::new(name);
+    if p.is_absolute() { p.to_path_buf() } else { fonts_dir().join(name) }
+}
+
+/// [`install_fonts`], then the fonts chosen for the interface, the file lists and the logs
+/// (files of the fonts folder or full paths, empty: the font of the theme) come first.
+/// Answers the chosen fonts that could not be read; the theme's font replaces them.
+pub fn install_fonts_with(ctx: &egui::Context, app: &str, lists: &str, log: &str) -> Vec<String> {
+    let dir = fonts_dir();
     let mut fonts = egui::FontDefinitions::default();
     let mut added = Vec::new();
     for (name, file) in [("segoe-ui", "segoeui.ttf"), ("segoe-symbol", "seguisym.ttf")] {
@@ -192,9 +216,6 @@ pub fn install_fonts(ctx: &egui::Context) {
             fonts.font_data.insert(name.into(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
             added.push(name.to_string());
         }
-    }
-    if added.is_empty() {
-        return;
     }
     if let Some(prop) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
         for (i, name) in added.iter().enumerate() {
@@ -206,7 +227,157 @@ pub fn install_fonts(ctx: &egui::Context) {
     {
         mono.push("segoe-symbol".into());
     }
+    let mut failed = Vec::new();
+    // A file that is not a TrueType / OpenType font is refused before egui reads it.
+    let mut load = |fonts: &mut egui::FontDefinitions, key: &str, file: &str| -> bool {
+        let file = file.trim();
+        if file.is_empty() {
+            return false;
+        }
+        match std::fs::read(font_path(file)) {
+            Ok(bytes) if font_name(&bytes).is_some() => {
+                fonts.font_data.insert(key.into(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
+                true
+            }
+            _ => {
+                failed.push(file.to_string());
+                false
+            }
+        }
+    };
+    if load(&mut fonts, "user-app", app)
+        && let Some(prop) = fonts.families.get_mut(&egui::FontFamily::Proportional)
+    {
+        prop.insert(0, "user-app".into());
+    }
+    if load(&mut fonts, "user-log", log)
+        && let Some(mono) = fonts.families.get_mut(&egui::FontFamily::Monospace)
+    {
+        mono.insert(0, "user-log".into());
+    }
+    let mut family = fonts.families.get(&egui::FontFamily::Proportional).cloned().unwrap_or_default();
+    let lists_on = load(&mut fonts, "user-lists", lists);
+    if lists_on {
+        family.insert(0, "user-lists".into());
+    }
+    fonts.families.insert(egui::FontFamily::Name(LISTS.into()), family);
+    LISTS_FONT.store(lists_on, std::sync::atomic::Ordering::Relaxed);
     ctx.set_fonts(fonts);
+    failed
+}
+
+/// Text of the file lists, in the font chosen for them.
+pub fn lists_text(text: impl Into<RichText>) -> RichText {
+    let t = text.into();
+    if LISTS_FONT.load(std::sync::atomic::Ordering::Relaxed) { t.family(egui::FontFamily::Name(LISTS.into())) } else { t }
+}
+
+fn be16(d: &[u8], o: usize) -> Option<u16> {
+    d.get(o..o + 2).map(|b| u16::from_be_bytes([b[0], b[1]]))
+}
+
+fn be32(d: &[u8], o: usize) -> Option<u32> {
+    d.get(o..o + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+}
+
+/// Place and length of the `name` table from the table directory of a TrueType / OpenType
+/// file (`head`: its first bytes), when it is one with characters (`cmap`).
+fn name_table_place(head: &[u8]) -> Option<(usize, usize)> {
+    if !matches!(be32(head, 0)?, 0x0001_0000 | 0x4F54_544F | 0x7472_7565) {
+        return None;
+    }
+    let mut name = None;
+    let mut cmap = false;
+    for i in 0..usize::from(be16(head, 4)?) {
+        let r = 12 + 16 * i;
+        let tag = head.get(r..r + 4)?;
+        let place = (be32(head, r + 8)? as usize, be32(head, r + 12)? as usize);
+        match tag {
+            b"name" => name = Some(place),
+            b"cmap" => cmap = true,
+            _ => {}
+        }
+    }
+    name.filter(|_| cmap)
+}
+
+/// Full name of a font from its `name` table (English Windows name first).
+fn name_from_table(t: &[u8]) -> Option<String> {
+    let count = usize::from(be16(t, 2)?);
+    let strings = usize::from(be16(t, 4)?);
+    let mut best: Option<(u8, String)> = None;
+    for i in 0..count {
+        let r = 6 + 12 * i;
+        let (platform, language, id) = (be16(t, r)?, be16(t, r + 4)?, be16(t, r + 6)?);
+        let (len, off) = (usize::from(be16(t, r + 8)?), usize::from(be16(t, r + 10)?));
+        if id != 4 && id != 1 {
+            continue;
+        }
+        let Some(raw) = t.get(strings + off..strings + off + len) else { continue };
+        let text = match platform {
+            0 | 3 => String::from_utf16_lossy(&raw.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes(*c)).collect::<Vec<_>>()),
+            1 => raw.iter().map(|&b| char::from(b)).collect(),
+            _ => continue,
+        };
+        let score = u8::from(id == 4) * 4 + u8::from(platform == 3) * 2 + u8::from(language == 0x409);
+        if !text.trim().is_empty() && best.as_ref().is_none_or(|(s, _)| score > *s) {
+            best = Some((score, text.trim().to_string()));
+        }
+    }
+    best.map(|(_, n)| n)
+}
+
+/// Full name of a TrueType / OpenType font (`None`: not such a font).
+pub fn font_name(data: &[u8]) -> Option<String> {
+    let (off, len) = name_table_place(data)?;
+    name_from_table(data.get(off..off.checked_add(len)?)?)
+}
+
+/// Name of a font file, read from its table directory and `name` table only.
+fn font_file_name(path: &std::path::Path) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut head = vec![0u8; 12];
+    f.read_exact(&mut head).ok()?;
+    let tables = usize::from(be16(&head, 4)?);
+    head.resize(12 + 16 * tables, 0);
+    f.read_exact(&mut head[12..]).ok()?;
+    let (off, len) = name_table_place(&head)?;
+    let mut table = vec![0u8; len.min(1 << 20)];
+    f.seek(SeekFrom::Start(off as u64)).ok()?;
+    f.read_exact(&mut table).ok()?;
+    name_from_table(&table)
+}
+
+static SYSTEM_FONTS: std::sync::OnceLock<Vec<(String, String)>> = std::sync::OnceLock::new();
+
+/// Fonts of the Windows fonts folder: (file, name), by name (read once).
+pub fn system_fonts() -> &'static [(String, String)] {
+    SYSTEM_FONTS.get_or_init(|| {
+        let mut v: Vec<(String, String)> = std::fs::read_dir(fonts_dir())
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                let file = e.file_name().to_string_lossy().into_owned();
+                let ext = std::path::Path::new(&file).extension()?.to_string_lossy().to_lowercase();
+                if ext != "ttf" && ext != "otf" {
+                    return None;
+                }
+                Some((file, font_file_name(&e.path())?))
+            })
+            .collect();
+        v.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()).then_with(|| a.0.cmp(&b.0)));
+        v
+    })
+}
+
+/// Name shown for a chosen font: its name when the fonts folder was read, else the file.
+pub fn font_label(file: &str) -> String {
+    SYSTEM_FONTS
+        .get()
+        .and_then(|v| v.iter().find(|(f, _)| f.eq_ignore_ascii_case(file)).map(|(_, n)| n.clone()))
+        .unwrap_or_else(|| file.to_string())
 }
 
 /// Applies the light and dark themes; `dark` selects the one shown.
@@ -374,5 +545,38 @@ mod tests {
         assert_eq!(super::human_size(5 * 1024 * 1024 * 1024), "5,0 Go");
         urftp_i18n::set_language(urftp_i18n::Lang::En);
         assert_eq!(super::human_size(1536), "1.5 KB");
+    }
+
+    #[test]
+    fn font_names() {
+        // A made-up font: table directory (cmap, name) and a name table with a Mac and a
+        // Windows full name.
+        let records: [(u16, u16, &[u8]); 2] = [(1, 0, b"Mac Name"), (3, 0x409, &[0, b'W', 0, b'i', 0, b'n'])];
+        let mut name = vec![0, 0, 0, 2, 0, 30];
+        let mut off = 0u16;
+        for (platform, language, raw) in records {
+            for v in [platform, 0, language, 4, raw.len() as u16, off] {
+                name.extend_from_slice(&v.to_be_bytes());
+            }
+            off += raw.len() as u16;
+        }
+        for (_, _, raw) in records {
+            name.extend_from_slice(raw);
+        }
+        let mut font = 0x0001_0000u32.to_be_bytes().to_vec();
+        font.extend_from_slice(&[0, 2, 0, 0, 0, 0, 0, 0]);
+        let start = 12 + 2 * 16u32;
+        for (tag, len) in [(b"cmap", 0u32), (b"name", name.len() as u32)] {
+            font.extend_from_slice(tag);
+            font.extend_from_slice(&[0; 4]);
+            font.extend_from_slice(&start.to_be_bytes());
+            font.extend_from_slice(&len.to_be_bytes());
+        }
+        font.extend_from_slice(&name);
+        assert_eq!(super::font_name(&font).as_deref(), Some("Win"));
+        assert_eq!(super::font_name(b"not a font at all"), None);
+        // No character table: refused.
+        font[12..16].copy_from_slice(b"xxxx");
+        assert_eq!(super::font_name(&font), None);
     }
 }

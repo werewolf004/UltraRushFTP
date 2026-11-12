@@ -36,6 +36,8 @@ pub(super) struct Notifier {
     pub(super) main: isize,
     /// The window is hidden in the notification area.
     pub(super) hidden: bool,
+    /// The taskbar button flashes because transfers run in the background.
+    flashing: bool,
     toasts: Vec<Toast>,
     monitors: Vec<MonitorState>,
 }
@@ -96,6 +98,25 @@ impl UltraRushApp {
         }
         if queue_end && self.options.settings.notify.flash_on_queue_end && !self.notifier.hidden {
             urftp_sys::tray::flash(self.notifier.main);
+            // That flash is the queue's: it is not stopped with the transfers.
+            self.notifier.flashing = false;
+        }
+    }
+
+    /// "Flash while transferring": the taskbar button flashes while transfers run with the
+    /// window in the background, and stops when they end.
+    fn flash_transfers(&mut self, focused: bool) {
+        let running = self.tabs.iter().any(|t| t.engine_events.is_some());
+        let want = self.options.settings.notify.flash_while_transferring && running && !focused && !self.notifier.hidden;
+        if want && !self.notifier.flashing {
+            urftp_sys::tray::flash(self.notifier.main);
+            self.notifier.flashing = true;
+        } else if self.notifier.flashing && !running {
+            urftp_sys::tray::flash_stop(self.notifier.main);
+            self.notifier.flashing = false;
+        } else if focused {
+            // Flashing stops by itself when the window comes forward.
+            self.notifier.flashing = false;
         }
     }
 
@@ -141,6 +162,7 @@ impl UltraRushApp {
             let running = self.tabs.iter().filter(|t| t.engine.is_some()).count();
             t.set_tip(&if running > 0 { t!("notify.tip_running", n = running) } else { "UltraRushFTP".to_string() });
         }
+        self.flash_transfers(ctx.input(|i| i.focused));
         self.take_tab_events();
         self.run_monitors(ctx);
     }

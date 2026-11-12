@@ -10,6 +10,37 @@ la traduction.
 
 ## [Non publié]
 
+Apparence (bloc N).
+
+### Ajouté
+
+- Options › Interface : **polices** de l'interface, des listes de fichiers et des journaux
+  (les polices TrueType / OpenType de Windows, par leur nom) ; **onglets sur plusieurs
+  lignes** et **largeur minimale d'un onglet** ; **grands boutons** dans les barres
+  d'outils ; **liens listés à part**, entre les dossiers et les fichiers (🔗) ; **couleur
+  propre des barres de progression**, par thème, avec son contraste ; **bouton Favoris
+  scindé** dont la partie principale se connecte au dernier site.
+- **Actions du double-clic** : sur une ligne de journal (la copier), sur un site du
+  gestionnaire (se connecter), sur le titre d'un panneau de fichiers (actualiser, dossier
+  parent, basculer local / distant), sur un onglet (nouvel onglet des mêmes sites, fermer)
+  et sur un élément de la file (modifier, réessayer, retirer).
+- Favoris : les **connexions rapides** sont gardées (dix, jamais leur mot de passe) ; l'une
+  d'elles se reconnecte aussitôt si elle est anonyme, sinon le champ mot de passe attend
+  le mot de passe.
+- Affichage › Dispositions › **Panneaux en onglets** : les deux panneaux de fichiers dans
+  une seule zone, leurs titres basculent de l'un à l'autre.
+- Options › Notifications : **faire clignoter le bouton de la barre des tâches pendant
+  les transferts** en arrière-plan.
+
+### Corrigé
+
+- Un clic sur le nom d'un fichier ou d'un élément de la file le sélectionne (le texte
+  prenait le clic) : le double-clic sur un nom le transfère ou l'ouvre de nouveau.
+- Gestionnaire de sites : la barre d'outils garde sa taille quand un site est choisi,
+  l'arbre ne bouge plus sous le pointeur.
+- Les titres des panneaux de fichiers ont un nom pour les lecteurs d'écran (« Panneau
+  gauche : Local (actif) »).
+
 ## [0.11.0] - 2026-11-12
 
 Confort au quotidien (bloc M).

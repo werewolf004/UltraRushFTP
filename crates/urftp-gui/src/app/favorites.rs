@@ -2,6 +2,7 @@
 //! saved as a site, "Manual download" of addresses (with incremented lists) and the
 //! clipboard watch.
 
+use urftp_core::settings::QuickConnection;
 use urftp_core::urls::{self, FtpUrl, UrlScheme};
 
 use super::*;
@@ -99,13 +100,27 @@ impl UltraRushApp {
         self.tabs[a].push_log(0, LogKind::Status, t!("fav.site_added", site = name));
     }
 
-    /// Favourites button of the toolbar: recent sites, then every site.
+    /// Favourites button of the toolbar: recent sites, quick connections, then every site.
+    /// Split (options), its main part connects to the last site and its arrow opens the menu.
     pub(super) fn favorites_menu(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let side = self.tabs[self.active].focus;
         let recent: Vec<(u64, String)> =
             self.options.settings.recent_sites.iter().filter_map(|id| self.sites.book.find(*id).map(|s| (*id, s.name.clone()))).collect();
         let entries = self.site_entries();
-        let r = ui.menu_button(t!("fav.button"), |ui| {
+        let history = self.options.settings.quick_history.clone();
+        let mut pick: Option<QuickConnection> = None;
+        let mut clear = false;
+        let mut last = None;
+        let split = self.options.settings.interface.favorites_split && !recent.is_empty();
+        if split && let Some((id, name)) = recent.first() {
+            let label = t!("fav.split_connect", site = name);
+            let r = ui.button(format!("★ {name}"));
+            theme::name(&r, &label);
+            if r.on_hover_text(&label).clicked() {
+                last = Some((*id, sites::LoginVariant::from_modifiers(ui.input(|i| i.modifiers))));
+            }
+        }
+        let menu = |ui: &mut egui::Ui| {
             ui.label(RichText::new(t!("fav.recent")).strong());
             if recent.is_empty() {
                 ui.label(RichText::new(t!("fav.no_recent")).italics());
@@ -117,6 +132,20 @@ impl UltraRushApp {
                     ui.close();
                 }
             }
+            if !history.is_empty() {
+                ui.separator();
+                ui.label(RichText::new(t!("fav.quick_history")).strong());
+                for c in &history {
+                    if ui.button(format!("⚡ {}", c.label())).clicked() {
+                        pick = Some(c.clone());
+                        ui.close();
+                    }
+                }
+                if ui.button(t!("fav.quick_clear")).clicked() {
+                    clear = true;
+                    ui.close();
+                }
+            }
             ui.separator();
             connection_menu(ui, &entries, side, actions);
             ui.separator();
@@ -124,8 +153,41 @@ impl UltraRushApp {
                 actions.push(Action::ManualDownload);
                 ui.close();
             }
-        });
+        };
+        let r = ui.menu_button(if split { "⏷".to_string() } else { t!("fav.button") }, menu);
+        theme::name(&r.response, t!("fav.button"));
         r.response.on_hover_text(t!("fav.hint"));
+        if let Some((id, variant)) = last {
+            actions.push(Action::ConnectSite(side, id, variant));
+        }
+        if clear {
+            self.options.settings.quick_history.clear();
+            self.options.touch(ui.ctx());
+        }
+        if let Some(c) = pick {
+            self.use_quick(c, ui.ctx());
+        }
+    }
+
+    /// A quick connection of the history fills the quick bar; it connects at once when it
+    /// needs no password (anonymous), else the password field takes the keyboard.
+    pub(super) fn use_quick(&mut self, c: QuickConnection, ctx: &egui::Context) {
+        use urftp_core::site::SiteProtocol as P;
+        self.quick.proto = match c.protocol {
+            P::Ftp => QuickProto::Ftp,
+            P::FtpsExplicit => QuickProto::FtpsExplicit,
+            P::FtpsImplicit => QuickProto::FtpsImplicit,
+            P::Sftp => QuickProto::Sftp,
+        };
+        self.quick.host = c.host;
+        self.quick.port = c.port.to_string();
+        self.quick.user = c.user;
+        self.quick.pass.clear();
+        if self.quick.user.is_empty() || self.quick.user.eq_ignore_ascii_case("anonymous") {
+            self.quick_connect(ctx);
+        } else {
+            self.quick_focus_pass = true;
+        }
     }
 
     /// "➕" next to Connect of the quick bar.
