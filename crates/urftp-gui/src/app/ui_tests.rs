@@ -1994,3 +1994,40 @@ fn sites_and_folders_are_dragged_in_the_site_manager() {
     assert!(ui.app().sites.dirty, "saved after the move");
     assert_all_named(&ui, "site tree after drag and drop");
 }
+
+#[test]
+fn right_click_menus_select_everything() {
+    let mut ui = Ui::start(Lang::En, true);
+    assert!(ui.left_rows().len() > 2);
+    ui.harness.run_steps(12);
+    let row = ui
+        .harness
+        .query_all_by_label_contains("alpha.txt")
+        .filter(|n| n.accesskit_node().bounding_box().is_some())
+        .map(|n| n.rect())
+        .min_by(|a, b| a.left().total_cmp(&b.left()))
+        .unwrap()
+        .center();
+    ui.harness.hover_at(row);
+    ui.harness.event(egui::Event::PointerButton {
+        pos: row,
+        button: egui::PointerButton::Secondary,
+        pressed: true,
+        modifiers: Modifiers::default(),
+    });
+    ui.harness.event(egui::Event::PointerButton {
+        pos: row,
+        button: egui::PointerButton::Secondary,
+        pressed: false,
+        modifiers: Modifiers::default(),
+    });
+    ui.run();
+    ui.harness.get_by_label(&t!("ops.m_select_all")).click();
+    ui.run();
+    let n = ui.left_rows().len();
+    assert_eq!(ui.app().tabs[0].sides[0].selected_mut().len(), n, "every file of the panel");
+
+    let ids = fill_queue(&mut ui);
+    act(&mut ui, super::Action::QueueSelectAll);
+    assert_eq!(ui.app().tabs[0].queue_sel.iter().copied().collect::<Vec<_>>(), ids);
+}

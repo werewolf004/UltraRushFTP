@@ -1492,6 +1492,8 @@ enum Action {
     QueueStop(ItemId),
     QueueStopAll,
     QueueMove(ItemId, Move),
+    /// Every item of the queue selected.
+    QueueSelectAll,
     QueueRemove(ItemId),
     QueueRetry(ItemId),
     QueueRetryAll,
@@ -3072,6 +3074,7 @@ impl UltraRushApp {
                 Action::QueueStop(id) => tab.stop_item(id),
                 Action::QueueStopAll => tab.stop_all(),
                 Action::QueueMove(id, m) => tab.move_item(id, m),
+                Action::QueueSelectAll => tab.queue_sel = tab.queue.lock().ids().into_iter().collect(),
                 Action::QueueRemove(id) => {
                     tab.queue.lock().remove_where(|i| i.id == id);
                     tab.prune_queue_selection();
@@ -4451,6 +4454,10 @@ impl PaneViewer<'_> {
                             }
                         }
                         ui.separator();
+                        if ui.button(t!("queue.select_all")).clicked() {
+                            menu.push(Action::QueueSelectAll);
+                            ui.close();
+                        }
                         if ui
                             .add_enabled(targets.iter().any(|i| i.state != ItemState::Running), egui::Button::new(t!("queue.remove")))
                             .clicked()

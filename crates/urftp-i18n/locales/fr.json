@@ -1352,5 +1352,6 @@
   "script.save_title": "Enregistrer le script",
   "script.file_failed": "{file} : {error}",
   "options.stall": "Arrêter et reprendre sans données pendant",
-  "options.stall_note": "Un transfert qui ne reçoit ni n'envoie rien pendant ce temps est arrêté puis repris (tentatives) ; 0 : le délai de réponse s'applique."
+  "options.stall_note": "Un transfert qui ne reçoit ni n'envoie rien pendant ce temps est arrêté puis repris (tentatives) ; 0 : le délai de réponse s'applique.",
+  "queue.select_all": "Tout sélectionner"
 }

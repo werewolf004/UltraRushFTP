@@ -1352,5 +1352,6 @@
   "script.save_title": "Save the script",
   "script.file_failed": "{file}: {error}",
   "options.stall": "Stop and resume after no data for",
-  "options.stall_note": "A transfer that receives or sends nothing for this time is stopped and resumed (retries); 0: the reply timeout applies."
+  "options.stall_note": "A transfer that receives or sends nothing for this time is stopped and resumed (retries); 0: the reply timeout applies.",
+  "queue.select_all": "Select all"
 }

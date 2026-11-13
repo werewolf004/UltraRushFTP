@@ -28,6 +28,7 @@ Advanced transfers (block O) and finishing touches (block P).
 
 ### Fixed
 
+- Right-click menu of the files and of the queue: **Select all**.
 - Site manager: sites and folders are moved in the tree by **drag and drop** (onto a
   folder, or before another site).
 - After a compressed transfer, a listing on the same connection was read compressed: it

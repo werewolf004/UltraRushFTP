@@ -30,6 +30,7 @@ Transferts avancés (bloc O) et finitions (bloc P).
 
 ### Corrigé
 
+- Menu du clic droit des fichiers et de la file d'attente : **Tout sélectionner**.
 - Gestionnaire de sites : les sites et les dossiers se déplacent dans l'arbre par
   **glisser-déposer** (sur un dossier, ou avant un autre site).
 - Après un transfert compressé, une liste sur la même connexion était lue compressée :

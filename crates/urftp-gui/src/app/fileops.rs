@@ -1694,6 +1694,10 @@ pub(super) fn context_menu(ui: &mut egui::Ui, side: usize, remote: bool, row: &F
         op_button(ui, true, t!("ops.ctx_view"), side, Op::View(row.name.clone()), menu);
         op_button(ui, true, t!("ops.ctx_edit"), side, Op::Edit(row.name.clone()), menu);
     }
+    if ui.button(t!("ops.m_select_all")).clicked() {
+        menu.push(Action::SelectAll(side));
+        ui.close();
+    }
     op_button(ui, true, t!("ops.m_mark"), side, Op::Mark, menu);
     op_button(ui, true, t!("ops.m_copy_names"), side, Op::CopyNames, menu);
     op_button(ui, true, t!("ops.m_rename_many"), side, Op::RenameMany, menu);
