@@ -9,7 +9,7 @@ compatible with FTPRush's `rushmirc.dll`.
 
 ![Main window](docs/images/main.en.png)
 
-> **Status — 0.12.0 (pre-release).** The protocol engine (FTP, FTPS, SFTP, FXP, proxies,
+> **Status — 0.13.0 (pre-release).** The protocol engine (FTP, FTPS, SFTP, FXP, proxies,
 > Ident, queue), the tabbed interface, the site manager, the options, Pascal scripting,
 > the mIRC link and the command line are in place and covered by automated tests against
 > local test servers. They have been checked against **glftpd**; the other servers

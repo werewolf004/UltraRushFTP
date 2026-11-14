@@ -10,6 +10,8 @@ la traduction.
 
 ## [Non publié]
 
+## [0.13.0] - 2026-11-14
+
 Transferts avancés (bloc O) et finitions (bloc P).
 
 ### Ajouté
@@ -41,7 +43,7 @@ Transferts avancés (bloc O) et finitions (bloc P).
 - Le dépôt est public. La CI ne se lance pas pour les changements de la documentation
   seule ; Dependabot laisse de côté les versions majeures et les nouvelles versions
   d'egui (migrées à la main).
-- parking_lot 0.13.
+- parking_lot 0.13, flate2 1.1.11.
 
 ## [0.12.0] - 2026-11-12
 
@@ -529,7 +531,8 @@ réels.
 - Alerte connue acceptée : `RUSTSEC-2023-0071` dans `rsa` (utilisée pour les clés SSH
   RSA) ; voir [SECURITY.fr.md](SECURITY.fr.md).
 
-[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.12.0...HEAD
+[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.9.0...v0.10.0

@@ -9,6 +9,8 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-14
+
 Advanced transfers (block O) and finishing touches (block P).
 
 ### Added
@@ -38,7 +40,7 @@ Advanced transfers (block O) and finishing touches (block P).
 
 - The repository is public. CI skips the changes to the documentation only; Dependabot
   leaves out major versions and new egui versions (migrated by hand).
-- parking_lot 0.13.
+- parking_lot 0.13, flate2 1.1.11.
 
 ## [0.12.0] - 2026-11-12
 
@@ -479,7 +481,8 @@ link and command line. Not yet validated against real-world servers.
 - Known advisory accepted: `RUSTSEC-2023-0071` in `rsa` (used for SSH RSA keys); see
   [SECURITY.md](SECURITY.md).
 
-[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.9.0...v0.10.0
