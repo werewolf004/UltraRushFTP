@@ -994,7 +994,7 @@
   "options.page_notifications": "🔔 Notifications",
   "options.nt_tray_section": "Zone de notification",
   "options.nt_tray_always": "Toujours afficher l'icône",
-  "options.nt_minimize": "Réduire y cache la fenêtre (un clic sur l'icône la ramène)",
+  "options.nt_minimize": "Réduire dans la zone de notification (un clic sur l'icône la ramène)",
   "options.nt_flash": "Faire clignoter le bouton de la barre des tâches quand une file se termine en arrière-plan",
   "options.nt_events_section": "Événements",
   "options.nt_sound": "Son",

@@ -522,7 +522,7 @@ montre les touches en vigueur. Les flèches, `Entrée`, `Échap`, `Tab`, `Ctrl+T
 | Option | Défaut | Effet |
 |---|---|---|
 | Toujours afficher l'icône | désactivé | Icône dans la zone de notification ; un clic affiche la fenêtre |
-| Réduire y cache la fenêtre | désactivé | |
+| Réduire dans la zone de notification | désactivé | |
 | Faire clignoter le bouton de la barre des tâches à la fin d'une file en arrière-plan | activé | |
 | Faire clignoter le bouton de la barre des tâches pendant les transferts en arrière-plan | désactivé | S'arrête à leur fin ou quand la fenêtre revient au premier plan |
 | Événements : son, bulle | file terminée et nouveautés : son Windows et bulle ; échec d'un transfert : bulle | Son : vide, `system` ou un fichier `.wav` (`▶` l'écoute) ; bulles au-dessus de l'icône, ou dans un coin de la fenêtre sans elle ; chaque événement va aussi dans le journal système |
