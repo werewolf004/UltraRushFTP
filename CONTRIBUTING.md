@@ -93,6 +93,7 @@ needed for the installer, or `-NoInstaller`). The icon is drawn by
 
 ### Code signing
 
+No certificate is planned: releases are published unsigned. The support stays in place:
 `scripts/sign.ps1` signs with `signtool` (SHA-256, RFC 3161 timestamp) when these
 repository secrets exist; without them the release is published unsigned:
 

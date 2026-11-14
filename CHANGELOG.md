@@ -9,6 +9,10 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Code signing is not planned: the releases stay unsigned (check the `.sha256` files).
+
 ## [0.13.0] - 2026-11-14
 
 Advanced transfers (block O) and finishing touches (block P).

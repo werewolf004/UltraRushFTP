@@ -10,6 +10,11 @@ la traduction.
 
 ## [Non publié]
 
+### Modifié
+
+- La signature du code n'est pas prévue : les versions restent non signées (vérifier les
+  fichiers `.sha256`).
+
 ## [0.13.0] - 2026-11-14
 
 Transferts avancés (bloc O) et finitions (bloc P).

@@ -158,8 +158,8 @@ planned work is grouped below into blocks, each ending with a release.
 
 ### Distribution
 - ✅ Application manifest (`longPathAware`, per-monitor DPI), icon and version resources.
-- 🟡 Code signing of the binaries: ready in the release workflow, waiting for a
-  certificate.
+- ➖ Code signing of the binaries: not planned (a certificate costs too much); the release
+  workflow would sign them if one were stored in the repository secrets.
 - ✅ Installer (Inno Setup, per user or for all users) in addition to the portable zip.
 - ✅ UPnP port mapping (active mode, Ident), Restart UPnP service.
 

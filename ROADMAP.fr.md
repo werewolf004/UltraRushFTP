@@ -180,8 +180,8 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
 ### Distribution
 - ✅ Manifeste d'application (`longPathAware`, DPI par écran), icône et ressources de
   version.
-- 🟡 Signature des binaires : prête dans le workflow de publication, en attente d'un
-  certificat.
+- ➖ Signature des binaires : pas prévue (un certificat coûte trop cher) ; le workflow de
+  publication les signerait si un certificat était enregistré dans les secrets du dépôt.
 - ✅ Installateur (Inno Setup, par utilisateur ou pour tous) en plus du zip portable.
 - ✅ Redirection de ports UPnP (mode actif, Ident), Relancer le service UPnP.
 

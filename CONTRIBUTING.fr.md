@@ -99,7 +99,8 @@ Setup 6 nécessaire pour l'installateur, sinon `-NoInstaller`). L'icône est des
 
 ### Signature du code
 
-`scripts/sign.ps1` signe avec `signtool` (SHA-256, horodatage RFC 3161) quand ces secrets
+Aucun certificat n'est prévu : les versions sont publiées non signées. La prise en charge
+reste en place : `scripts/sign.ps1` signe avec `signtool` (SHA-256, horodatage RFC 3161) quand ces secrets
 du dépôt existent ; sans eux la version est publiée non signée :
 
 | Secret / variable | Contenu |

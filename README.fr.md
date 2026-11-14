@@ -50,8 +50,10 @@ mentions des composants tiers. Réglages et sites sont enregistrés dans
 `%APPDATA%\UltraRushFTP` (gardés à la désinstallation) ; lancer avec `-f` pour les garder
 à côté du programme (mode portable).
 
-Configuration requise : Windows 10 ou plus récent, 64 bits. Tant que les versions ne sont
-pas signées, Windows SmartScreen peut demander une confirmation au premier lancement.
+Configuration requise : Windows 10 ou plus récent, 64 bits. Les versions ne sont pas
+signées : Windows SmartScreen peut demander une confirmation au premier lancement
+(*Informations complémentaires › Exécuter quand même*) ; le fichier `.sha256` publié avec
+chaque version vérifie le téléchargement.
 
 ## Prise en main
 

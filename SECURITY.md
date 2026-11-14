@@ -64,6 +64,6 @@ the *Security* section of the [changelog](CHANGELOG.md).
 - `RUSTSEC-2023-0071` (`rsa`, Marvin timing attack): no fixed version exists. It concerns
   signing with an **RSA** SSH key; ed25519 and ECDSA keys are not affected. Prefer an
   ed25519 key for SFTP.
-- The binaries are not code-signed yet (the release workflow signs them once a certificate
-  is configured): check the `.sha256` file published with each release.
+- The binaries are not code-signed (no certificate is planned): check the `.sha256` file
+  published with each release.
 - Not yet audited by a third party, and not yet validated against real-world servers.
