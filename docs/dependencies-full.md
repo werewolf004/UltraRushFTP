@@ -56,7 +56,7 @@ Total: 399 — runtime (normal dependencies, Windows x64 / dépendances normales
 | core_detect | 1.0.0 | MIT/Apache-2.0 | runtime |
 | cpubits | 0.1.1 | MIT OR Apache-2.0 | runtime |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 | runtime |
-| crc32fast | 1.5.4 | MIT OR Apache-2.0 | runtime |
+| crc32fast | 1.5.5 | MIT OR Apache-2.0 | runtime |
 | crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 | runtime |
 | crypto-bigint | 0.7.10 | Apache-2.0 OR MIT | runtime |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 | runtime |
@@ -111,7 +111,7 @@ Total: 399 — runtime (normal dependencies, Windows x64 / dépendances normales
 | fearless_simd | 0.4.1 | Apache-2.0 OR MIT | runtime |
 | ff | 0.14.0 | MIT/Apache-2.0 | runtime |
 | find-msvc-tools | 0.1.15 | MIT OR Apache-2.0 | build/test |
-| flate2 | 1.1.10 | MIT OR Apache-2.0 | runtime |
+| flate2 | 1.1.11 | MIT OR Apache-2.0 | runtime |
 | foldhash | 0.2.0 | Zlib | runtime |
 | font-types | 0.12.7 | MIT OR Apache-2.0 | runtime |
 | form_urlencoded | 1.2.2 | MIT OR Apache-2.0 | runtime |
