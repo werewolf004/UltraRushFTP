@@ -96,7 +96,10 @@ async fn the_source_site_skip_list_and_priorities_apply() {
     };
     let mut q = Queue::new();
     q.push(Endpoint::remote("A", "/rel"), Endpoint::local(local(&dir.join("rel"))), true, None, None);
-    let e = run(q, vec![site("A", srv.addr.port(), rules)], opts()).await;
+    // One transfer at a time: with two, both RETR start together and arrive in any order.
+    let mut s = site("A", srv.addr.port(), rules);
+    s.limits.max_transfers = 1;
+    let e = run(q, vec![s], opts()).await;
     assert!(dir.join("rel/a.rar").exists() && dir.join("rel/b.nfo").exists());
     assert!(!dir.join("rel/c.jpg").exists(), "skipped by the site's own list");
     let retrs: Vec<String> = srv.received().into_iter().filter(|l| l.starts_with("RETR")).collect();
