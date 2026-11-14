@@ -50,7 +50,7 @@ release whose notes come from [CHANGELOG.md](CHANGELOG.md).
 ## Remaining for FTPRush v2 parity
 
 Every topic of the FTPRush v2 help, with its status, is in
-[docs/PARITY.md](docs/PARITY.md) (287 topics: ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18). The
+[docs/PARITY.md](docs/PARITY.md) (287 topics: ✅ 264 · 🟡 4 · ⬜ 0 · ➖ 19). The
 planned work is grouped below into blocks, each ending with a release.
 
 ### G — Connections and sites
@@ -112,11 +112,11 @@ planned work is grouped below into blocks, each ending with a release.
   manual download and incremented URL list, clipboard monitoring (J3).
 - ✅ Shortcut manager, configurable mouse actions, confirmations (exit, close a busy tab) (J4).
 - ✅ Tray icon, lock, notifications (sounds, pop-ups, folder monitoring), window flash (J5).
-- 🟡 Highlights, fonts, custom colours (with the contrast test), sort options, tab layout
-  options, saved layouts (J6; no choice of font, tabs on one line).
-- 🟡 Site manager: list mode, import plain text and UltraFXP, export text / CSV / HTML /
-  XML (without passwords), optional master password; backup and restore of the
-  configuration, single instance; About window (J7; UltraFXP import not done: no sample file).
+- ✅ Highlights, fonts, custom colours (with the contrast test), sort options, tab layout
+  options, saved layouts (J6; fonts and tabs on several lines in block N).
+- ✅ Site manager: list mode, import plain text, export text / CSV / HTML / XML (without
+  passwords), optional master password; backup and restore of the configuration, single
+  instance; About window (J7; UltraFXP import dropped: the program is no longer used).
 
 ### K — Scripting
 - ✅ Arrays, indexes, `case`, `break` / `continue`, constants, user procedures and

@@ -14,6 +14,7 @@ la traduction.
 
 - La signature du code n'est pas prévue : les versions restent non signées (vérifier les
   fichiers `.sha256`).
+- L'import UltraFXP est abandonné : le programme n'est plus utilisé depuis longtemps.
 
 ## [0.13.0] - 2026-11-14
 

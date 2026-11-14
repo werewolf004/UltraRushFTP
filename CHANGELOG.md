@@ -12,6 +12,7 @@ GitHub release with the same tag.
 ### Changed
 
 - Code signing is not planned: the releases stay unsigned (check the `.sha256` files).
+- The UltraFXP import is dropped: the program has been unused for a long time.
 
 ## [0.13.0] - 2026-11-14
 

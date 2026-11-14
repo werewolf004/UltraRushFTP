@@ -8,7 +8,7 @@ copié et FTPRush lui-même n'est pas décompilé.
 
 Légende : ✅ fait · 🟡 en partie · ⬜ prévu · ➖ hors périmètre (raison donnée).
 
-Résumé (287 sujets) : ✅ 264 · 🟡 4 · ⬜ 1 · ➖ 18.
+Résumé (287 sujets) : ✅ 264 · 🟡 4 · ⬜ 0 · ➖ 19.
 
 ## Fenêtre principale et menus
 
@@ -159,7 +159,7 @@ Résumé (287 sujets) : ✅ 264 · 🟡 4 · ⬜ 1 · ➖ 18.
 | Mode arborescence | ✅ | |
 | Mode liste, largeur automatique des colonnes | ✅ | Mode liste, triable ; colonnes ajustées à leur contenu, défilement horizontal si la liste est plus large que le volet |
 | Import texte brut (une URL par ligne) | ✅ | Détecté par l'import |
-| Import des sites et réglages UltraFXP | ⬜ | Pas fait : aucun fichier d'exemple du format |
+| Import des sites et réglages UltraFXP | ➖ | Abandonné : UltraFXP n'est plus utilisé ni utilisable depuis longtemps |
 | Import FTPRush XML | ✅ | Plus FTPRush v1/v3, FileZilla, FlashFXP ; les mots de passe ne sont pas importés |
 | Export texte brut / CSV / HTML / FTPRush XML | ✅ | Texte, CSV, HTML, XML FTPRush v2 ; jamais les mots de passe |
 | Réglages par défaut d'un site | ✅ | Options › Nouveau site : protocole, connexion, mode, limites, dossiers, listing |

@@ -54,7 +54,7 @@ taguée dont les notes viennent du [CHANGELOG.fr.md](CHANGELOG.fr.md).
 ## Reste à faire pour la parité avec FTPRush v2
 
 Chaque sujet de l'aide de FTPRush v2, avec son état, est dans
-[docs/PARITY.fr.md](docs/PARITY.fr.md) (287 sujets : ✅ 249 · 🟡 18 · ⬜ 2 · ➖ 18).
+[docs/PARITY.fr.md](docs/PARITY.fr.md) (287 sujets : ✅ 264 · 🟡 4 · ⬜ 0 · ➖ 19).
 Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une version.
 
 ### G — Connexions et sites
@@ -127,11 +127,13 @@ Le travail prévu est regroupé ci-dessous en blocs, chacun terminé par une ver
   fermer un onglet occupé) (J4).
 - ✅ Icône de notification, verrouillage, notifications (sons, bulles, surveillance de
   dossiers), clignotement de la fenêtre (J5).
-- 🟡 Surlignage, polices, couleurs personnalisées (avec le test de contraste), options de
-  tri, options d'onglets, dispositions enregistrées (J6 ; pas de choix de police, onglets sur une ligne).
-- 🟡 Gestionnaire de sites : mode liste, import texte brut et UltraFXP, export texte / CSV
-  / HTML / XML (sans mots de passe), mot de passe maître facultatif ; sauvegarde et
-  restauration de la configuration, instance unique ; fenêtre À propos (J7 ; import UltraFXP pas fait : aucun fichier d'exemple).
+- ✅ Surlignage, polices, couleurs personnalisées (avec le test de contraste), options de
+  tri, options d'onglets, dispositions enregistrées (J6 ; polices et onglets sur plusieurs
+  lignes au bloc N).
+- ✅ Gestionnaire de sites : mode liste, import texte brut, export texte / CSV / HTML / XML
+  (sans mots de passe), mot de passe maître facultatif ; sauvegarde et restauration de la
+  configuration, instance unique ; fenêtre À propos (J7 ; import UltraFXP abandonné : le
+  programme n'est plus utilisé).
 
 ### K — Scripts
 - ✅ Tableaux, index, `case`, `break` / `continue`, constantes, procédures et fonctions de

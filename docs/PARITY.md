@@ -8,7 +8,7 @@ from it and FTPRush itself is not decompiled.
 
 Legend: ✅ done · 🟡 partly done · ⬜ planned · ➖ out of scope (reason given).
 
-Summary (287 topics): ✅ 264 · 🟡 4 · ⬜ 1 · ➖ 18.
+Summary (287 topics): ✅ 264 · 🟡 4 · ⬜ 0 · ➖ 19.
 
 ## Main window and menus
 
@@ -159,7 +159,7 @@ Summary (287 topics): ✅ 264 · 🟡 4 · ⬜ 1 · ➖ 18.
 | Tree mode | ✅ | |
 | List mode, column auto width | ✅ | List mode, sortable; columns fitted to their content, scrolls sideways when wider than the pane |
 | Import plain text (one URL per line) | ✅ | Detected by the import |
-| Import UltraFXP sites and settings | ⬜ | Not done: no sample file of the format |
+| Import UltraFXP sites and settings | ➖ | Dropped: UltraFXP has been unused and unusable for a long time |
 | Import FTPRush XML | ✅ | Plus FTPRush v1/v3, FileZilla, FlashFXP; passwords are not imported |
 | Export plain text / CSV / HTML / FTPRush XML | ✅ | Text, CSV, HTML, FTPRush v2 XML; never the passwords |
 | Default site setting | ✅ | Options › New site: protocol, login, mode, limits, folders, listing |
