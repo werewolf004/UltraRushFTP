@@ -1,8 +1,7 @@
-# Continuous integration. Every push to main and every pull request runs the cheap Linux
-# checks (formatting, dependencies); the Windows job (Clippy, tests, DLLs, installer),
-# whose minutes count double on a private repository, runs on demand ("Run workflow").
-# The Release workflow runs the tests again before publishing. Pushes and pull requests
-# touching documentation only run nothing.
+# Continuous integration. Every push to main and every pull request runs the Linux checks
+# (formatting, dependencies) and the Windows job (Clippy, tests, DLLs, installer); it can
+# also be run by hand ("Run workflow"). Pushes and pull requests touching documentation
+# only run nothing.
 # Actions are pinned to commit SHAs (Dependabot keeps them up to date).
 name: CI
 
@@ -49,7 +48,6 @@ jobs:
 
   windows:
     name: Clippy, tests, DLL 32/64-bit
-    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

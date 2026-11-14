@@ -31,12 +31,8 @@ cargo deny check                                  # when dependencies changed
 pwsh scripts/generate-dependencies.ps1            # when dependencies changed
 ```
 
-Run them all before pushing: on every push and pull request CI only checks the
-formatting and the dependencies (Linux). The Windows job (Clippy, tests, both DLLs,
-installer) runs on demand — *Actions › CI › Run workflow*, or
-`gh workflow run ci.yml --ref <branch>` — because Windows minutes count double on a
-private repository; the *Release* workflow runs the tests again. A red CI blocks the
-merge.
+CI runs the same checks on every push and pull request (changes to the documentation
+only are skipped); a red CI blocks the merge.
 
 ## Rules
 

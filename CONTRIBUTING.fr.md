@@ -32,11 +32,8 @@ cargo deny check                                  # si les dépendances ont chan
 pwsh scripts/generate-dependencies.ps1            # si les dépendances ont changé
 ```
 
-Lancez-les toutes avant de pousser : à chaque push et pull request, la CI ne vérifie que
-le formatage et les dépendances (Linux). Le job Windows (Clippy, tests, les deux DLL,
-installeur) se lance à la demande — *Actions › CI › Run workflow*, ou
-`gh workflow run ci.yml --ref <branche>` — car les minutes Windows comptent double sur un
-dépôt privé ; le workflow *Release* relance les tests. Une CI rouge bloque la fusion.
+La CI lance les mêmes vérifications à chaque push et pull request (sauf pour les
+changements de la documentation seule) ; une CI rouge bloque la fusion.
 
 ## Règles
 
