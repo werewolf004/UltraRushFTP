@@ -14,6 +14,29 @@ async fn connect(srv: &MockServer) -> FtpClient {
 }
 
 #[tokio::test]
+async fn unreachable_epsv_port_falls_back_to_pasv() {
+    let srv = MockServer::start(MockConfig { epsv_dead_port: true, ..MockConfig::default() }).await;
+    let mut c = connect(&srv).await;
+    c.list(None).await.unwrap();
+    c.list(None).await.unwrap();
+    let cmds = srv.received();
+    // One EPSV only: the connection then stays on PASV.
+    assert_eq!(cmds.iter().filter(|l| *l == "EPSV").count(), 1, "{cmds:?}");
+    assert_eq!(cmds.iter().filter(|l| *l == "PASV").count(), 2, "{cmds:?}");
+}
+
+#[tokio::test]
+async fn pasv_only_never_sends_epsv() {
+    let srv = MockServer::start(MockConfig::default()).await;
+    let config = FtpConfig { prefer_epsv: false, ..FtpConfig::default() };
+    let mut c = FtpClient::connect("127.0.0.1", srv.addr.port(), config).await.unwrap();
+    c.login("test", "secret").await.unwrap();
+    c.list(None).await.unwrap();
+    let cmds = srv.received();
+    assert!(!cmds.iter().any(|l| l == "EPSV") && cmds.iter().any(|l| l == "PASV"), "{cmds:?}");
+}
+
+#[tokio::test]
 async fn full_session_upload_list_download_rename_delete() {
     let srv = MockServer::start(MockConfig::default()).await;
     let mut c = connect(&srv).await;

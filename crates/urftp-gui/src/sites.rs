@@ -873,6 +873,7 @@ fn site_form(
                         ui.checkbox(&mut s.force_utf8, t!("site.force_utf8"));
                         ui.checkbox(&mut s.utf8_username, t!("site.utf8_username"));
                         ui.checkbox(&mut s.behind_nat, t!("site.behind_nat")).on_hover_text(t!("site.behind_nat_tip"));
+                        ui.checkbox(&mut s.pasv_only, t!("site.pasv_only")).on_hover_text(t!("site.pasv_only_tip"));
                     });
                 });
             }

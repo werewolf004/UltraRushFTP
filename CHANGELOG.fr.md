@@ -14,6 +14,7 @@ la traduction.
 
 - Option de site *Utiliser AUTH SSL au lieu d'AUTH TLS* (FTPS explicite), pour les
   serveurs qui raccrochent sur `AUTH TLS` (mode *AUTH SSL* de FTPRush).
+- Option de site *PASV uniquement (pas d'EPSV)*, pour les bouncers.
 
 ### Modifié
 
@@ -23,6 +24,8 @@ la traduction.
 
 ### Corrigé
 
+- FTP : une connexion de données qui échoue après `EPSV` (bouncer qui ne la fait pas
+  suivre) fait passer la connexion en `PASV` au lieu de bloquer la liste ou le transfert.
 - FTPS : les serveurs au certificat ECDSA P-521 (glftpd et OpenSSL récents)
   n'interrompent plus la négociation TLS (`HandshakeFailure`), et les certificats à clé
   RSA de 1024 bits (anciens certificats auto-signés) sont acceptés.

@@ -13,6 +13,7 @@ GitHub release with the same tag.
 
 - Site option *Use AUTH SSL instead of AUTH TLS* (explicit FTPS), for the servers that
   hang up on `AUTH TLS` (FTPRush's *AUTH SSL* mode).
+- Site option *PASV only (no EPSV)*, for the bouncers.
 
 ### Changed
 
@@ -21,6 +22,8 @@ GitHub release with the same tag.
 
 ### Fixed
 
+- FTP: a data connection that fails after `EPSV` (bouncer that does not forward it)
+  switches the connection to `PASV` instead of blocking the listing or the transfer.
 - FTPS: servers with an ECDSA P-521 certificate (recent glftpd and OpenSSL) no longer
   abort the TLS handshake (`HandshakeFailure`), and certificates with a 1024-bit RSA key
   (old self-signed ones) are accepted.

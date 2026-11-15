@@ -563,6 +563,7 @@ ou sur un autre site (avant lui) ; un dossier glissé sur un autre dossier va de
 | Hôte, port | — / 21 | Nom ou adresse IP ; quand un nom a des adresses IPv6 et IPv4, les deux sont essayées (« happy eyeballs ») |
 | UTF-8 forcé | non | FTP : `OPTS UTF8 ON` est envoyé et les noms sont lus en UTF-8 même si le serveur n'annonce pas `UTF8` (remplace le jeu de caractères) |
 | Envoyer l'identifiant en UTF-8 | non | FTP : `USER` et `PASS` en UTF-8 quand le site utilise un autre jeu de caractères |
+| PASV uniquement (pas d'EPSV) | non | FTP : mode passif par `PASV` seulement. Pour les bouncers : `EPSV` ne donne qu'un port, la connexion de données part donc vers le bouncer, qui ne la fait pas suivre ; `PASV` donne l'adresse du vrai serveur. Sans cette option, une connexion de données qui échoue après `EPSV` fait passer la connexion en `PASV` |
 | Le serveur est derrière un NAT | non | FTP : les connexions de données vont toujours à l'adresse du serveur, quoi que réponde `PASV` (sinon seulement quand `PASV` donne une adresse privée pour un serveur public) |
 | Autres adresses | aucune | `hôte:port` (ou `[IPv6]:port`), une par ligne : essayées à tour de rôle quand l'adresse principale ne répond pas ou refuse la connexion ; celle qui a marché sert en premier la fois suivante |
 | Utilisateur, mot de passe, anonyme | — | Mot de passe chiffré par DPAPI ; avec une clé SSH, c'est sa phrase de passe |

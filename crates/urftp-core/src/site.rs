@@ -520,6 +520,9 @@ pub struct Site {
     /// The server is behind NAT: the data connections always go to the address of the
     /// control connection, whatever `PASV` answers.
     pub behind_nat: bool,
+    /// Passive mode with `PASV` only, never `EPSV` (bouncers: `EPSV` sends the data
+    /// connection to the bouncer instead of the real server).
+    pub pasv_only: bool,
     /// `PBSZ 0` after the TLS login (some servers refuse it).
     pub send_pbsz: bool,
     /// Explicit FTPS with `AUTH SSL` instead of `AUTH TLS` (servers that hang up on
@@ -573,6 +576,7 @@ impl Default for Site {
             utf8_username: false,
             force_utf8: false,
             behind_nat: false,
+            pasv_only: false,
             send_pbsz: true,
             auth_ssl: false,
             fxp_tls: None,

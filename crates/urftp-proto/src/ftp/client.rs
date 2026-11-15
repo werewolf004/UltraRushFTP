@@ -821,12 +821,14 @@ impl FtpClient {
             self.ok(&format!("PRET {transfer_cmd}")).await?;
         }
         let mut target = None;
+        let mut from_epsv = false;
         if self.config.prefer_epsv && !self.epsv_refused {
             let r = self.raw("EPSV").await?;
             if r.code == 229 {
                 let port = parse_epsv(r.text()).ok_or_else(|| FtpError::Protocol(format!("unreadable EPSV reply: {r}")))?;
                 // EPSV only gives a port: same host as the control channel.
                 target = Some(self.server_target(port));
+                from_epsv = true;
             } else if r.is_permanent_negative() {
                 self.epsv_refused = true;
                 self.status("EPSV refused: falling back to PASV");
@@ -834,25 +836,44 @@ impl FtpClient {
                 return Err(FtpError::Unexpected { command: "EPSV".into(), reply: r });
             }
         }
-        let target = match target {
-            Some(t) => t,
-            None => {
-                let r = self.expect("PASV", |r| r.code == 227).await?;
-                let (ip, port) = parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("unreadable PASV reply: {r}")))?;
-                let ip = IpAddr::V4(ip);
-                if self.config.pasv_use_server_ip || (self.config.pasv_fix_private_ip && needs_fix(ip, self.server_ip)) {
-                    let t = self.server_target(port);
-                    self.status(format!("PASV returns {ip}: using {}", t.host(&self.host)));
-                    t
-                } else {
-                    DataTarget::Addr(SocketAddr::new(ip, port))
+        let tcp = match target {
+            Some(t) => match self.connect_data(t).await {
+                Ok(tcp) => tcp,
+                // A bouncer answers EPSV with its own port but does not forward the data
+                // connections: PASV gives the address of the real server.
+                Err(e) if from_epsv => {
+                    self.epsv_refused = true;
+                    self.status(format!("EPSV data connection failed ({e}): falling back to PASV"));
+                    if self.features.has("PRET") {
+                        self.ok(&format!("PRET {transfer_cmd}")).await?;
+                    }
+                    let t = self.pasv_target().await?;
+                    self.connect_data(t).await?
                 }
+                Err(e) => return Err(e),
+            },
+            None => {
+                let t = self.pasv_target().await?;
+                self.connect_data(t).await?
             }
         };
-        let tcp = self.connect_data(target).await?;
         tcp.set_nodelay(true)?;
         crate::net::set_buffers(&tcp, self.config.send_buffer, self.config.receive_buffer)?;
         Ok(Box::new(tcp))
+    }
+
+    /// `PASV` and the address to connect to.
+    async fn pasv_target(&mut self) -> Result<DataTarget> {
+        let r = self.expect("PASV", |r| r.code == 227).await?;
+        let (ip, port) = parse_pasv(r.text()).ok_or_else(|| FtpError::Protocol(format!("unreadable PASV reply: {r}")))?;
+        let ip = IpAddr::V4(ip);
+        Ok(if self.config.pasv_use_server_ip || (self.config.pasv_fix_private_ip && needs_fix(ip, self.server_ip)) {
+            let t = self.server_target(port);
+            self.status(format!("PASV returns {ip}: using {}", t.host(&self.host)));
+            t
+        } else {
+            DataTarget::Addr(SocketAddr::new(ip, port))
+        })
     }
 
     /// Target "the server itself" on `port`: its IP when known without proxy, its name otherwise.

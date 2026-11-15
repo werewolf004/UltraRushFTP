@@ -1126,6 +1126,8 @@
   "site.utf8_username": "Envoyer l'identifiant en UTF-8",
   "site.behind_nat": "Le serveur est derrière un NAT / non routable / IP masquée",
   "site.behind_nat_tip": "Les connexions de données vont à l'adresse du serveur, quoi que réponde PASV.",
+  "site.pasv_only": "PASV uniquement (pas d'EPSV)",
+  "site.pasv_only_tip": "Pour les bouncers : EPSV envoie les connexions de données au bouncer, PASV au vrai serveur.",
   "site.send_pbsz": "Envoyer PBSZ 0 après l'authentification TLS",
   "site.auth_ssl": "Utiliser AUTH SSL au lieu d'AUTH TLS (serveurs qui raccrochent sur AUTH TLS)",
   "site.fxp_tls": "FXP chiffré (FTP à FTP) :",

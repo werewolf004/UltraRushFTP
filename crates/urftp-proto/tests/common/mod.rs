@@ -38,6 +38,9 @@ pub struct MockConfig {
     /// Refuses (550) any argument longer than this limit, like some real servers.
     pub max_arg_len: Option<usize>,
     pub epsv: bool,
+    /// `EPSV` answers with a closed port, like a bouncer that does not forward the data
+    /// connections.
+    pub epsv_dead_port: bool,
     pub mlsd: bool,
     pub tls: MockTls,
     /// Like vsftpd `require_ssl_reuse=YES`: refuses a TLS data channel without session reuse.
@@ -94,6 +97,7 @@ impl Default for MockConfig {
             pass: "secret".into(),
             max_arg_len: None,
             epsv: true,
+            epsv_dead_port: false,
             mlsd: true,
             tls: MockTls::None,
             require_session_reuse: false,
@@ -636,6 +640,10 @@ async fn session(tcp: TcpStream, sh: Arc<Shared>) -> std::io::Result<()> {
                 }
                 out += "213 End of status";
                 reply(&mut c, &out).await?;
+            }
+            "EPSV" if sh.cfg.epsv && sh.cfg.epsv_dead_port => {
+                let port = TcpListener::bind("127.0.0.1:0").await?.local_addr()?.port();
+                reply(&mut c, &format!("229 Entering Extended Passive Mode (|||{port}|)")).await?;
             }
             "EPSV" if sh.cfg.epsv => {
                 let l = TcpListener::bind(if sh.cfg.ipv6 { "[::1]:0" } else { "127.0.0.1:0" }).await?;

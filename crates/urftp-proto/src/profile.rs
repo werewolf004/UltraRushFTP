@@ -150,6 +150,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
             utf8_login: site.utf8_username,
             force_utf8: site.force_utf8,
             pasv_use_server_ip: site.behind_nat,
+            prefer_epsv: !site.pasv_only,
             send_pbsz: site.send_pbsz,
             active_external_ip: net.external(),
             active_port_range: net.port_range(),
