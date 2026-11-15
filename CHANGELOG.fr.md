@@ -16,6 +16,16 @@ la traduction.
   fichiers `.sha256`).
 - L'import UltraFXP est abandonné : le programme n'est plus utilisé depuis longtemps.
 
+### Corrigé
+
+- FTPS : les serveurs au certificat ECDSA P-521 (glftpd et OpenSSL récents)
+  n'interrompent plus la négociation TLS (`HandshakeFailure`), et les certificats à clé
+  RSA de 1024 bits (anciens certificats auto-signés) sont acceptés.
+- SFTP : les serveurs plus anciens (vieux OpenSSH, NAS, routeurs, serveurs Windows sans
+  curve25519) se connectent : échanges de clés ECDH NIST et Diffie-Hellman SHA-1,
+  chiffrements AES-CBC et 3DES, HMAC-SHA1 et clés d'hôte DSA sont proposés en dernier,
+  après les algorithmes sûrs.
+
 ## [0.13.0] - 2026-11-14
 
 Transferts avancés (bloc O) et finitions (bloc P).

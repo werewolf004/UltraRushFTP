@@ -14,6 +14,15 @@ GitHub release with the same tag.
 - Code signing is not planned: the releases stay unsigned (check the `.sha256` files).
 - The UltraFXP import is dropped: the program has been unused for a long time.
 
+### Fixed
+
+- FTPS: servers with an ECDSA P-521 certificate (recent glftpd and OpenSSL) no longer
+  abort the TLS handshake (`HandshakeFailure`), and certificates with a 1024-bit RSA key
+  (old self-signed ones) are accepted.
+- SFTP: older servers (old OpenSSH, NAS, routers, Windows servers without curve25519)
+  connect: NIST ECDH and SHA-1 Diffie-Hellman key exchanges, AES-CBC and 3DES ciphers,
+  HMAC-SHA1 and DSA host keys are offered last, after the safe algorithms.
+
 ## [0.13.0] - 2026-11-14
 
 Advanced transfers (block O) and finishing touches (block P).

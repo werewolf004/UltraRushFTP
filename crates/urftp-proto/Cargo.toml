@@ -18,7 +18,10 @@ rustls = { version = "0.23.46", default-features = false, features = ["ring", "s
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12", "logging"] }
 rustls-native-certs = "0.8.5"
 ring = "0.17.14"
-russh = { version = "0.65.1", default-features = false, features = ["ring", "rsa", "flate2"] }
+# ECDSA P-521 verification of server certificates (missing from ring).
+p521 = { version = "0.14.0", default-features = false, features = ["ecdsa", "sha512"] }
+sha2 = "0.11.1"
+russh = { version = "0.65.1", default-features = false, features = ["ring", "rsa", "flate2", "des", "dsa"] }
 russh-sftp = "3.0.1"
 encoding_rs = "0.8.44"
 # MODE Z (zlib compression of the data channel).

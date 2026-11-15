@@ -26,7 +26,12 @@ corrective et listés dans la section *Sécurité* du
   contrôlé. Un certificat inconnu n'est jamais accepté en silence : son empreinte SHA-256
   est montrée à l'utilisateur, qui peut l'approuver ; elle est alors épinglée dans la fiche
   du site. « Accepter tout certificat » existe pour les serveurs de test, est signalé comme
-  déconseillé, et `urftp` exige `--insecure` pour l'utiliser.
+  déconseillé, et `urftp` exige `--insecure` pour l'utiliser. En plus des algorithmes de
+  ring, les certificats ECDSA P-521 et les clés RSA à partir de 1024 bits sont acceptés
+  (anciens serveurs FTP).
+- **SFTP** propose d'abord les algorithmes sûrs de russh ; les plus anciens
+  (Diffie-Hellman SHA-1, AES-CBC, 3DES, HMAC-SHA1, clés DSA) viennent en dernier et ne
+  servent que si le serveur ne propose rien de mieux.
 - Les **canaux de données** sont chiffrés par `PROT P` par défaut, et les sessions TLS sont
   reprises pour que les serveurs puissent vérifier que la connexion de données appartient
   bien à la connexion de contrôle.

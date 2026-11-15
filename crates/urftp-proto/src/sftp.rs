@@ -27,6 +27,32 @@ use crate::proxy::{self, ProxyConfig, ProxyError};
 
 const CHUNK: usize = 64 * 1024;
 
+/// russh's safe algorithms first, then the older ones in last resort (old OpenSSH, NAS,
+/// routers, Windows servers without curve25519): a modern server still negotiates the
+/// safe ones, since the client's order decides.
+fn preferred_algorithms() -> russh::Preferred {
+    use russh::{cipher, kex, mac};
+    let base = russh::Preferred::DEFAULT;
+    let (ext, mut kexes): (Vec<kex::Name>, Vec<kex::Name>) =
+        base.kex.iter().copied().partition(|k| k.as_ref().starts_with("ext-info") || k.as_ref().starts_with("kex-strict"));
+    kexes.extend([
+        kex::ECDH_SHA2_NISTP256,
+        kex::ECDH_SHA2_NISTP384,
+        kex::ECDH_SHA2_NISTP521,
+        kex::DH_G14_SHA1,
+        kex::DH_GEX_SHA1,
+        kex::DH_G1_SHA1,
+    ]);
+    kexes.extend(ext);
+    let mut ciphers = base.cipher.to_vec();
+    ciphers.extend([cipher::AES_256_CBC, cipher::AES_192_CBC, cipher::AES_128_CBC, cipher::TRIPLE_DES_CBC]);
+    let mut macs = base.mac.to_vec();
+    macs.extend([mac::HMAC_SHA1_ETM, mac::HMAC_SHA1]);
+    let mut keys = base.key.to_vec();
+    keys.push(russh::keys::Algorithm::Dsa);
+    russh::Preferred { kex: kexes.into(), cipher: ciphers.into(), mac: macs.into(), key: keys.into(), ..base }
+}
+
 /// Authentication method.
 #[derive(Clone, PartialEq, Eq)]
 pub enum SftpAuth {
@@ -219,7 +245,12 @@ impl SftpClient {
 
         let seen = Arc::new(Mutex::new(None));
         let handler = Handler { policy: config.host_key.clone(), seen: seen.clone() };
-        let ssh_config = client::Config { keepalive_interval: config.keepalive, inactivity_timeout: None, ..client::Config::default() };
+        let ssh_config = client::Config {
+            keepalive_interval: config.keepalive,
+            inactivity_timeout: None,
+            preferred: preferred_algorithms(),
+            ..client::Config::default()
+        };
         let connected = tokio::time::timeout(ct, client::connect_stream(Arc::new(ssh_config), tcp, handler)).await;
         let mut ssh = match connected {
             Err(_) => return Err(SftpError::Timeout),

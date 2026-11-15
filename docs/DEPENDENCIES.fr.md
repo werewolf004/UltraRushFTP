@@ -37,6 +37,8 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `tokio-rustls` | 0.26 | MIT / Apache-2.0 | proto | rustls sur les flux tokio |
 | `rustls-native-certs` | 0.8 | Apache-2.0 / ISC / MIT | proto | Magasin de certificats de Windows |
 | `ring` | 0.17 | Apache-2.0 AND ISC | proto, core | Empreintes SHA-256, fournisseur cryptographique de rustls et russh ; PBKDF2 du mot de passe maître |
+| `p521` | 0.14 | Apache-2.0 / MIT | proto | Vérification ECDSA P-521 des certificats des serveurs (absente de ring) |
+| `sha2` | 0.11 | MIT / Apache-2.0 | proto | Hachages des signatures P-521 |
 | `russh` | 0.65 | Apache-2.0 | proto | Client SSH (transport de SFTP) |
 | `russh-sftp` | 3.0 | Apache-2.0 | proto | Protocole SFTP |
 | `encoding_rs` | 0.8 | (Apache-2.0 / MIT) AND BSD-3-Clause | proto | Jeux de caractères des serveurs non UTF-8 |

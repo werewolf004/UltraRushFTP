@@ -24,7 +24,11 @@ the *Security* section of the [changelog](CHANGELOG.md).
   An unknown certificate is never accepted silently: the user is shown its SHA-256
   fingerprint and may trust it, which pins that fingerprint in the site record.
   "Accept any certificate" exists for test servers, is labelled as not recommended, and
-  `urftp` requires `--insecure` for it.
+  `urftp` requires `--insecure` for it. Besides ring's algorithms, ECDSA P-521
+  certificates and RSA keys from 1024 bits are accepted (old FTP servers).
+- **SFTP** offers russh's safe algorithms first; older ones (SHA-1 Diffie-Hellman,
+  AES-CBC, 3DES, HMAC-SHA1, DSA keys) come last and are only used when the server offers
+  nothing better.
 - **Data channels** are encrypted with `PROT P` by default, and TLS sessions are reused
   so that servers can check the data connection belongs to the control connection.
 - **SFTP host keys** are trusted by SHA-256 fingerprint only; an unknown or changed key
