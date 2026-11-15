@@ -569,6 +569,7 @@ ou sur un autre site (avant lui) ; un dossier glissé sur un autre dossier va de
 | Site activé | oui | Un site désactivé ne peut pas être connecté (`RushApp.FTP.DisableSite`) |
 | Chiffrer aussi les transferts (PROT P) | oui | FTPS : canaux de données des transferts chiffrés |
 | Chiffrer aussi les listings (PROT P) | comme les transferts | FTPS : canaux de données des listings chiffrés |
+| Utiliser AUTH SSL au lieu d'AUTH TLS | non | FTPS explicite : `AUTH SSL` est envoyé d'abord (`AUTH TLS` s'il est refusé), pour les serveurs qui raccrochent sur `AUTH TLS` (mode *AUTH SSL* de FTPRush) |
 | Envoyer PBSZ 0 après l'authentification TLS | oui | FTPS : à désactiver pour les serveurs qui le refusent |
 | FXP chiffré (FTP à FTP) | Automatique | Automatique (`SSCN` quand il est annoncé, sinon `CPSV`), Ne pas utiliser (canal de données en clair entre les serveurs), Utiliser |
 | Certificat | Vérifier avec les autorités Windows | ou Accepter tout certificat (déconseillé), ou Certificat approuvé (empreinte SHA-256, remplie quand on approuve un serveur) |

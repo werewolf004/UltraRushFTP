@@ -10,6 +10,11 @@ la traduction.
 
 ## [Non publié]
 
+### Ajouté
+
+- Option de site *Utiliser AUTH SSL au lieu d'AUTH TLS* (FTPS explicite), pour les
+  serveurs qui raccrochent sur `AUTH TLS` (mode *AUTH SSL* de FTPRush).
+
 ### Modifié
 
 - La signature du code n'est pas prévue : les versions restent non signées (vérifier les

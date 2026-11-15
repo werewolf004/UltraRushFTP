@@ -134,6 +134,7 @@ pub fn site_profile(site: &Site, settings: &Settings) -> SiteProfile {
         protect_data: site.protect_data,
         protect_listings: site.listings_protected(),
         auth_ssl_fallback: true,
+        auth_ssl: site.auth_ssl,
     };
     let net = &settings.network;
     let (list_command, use_mlsd) = list_command(site, settings);

@@ -522,6 +522,9 @@ pub struct Site {
     pub behind_nat: bool,
     /// `PBSZ 0` after the TLS login (some servers refuse it).
     pub send_pbsz: bool,
+    /// Explicit FTPS with `AUTH SSL` instead of `AUTH TLS` (servers that hang up on
+    /// `AUTH TLS`).
+    pub auth_ssl: bool,
     /// Encrypted FXP from or to this site (`None`: automatic, `SSCN` or `CPSV`).
     pub fxp_tls: Option<bool>,
     /// The logs show the name of the site instead of "Left" / "Right", whatever the
@@ -571,6 +574,7 @@ impl Default for Site {
             force_utf8: false,
             behind_nat: false,
             send_pbsz: true,
+            auth_ssl: false,
             fxp_tls: None,
             log_site_name: false,
             notify_new: false,

@@ -44,11 +44,14 @@ pub struct TlsOptions {
     pub protect_listings: bool,
     /// Try `AUTH SSL` when `AUTH TLS` is refused (old servers).
     pub auth_ssl_fallback: bool,
+    /// Send `AUTH SSL` first (`AUTH TLS` when it is refused): for the servers that hang
+    /// up on `AUTH TLS` instead of refusing it.
+    pub auth_ssl: bool,
 }
 
 impl Default for TlsOptions {
     fn default() -> Self {
-        Self { verify: TlsVerify::System, protect_data: true, protect_listings: true, auth_ssl_fallback: true }
+        Self { verify: TlsVerify::System, protect_data: true, protect_listings: true, auth_ssl_fallback: true, auth_ssl: false }
     }
 }
 

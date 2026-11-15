@@ -1127,6 +1127,7 @@
   "site.behind_nat": "Le serveur est derrière un NAT / non routable / IP masquée",
   "site.behind_nat_tip": "Les connexions de données vont à l'adresse du serveur, quoi que réponde PASV.",
   "site.send_pbsz": "Envoyer PBSZ 0 après l'authentification TLS",
+  "site.auth_ssl": "Utiliser AUTH SSL au lieu d'AUTH TLS (serveurs qui raccrochent sur AUTH TLS)",
   "site.fxp_tls": "FXP chiffré (FTP à FTP) :",
   "site.fxp_tls_auto": "Automatique",
   "site.fxp_tls_off": "Ne pas utiliser",

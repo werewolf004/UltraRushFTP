@@ -303,12 +303,14 @@ impl FtpClient {
             return Ok(());
         }
         let opts = self.config.security.options().cloned().unwrap_or_default();
-        let r = self.raw("AUTH TLS").await?;
-        if r.code != 234 {
-            let retry = opts.auth_ssl_fallback && r.is_permanent_negative();
-            let r2 = if retry { Some(self.raw("AUTH SSL").await?) } else { None };
-            if !r2.as_ref().is_some_and(|r| r.code == 234 || r.code == 334) {
-                return Err(FtpError::Unexpected { command: "AUTH TLS".into(), reply: r2.unwrap_or(r) });
+        let (first, second) = if opts.auth_ssl { ("AUTH SSL", "AUTH TLS") } else { ("AUTH TLS", "AUTH SSL") };
+        let accepted = |r: &Reply| r.code == 234 || r.code == 334;
+        let r = self.raw(first).await?;
+        if !accepted(&r) {
+            let retry = (opts.auth_ssl || opts.auth_ssl_fallback) && r.is_permanent_negative();
+            let r2 = if retry { Some(self.raw(second).await?) } else { None };
+            if !r2.as_ref().is_some_and(accepted) {
+                return Err(FtpError::Unexpected { command: first.into(), reply: r2.unwrap_or(r) });
             }
         }
         let ctx = TlsContext::new(&self.host, &opts)?;

@@ -116,6 +116,28 @@ async fn auth_tls_refused_by_plain_server() {
 }
 
 #[tokio::test]
+async fn auth_ssl_is_sent_first_when_chosen() {
+    let srv = MockServer::start(MockConfig { tls: MockTls::Explicit, ..MockConfig::default() }).await;
+    let opts = TlsOptions { auth_ssl: true, ..tls(TlsVerify::AcceptAny) };
+    let c = roundtrip(&srv, config(Security::Explicit(opts))).await;
+    assert!(c.is_secure());
+    let cmds = srv.received();
+    assert_eq!(cmds.iter().filter(|l| l.starts_with("AUTH")).collect::<Vec<_>>(), ["AUTH SSL"]);
+}
+
+#[tokio::test]
+async fn auth_ssl_falls_back_to_auth_tls() {
+    let srv = MockServer::start(MockConfig::default()).await;
+    let opts = TlsOptions { auth_ssl: true, auth_ssl_fallback: false, ..tls(TlsVerify::AcceptAny) };
+    let err = FtpClient::connect("127.0.0.1", srv.addr.port(), config(Security::Explicit(opts)))
+        .await
+        .err()
+        .expect("AUTH must fail on a plain server");
+    assert_eq!(err.reply_code(), Some(502));
+    assert_eq!(srv.received(), ["AUTH SSL", "AUTH TLS"]);
+}
+
+#[tokio::test]
 async fn active_mode_plain_and_tls() {
     let srv = MockServer::start(MockConfig::default()).await;
     roundtrip(&srv, FtpConfig { active_mode: true, ..FtpConfig::default() }).await;

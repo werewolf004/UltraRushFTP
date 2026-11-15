@@ -9,6 +9,11 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Added
+
+- Site option *Use AUTH SSL instead of AUTH TLS* (explicit FTPS), for the servers that
+  hang up on `AUTH TLS` (FTPRush's *AUTH SSL* mode).
+
 ### Changed
 
 - Code signing is not planned: the releases stay unsigned (check the `.sha256` files).

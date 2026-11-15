@@ -554,6 +554,7 @@ site (before it); a folder is dragged onto another folder to go inside it.
 | Site enabled | on | A disabled site cannot be connected (`RushApp.FTP.DisableSite`) |
 | Also encrypt transfers (PROT P) | on | FTPS: encrypted data channels of the transfers |
 | Also encrypt listings (PROT P) | like the transfers | FTPS: encrypted data channels of the listings |
+| Use AUTH SSL instead of AUTH TLS | off | Explicit FTPS: `AUTH SSL` is sent first (`AUTH TLS` if refused), for the servers that hang up on `AUTH TLS` (FTPRush's *AUTH SSL* mode) |
 | Send PBSZ 0 after the TLS login | on | FTPS: off for the servers that refuse it |
 | Encrypted FXP (FTP to FTP) | Automatic | Automatic (`SSCN` when announced, otherwise `CPSV`), Do not use (clear data channel between the servers), Use |
 | Certificate | Verify with the Windows authorities | or Accept any certificate (not recommended), or Trusted certificate (SHA-256 fingerprint, filled in when you trust a server) |

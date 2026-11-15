@@ -916,6 +916,9 @@ fn site_form(
                 let r = ui.add(theme::single_line(fp).hint_text(t!("site.fingerprint_hint")).desired_width(f32::INFINITY));
                 theme::name(&r, t!("site.fingerprint"));
             }
+            if s.protocol == SiteProtocol::FtpsExplicit {
+                ui.checkbox(&mut s.auth_ssl, t!("site.auth_ssl"));
+            }
             ui.checkbox(&mut s.send_pbsz, t!("site.send_pbsz"));
             ui.label(t!("site.fxp_tls"));
             ui.horizontal(|ui| {
