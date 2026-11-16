@@ -9,6 +9,10 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-16
+
+File lists: type-ahead search and a lighter keyboard cursor.
+
 ### Added
 
 - Typing the first letters of a name in a list goes to it, like in Explorer.
@@ -517,7 +521,8 @@ link and command line. Not yet validated against real-world servers.
 - Known advisory accepted: `RUSTSEC-2023-0071` in `rsa` (used for SSH RSA keys); see
   [SECURITY.md](SECURITY.md).
 
-[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.11.0...v0.12.0
