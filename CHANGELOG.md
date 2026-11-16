@@ -15,7 +15,8 @@ GitHub release with the same tag.
 
 ### Fixed
 
-- The keyboard cursor frame of the file lists covered part of the row below.
+- The keyboard cursor of the file lists: no more frame on a highlighted row (it covered
+  part of the row below); a thin frame remains on a row that is not selected.
 
 ## [0.14.0] - 2026-11-15
 

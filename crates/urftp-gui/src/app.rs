@@ -4052,7 +4052,7 @@ impl PaneViewer<'_> {
         // The cursor is drawn in the panel that has the keyboard only.
         let cursor_row = cursor.row.filter(|_| self.focus == side);
         self.sides[side].selection_mut().1.scroll = false;
-        let cursor_stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
+        let cursor_stroke = egui::Stroke::new(1.0, ui.visuals().selection.stroke.color);
         let mut clicked: Option<(usize, bool, bool)> = None;
         let mut opened: Option<String> = None;
         let mut sort_by: Option<SortCol> = None;
@@ -4147,7 +4147,9 @@ impl PaneViewer<'_> {
                             });
                         }
                         let resp = row.response();
-                        if cursor_row == Some(i) {
+                        // The highlight shows the cursor on a selected row; a thin frame
+                        // shows it on a row that is not selected (Ctrl+click, Ctrl+Space).
+                        if cursor_row == Some(i) && !selected.contains(&i) {
                             // The row response can be taller than the row (cells of the
                             // previous frame): the frame keeps the height of one row.
                             let r = egui::Rect::from_min_size(resp.rect.min, egui::vec2(resp.rect.width(), ROW_HEIGHT));

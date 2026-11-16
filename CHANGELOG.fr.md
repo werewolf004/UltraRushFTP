@@ -16,7 +16,8 @@ la traduction.
 
 ### Corrigé
 
-- Le cadre du curseur clavier des listes de fichiers débordait sur la ligne du dessous.
+- Curseur clavier des listes de fichiers : plus de cadre sur une ligne surlignée (il
+  débordait sur la ligne du dessous) ; un trait fin reste sur une ligne non sélectionnée.
 
 ## [0.14.0] - 2026-11-15
 
