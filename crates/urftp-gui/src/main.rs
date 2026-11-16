@@ -6,6 +6,7 @@ mod app;
 mod browser;
 mod cmdline;
 mod options;
+mod render;
 mod sites;
 mod theme;
 
@@ -26,6 +27,11 @@ enum StartupError {
 
 fn main() -> Result<(), StartupError> {
     let result = run();
+    // No graphics card that can draw (virtual machine without 3D): start again with the
+    // software renderer of Windows.
+    if matches!(result, Err(StartupError::Ui(eframe::Error::Wgpu(_)))) && render::restart_in_software_mode() {
+        return Ok(());
+    }
     if let Err(e) = &result {
         // Released builds have no console: tell the user in a dialog.
         rfd::MessageDialog::new().set_level(rfd::MessageLevel::Error).set_title("UltraRushFTP").set_description(e.to_string()).show();
@@ -61,7 +67,7 @@ fn run() -> Result<(), StartupError> {
     if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon-256.png")) {
         viewport = viewport.with_icon(icon);
     }
-    let options = eframe::NativeOptions { viewport, ..Default::default() };
+    let options = eframe::NativeOptions { viewport, wgpu_options: render::wgpu_options(), ..Default::default() };
     eframe::run_native(
         "UltraRushFTP",
         options,

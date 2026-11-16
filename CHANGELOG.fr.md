@@ -23,6 +23,13 @@ la traduction.
 - Les commandes de site passent d'*Options › Interface* à la nouvelle page *Commandes* ;
   `%1` demande sa valeur dans une boîte de dialogue au lieu de la fenêtre RAW.
 
+### Corrigé
+
+- La fenêtre s'ouvre sur les ordinateurs sans accélération 3D (machines virtuelles,
+  Windows Server) : une carte graphique est choisie d'abord, puis le moteur logiciel de
+  Windows (WARP), OpenGL en dernier ; si la fenêtre ne s'ouvre toujours pas, le programme
+  se relance avec le moteur logiciel seul (que force aussi `ULTRARUSHFTP_SOFTWARE_RENDER=1`).
+
 ## [0.14.1] - 2026-11-16
 
 Listes de fichiers : recherche par saisie et curseur clavier plus discret.

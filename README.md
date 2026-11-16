@@ -48,7 +48,9 @@ Both contain `UltraRushFTP.exe` (interface), `urftp.exe` (command line),
 third-party notices. Settings and sites are stored in `%APPDATA%\UltraRushFTP` (kept when
 uninstalling); start with `-f` to keep them next to the program instead (portable mode).
 
-Requirements: Windows 10 or later, 64-bit. The releases are not code-signed: Windows
+Requirements: Windows 10 or later, 64-bit. No 3D acceleration is needed: without a usable
+graphics card (virtual machine, remote server) the window is drawn by the software renderer
+of Windows (WARP), which `ULTRARUSHFTP_SOFTWARE_RENDER=1` also forces. The releases are not code-signed: Windows
 SmartScreen may ask for confirmation on first start (*More info › Run anyway*); the
 `.sha256` file published with each release checks the download.
 

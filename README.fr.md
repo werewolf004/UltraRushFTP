@@ -50,7 +50,10 @@ mentions des composants tiers. Réglages et sites sont enregistrés dans
 `%APPDATA%\UltraRushFTP` (gardés à la désinstallation) ; lancer avec `-f` pour les garder
 à côté du programme (mode portable).
 
-Configuration requise : Windows 10 ou plus récent, 64 bits. Les versions ne sont pas
+Configuration requise : Windows 10 ou plus récent, 64 bits. L'accélération 3D n'est pas
+nécessaire : sans carte graphique utilisable (machine virtuelle, serveur distant), la fenêtre
+est dessinée par le moteur logiciel de Windows (WARP), que `ULTRARUSHFTP_SOFTWARE_RENDER=1`
+force aussi. Les versions ne sont pas
 signées : Windows SmartScreen peut demander une confirmation au premier lancement
 (*Informations complémentaires › Exécuter quand même*) ; le fichier `.sha256` publié avec
 chaque version vérifie le téléchargement.

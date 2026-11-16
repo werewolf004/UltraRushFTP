@@ -21,6 +21,13 @@ GitHub release with the same tag.
 - The site commands move from *Options › Interface* to the new *Commands* page; `%1`
   asks its value in a dialog instead of the RAW window.
 
+### Fixed
+
+- The window opens on computers without 3D acceleration (virtual machines, Windows
+  Server): a graphics card is chosen first, then the software renderer of Windows (WARP),
+  OpenGL last; when the window still cannot open, the program starts again with the
+  software renderer only (also forced by `ULTRARUSHFTP_SOFTWARE_RENDER=1`).
+
 ## [0.14.1] - 2026-11-16
 
 File lists: type-ahead search and a lighter keyboard cursor.
