@@ -71,6 +71,7 @@ one): `Enter` goes there.
 | Transfer to the other panel | `Transfer` button, drag and drop, right-click | `Space` or `Insert` |
 | Switch panel | click | `F6` |
 | Move the cursor | — | arrows, `Page Up` / `Page Down`, `Home` / `End` |
+| Go to a name | — | type its first letters (a pause of one second starts a new search; the same letter again goes to the next name) |
 | Select all / several | `Ctrl`+click, `Shift`+click, right-click › *Select all* | `Ctrl+A`, `Shift`+movement, `Ctrl+Space` (row at the cursor) |
 | Copy the full path | right-click → Copy path | — |
 | Copy the web address | right-click → Copy HTTP address (remote panel of a site with a web address) | — |

@@ -269,6 +269,26 @@ fn arrows_move_the_cursor_and_shift_extends_the_selection() {
 }
 
 #[test]
+fn typed_letters_go_to_the_first_matching_name() {
+    let mut ui = Ui::start(Lang::En, true);
+    assert_eq!(ui.left_rows(), ["docs", "alpha.txt", "beta.bin", "gamma.log"]);
+    ui.harness.event(egui::Event::Text("GA".into()));
+    ui.run();
+    assert_eq!(ui.left_selection(), ["gamma.log"]);
+    // After a pause, a new search.
+    ui.harness.step();
+    ui.app().type_ahead.at = -10.0;
+    ui.harness.event(egui::Event::Text("b".into()));
+    ui.run();
+    assert_eq!(ui.left_selection(), ["beta.bin"]);
+    // Space stays the transfer shortcut, not a letter of the search.
+    ui.app().type_ahead.at = -10.0;
+    ui.harness.event(egui::Event::Text("zz".into()));
+    ui.run();
+    assert_eq!(ui.left_selection(), ["beta.bin"], "no name starts with z");
+}
+
+#[test]
 fn enter_opens_a_folder_and_backspace_goes_back() {
     let mut ui = Ui::start(Lang::En, true);
     let home = ui.left_path();

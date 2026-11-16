@@ -10,6 +10,14 @@ la traduction.
 
 ## [Non publié]
 
+### Ajouté
+
+- Taper les premières lettres d'un nom dans une liste y amène, comme dans l'Explorateur.
+
+### Corrigé
+
+- Le cadre du curseur clavier des listes de fichiers débordait sur la ligne du dessous.
+
 ## [0.14.0] - 2026-11-15
 
 Connexion à davantage de serveurs : bouncers, `AUTH SSL`, certificats P-521 et RSA

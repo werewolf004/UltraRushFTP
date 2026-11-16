@@ -239,7 +239,37 @@ enum CursorMove {
     By(isize),
     First,
     Last,
+    To(usize),
 }
+
+/// Typing in a list goes to the first name starting with the letters typed.
+#[derive(Debug, Default)]
+struct TypeAhead {
+    text: String,
+    /// Time of the last letter (`egui` input time, seconds).
+    at: f64,
+}
+
+/// Letters typed further apart than this start a new search.
+const TYPE_AHEAD_PAUSE: f64 = 1.0;
+
+/// Row to go to after typing `text` (lower case): the first name starting with it; the
+/// same letter typed again goes to the next name starting with that letter.
+fn type_ahead_row(names: &[String], text: &str, cursor: Option<usize>) -> Option<usize> {
+    let starts = |i: &usize, p: &str| names[*i].to_lowercase().starts_with(p);
+    let mut chars = text.chars();
+    let first = chars.next()?;
+    if text.chars().count() > 1 && chars.all(|c| c == first) {
+        let one = first.to_string();
+        let n = names.len();
+        let from = cursor.map_or(0, |c| c + 1);
+        return (0..n).map(|k| (from + k) % n).find(|i| starts(i, &one));
+    }
+    (0..names.len()).find(|i| starts(i, text))
+}
+
+/// Height of the rows of the file lists.
+const ROW_HEIGHT: f32 = 22.0;
 
 /// Rows moved by Page Up / Page Down.
 const PAGE_ROWS: isize = 15;
@@ -426,6 +456,7 @@ impl Side {
             (CursorMove::By(d), Some(_)) => from.saturating_add_signed(d).min(last),
             (CursorMove::First, _) => 0,
             (CursorMove::Last, _) => last,
+            (CursorMove::To(i), _) => i.min(last),
         };
         if extend {
             sel.extend(from.min(to)..=from.max(to));
@@ -1385,6 +1416,8 @@ pub struct UltraRushApp {
     ipc_enabled: bool,
     /// `Ctrl+V` was down on the previous frame.
     paste_down: bool,
+    /// Letters typed in the active list.
+    type_ahead: TypeAhead,
     /// Last time the log files were written.
     logs_flushed: std::time::Instant,
     /// "Send RAW command" dialog and the replies received.
@@ -1597,6 +1630,7 @@ impl UltraRushApp {
             power: run_power_action,
             ipc_enabled: true,
             paste_down: false,
+            type_ahead: TypeAhead::default(),
             logs_flushed: std::time::Instant::now(),
             raw: raw::RawDialog::default(),
             manual: favorites::ManualDownload::default(),
@@ -3297,6 +3331,31 @@ impl UltraRushApp {
         if paste_pressed {
             out.push(Action::Op(side, Op::Paste));
         }
+        // Letters typed: to the first name starting with them. Space, `+` and `-` are
+        // shortcuts of the list (transfer, select or unselect by mask).
+        let (typed, now) = ctx.input(|i| {
+            let typed: String = i
+                .events
+                .iter()
+                .filter_map(|e| match e {
+                    egui::Event::Text(t) if !i.modifiers.command && !i.modifiers.alt => Some(t.as_str()),
+                    _ => None,
+                })
+                .collect();
+            (typed, i.time)
+        });
+        let typed: String = typed.chars().filter(|c| !c.is_control() && !matches!(c, ' ' | '+' | '-')).collect();
+        if !typed.is_empty() {
+            if now - self.type_ahead.at > TYPE_AHEAD_PAUSE {
+                self.type_ahead.text.clear();
+            }
+            self.type_ahead.at = now;
+            self.type_ahead.text.push_str(&typed.to_lowercase());
+            let names: Vec<String> = tab.sides[side].rows().iter().map(|r| r.name.clone()).collect();
+            if let Some(row) = type_ahead_row(&names, &self.type_ahead.text, tab.sides[side].cursor().row) {
+                out.push(Action::Cursor(side, CursorMove::To(row), false));
+            }
+        }
         if pressed(Modifiers::NONE, Key::Enter)
             && let Some(n) = tab.sides[side].folder_to_open()
         {
@@ -4044,7 +4103,7 @@ impl PaneViewer<'_> {
                     }
                 })
                 .body(|body| {
-                    body.rows(22.0, rows.len(), |mut row| {
+                    body.rows(ROW_HEIGHT, rows.len(), |mut row| {
                         let i = row.index();
                         let f = &rows[i];
                         row.set_selected(selected.contains(&i));
@@ -4089,7 +4148,10 @@ impl PaneViewer<'_> {
                         }
                         let resp = row.response();
                         if cursor_row == Some(i) {
-                            painter.rect_stroke(resp.rect.shrink(1.0), 3.0, cursor_stroke, egui::StrokeKind::Inside);
+                            // The row response can be taller than the row (cells of the
+                            // previous frame): the frame keeps the height of one row.
+                            let r = egui::Rect::from_min_size(resp.rect.min, egui::vec2(resp.rect.width(), ROW_HEIGHT));
+                            painter.rect_stroke(r.shrink(1.0), 3.0, cursor_stroke, egui::StrokeKind::Inside);
                         }
                         let size = if f.is_dir { t!("files.folder") } else { look::size_text(f.size) };
                         let mut spoken = if marked {
@@ -4571,5 +4633,21 @@ mod tests {
         let q = parse_connect_url("sftp://host").unwrap();
         assert!(q.proto == QuickProto::Sftp && q.port == "22" && q.user.is_empty());
         assert!(parse_connect_url("http://x").is_none());
+    }
+}
+
+#[cfg(test)]
+mod type_ahead_tests {
+    use super::type_ahead_row;
+
+    #[test]
+    fn prefix_then_same_letter_cycles() {
+        let names: Vec<String> = ["Docs", "Dragon.E01", "Dragon.E02", "alpha", "dr.txt"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(type_ahead_row(&names, "dra", None), Some(1));
+        assert_eq!(type_ahead_row(&names, "dr.", None), Some(4));
+        assert_eq!(type_ahead_row(&names, "x", None), None);
+        // "dd": the next name starting with d after the cursor, then back to the top.
+        assert_eq!(type_ahead_row(&names, "dd", Some(0)), Some(1));
+        assert_eq!(type_ahead_row(&names, "ddd", Some(4)), Some(0));
     }
 }

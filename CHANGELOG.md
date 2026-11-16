@@ -9,6 +9,14 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Added
+
+- Typing the first letters of a name in a list goes to it, like in Explorer.
+
+### Fixed
+
+- The keyboard cursor frame of the file lists covered part of the row below.
+
 ## [0.14.0] - 2026-11-15
 
 Connections to more servers: bouncers, `AUTH SSL`, P-521 and 1024-bit RSA certificates,

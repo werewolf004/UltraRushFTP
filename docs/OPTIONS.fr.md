@@ -71,6 +71,7 @@ dossier courant) : `Entrée` y va.
 | Transférer vers l'autre panneau | bouton `Transférer`, glisser-déposer, clic droit | `Espace` ou `Inser` |
 | Changer de panneau | clic | `F6` |
 | Déplacer le curseur | — | flèches, `Page préc.` / `Page suiv.`, `Début` / `Fin` |
+| Aller à un nom | — | taper ses premières lettres (une pause d'une seconde relance la recherche ; la même lettre à nouveau passe au nom suivant) |
 | Tout sélectionner / plusieurs | `Ctrl`+clic, `Maj`+clic, clic droit › *Tout sélectionner* | `Ctrl+A`, `Maj`+déplacement, `Ctrl+Espace` (ligne du curseur) |
 | Copier le chemin complet | clic droit → Copier le chemin | — |
 | Copier l'adresse web | clic droit → Copier l'adresse HTTP (panneau distant d'un site qui a une adresse web) | — |
