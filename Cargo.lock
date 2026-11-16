@@ -4115,7 +4115,7 @@ dependencies = [
 
 [[package]]
 name = "rushmirc"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "embed-resource",
  "urftp-sys",
@@ -5274,7 +5274,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "urftp-cli"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "embed-resource",
  "parking_lot 0.13.0",
@@ -5287,7 +5287,7 @@ dependencies = [
 
 [[package]]
 name = "urftp-core"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "base64",
  "crc32fast",
@@ -5303,7 +5303,7 @@ dependencies = [
 
 [[package]]
 name = "urftp-gui"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "crc32fast",
  "eframe",
@@ -5326,7 +5326,7 @@ dependencies = [
 
 [[package]]
 name = "urftp-i18n"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "serde_json",
  "sys-locale",
@@ -5334,7 +5334,7 @@ dependencies = [
 
 [[package]]
 name = "urftp-proto"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "crc32fast",
  "encoding_rs",
@@ -5358,14 +5358,14 @@ dependencies = [
 
 [[package]]
 name = "urftp-script"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "urftp-sys"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "thiserror 2.0.21",
  "windows",

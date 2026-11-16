@@ -10,6 +10,11 @@ la traduction.
 
 ## [Non publié]
 
+## [0.15.0] - 2026-11-16
+
+Concepteur de commandes (dossiers, une touche par commande, paramètres de FTPRush) et
+fenêtre qui s'ouvre sans accélération 3D.
+
 ### Ajouté
 
 - **Concepteur de commandes** (*Options › Commandes*, *FTP Command Designer* de
@@ -593,7 +598,8 @@ réels.
 - Alerte connue acceptée : `RUSTSEC-2023-0071` dans `rsa` (utilisée pour les clés SSH
   RSA) ; voir [SECURITY.fr.md](SECURITY.fr.md).
 
-[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.1...HEAD
+[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.12.0...v0.13.0
