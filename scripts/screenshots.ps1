@@ -121,7 +121,7 @@ try {
             ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8NoBOM "$data/tasks.json"
         Shot "$images/tasks.$lang.png" $base ($common + @{ URUSHFTP_SHOW_PANES = 'windows,tasks' }) 3
         Remove-Item -Force "$data/tasks.json" -ErrorAction SilentlyContinue
-        $pages = @{ 0 = 'general'; 1 = 'transfers'; 3 = 'existing-file'; 4 = 'skiplist'; 6 = 'proxy'; 7 = 'ident'; 8 = 'keep-alive'; 9 = 'connection'; 10 = 'new-site'; 11 = 'advanced'; 12 = 'browse'; 13 = 'interface'; 14 = 'shortcuts'; 15 = 'notifications'; 16 = 'security' }
+        $pages = @{ 0 = 'general'; 1 = 'transfers'; 3 = 'existing-file'; 4 = 'skiplist'; 6 = 'proxy'; 7 = 'ident'; 8 = 'keep-alive'; 9 = 'connection'; 10 = 'new-site'; 11 = 'advanced'; 12 = 'browse'; 13 = 'interface'; 14 = 'shortcuts'; 15 = 'notifications'; 16 = 'security'; 17 = 'commands' }
         foreach ($page in $pages.Keys | Sort-Object) {
             Shot "$images/options-$($pages[$page]).$lang.png" $base ($common + @{ URUSHFTP_OPEN_OPTIONS = "$page" }) 3
         }

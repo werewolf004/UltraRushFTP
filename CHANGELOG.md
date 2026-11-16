@@ -9,6 +9,18 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Added
+
+- **Command designer** (*Options › Commands*, FTPRush *FTP Command Designer*): commands
+  in folders (sub-menus), a key per command, in the FTP menu and the right-click menu of
+  the remote panels; parameters `%f` (once per selected item), `%p`, `%c`,
+  `%d[caption]` (asked in a dialog), `%1`…`%9`, `%all%`, `%clearbuf%`, `&window`.
+
+### Changed
+
+- The site commands move from *Options › Interface* to the new *Commands* page; `%1`
+  asks its value in a dialog instead of the RAW window.
+
 ## [0.14.1] - 2026-11-16
 
 File lists: type-ahead search and a lighter keyboard cursor.

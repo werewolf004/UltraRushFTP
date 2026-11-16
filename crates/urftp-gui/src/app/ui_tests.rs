@@ -1236,13 +1236,37 @@ fn raw_dialog_opens_with_ctrl_r_and_site_commands_fill_it() {
     assert!(ui.app().raw.open && ui.has_label(&t!("raw.title")));
     assert_all_named(&ui, "RAW dialog");
     ui.app().raw.open = false;
-    let i = ui.app().options.settings.site_commands.iter().position(|c| c.lines.contains("%1")).unwrap();
-    act(&mut ui, super::Action::SiteCommand(i));
-    assert!(ui.app().raw.open);
-    assert_eq!(ui.app().raw.text, "SITE SEARCH %1", "a command with a parameter is put in the dialog");
     // Nothing connected: the command is refused with a message.
     assert_eq!(ui.app().send_raw("SITE WHO", super::raw::RawTarget::All), 0);
     assert!(ui.app().tabs[0].log.iter().any(|e| e.text == t!("raw.no_connection")));
+}
+
+#[test]
+fn designer_commands_ask_their_questions_and_run_from_their_key() {
+    use urftp_core::settings::SiteCommand;
+    let mut ui = Ui::start(Lang::En, true);
+    let mut cmd = SiteCommand::new("Add user", "SITE ADDUSER %d[User name] %d[Password]");
+    cmd.folder = "glftpd/Users".into();
+    cmd.hotkey = "Ctrl+Alt+U".into();
+    ui.app().options.settings.site_commands = vec![cmd, SiteCommand::new("Nuke", "SITE NUKE %f 3")];
+    ui.key_with(Modifiers::COMMAND | Modifiers::ALT, Key::U);
+    assert!(ui.app().raw.ask.is_some(), "the key opens the questions");
+    assert!(ui.has_label("User name") && ui.has_label("Password"));
+    assert_all_named(&ui, "questions of a command");
+    ui.harness.event(egui::Event::Text("bob".into()));
+    ui.run();
+    assert_eq!(ui.app().raw.ask.as_ref().unwrap().answers[0], "bob", "the first field has the focus");
+    ui.key(Key::Enter);
+    assert!(ui.app().raw.ask.is_none());
+    // Nothing connected: refused with a message.
+    assert!(ui.app().tabs[0].log.iter().any(|e| e.text == t!("raw.no_connection")));
+    // %f with nothing selected: refused before sending.
+    act(&mut ui, super::Action::SiteCommand(1));
+    assert!(ui.app().tabs[0].log.iter().any(|e| e.text == t!("raw.no_selection")));
+    // Escape cancels the questions.
+    act(&mut ui, super::Action::SiteCommand(0));
+    ui.key(Key::Escape);
+    assert!(ui.app().raw.ask.is_none());
 }
 
 #[test]

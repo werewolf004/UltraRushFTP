@@ -10,6 +10,19 @@ la traduction.
 
 ## [Non publié]
 
+### Ajouté
+
+- **Concepteur de commandes** (*Options › Commandes*, *FTP Command Designer* de
+  FTPRush) : commandes rangées en dossiers (sous-menus), une touche par commande, dans le
+  menu FTP et le menu du clic droit des panneaux distants ; paramètres `%f` (une fois par
+  élément sélectionné), `%p`, `%c`, `%d[libellé]` (demandé dans une boîte de dialogue),
+  `%1`…`%9`, `%all%`, `%clearbuf%`, `&window`.
+
+### Modifié
+
+- Les commandes de site passent d'*Options › Interface* à la nouvelle page *Commandes* ;
+  `%1` demande sa valeur dans une boîte de dialogue au lieu de la fenêtre RAW.
+
 ## [0.14.1] - 2026-11-16
 
 Listes de fichiers : recherche par saisie et curseur clavier plus discret.

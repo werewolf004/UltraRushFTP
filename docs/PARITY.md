@@ -93,8 +93,8 @@ Summary (287 topics): ✅ 264 · 🟡 4 · ⬜ 0 · ➖ 19.
 |---|---|---|
 | Site manager | ✅ | |
 | Add to site manager | ✅ | `➕` next to Connect in the quick bar |
-| Command (predefined site commands) | ✅ | FTP › Site commands; `%1` asks for a parameter |
-| Command designer | ✅ | Options › Interface › Site commands |
+| Command (predefined site commands) | ✅ | FTP › Site commands and right-click menu of the remote panels |
+| Command designer | ✅ | Options › Commands: folders, a key per command, `%f` `%p` `%c` `%d[…]` `%1`… `%all%` `%clearbuf%` `&window` |
 | Send RAW command | ✅ | FTP › Send RAW command (`Ctrl+R`) |
 | Compare folder contents (name, size, partial, hide same) | ✅ | FTP menu → Compare the panels |
 | View raw directory | ✅ | FTP: as sent by the server; SFTP: `ls -l` lines |

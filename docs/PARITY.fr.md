@@ -93,8 +93,8 @@ Résumé (287 sujets) : ✅ 264 · 🟡 4 · ⬜ 0 · ➖ 19.
 |---|---|---|
 | Gestionnaire de sites | ✅ | |
 | Ajouter au gestionnaire de sites | ✅ | `➕` à côté de Connexion dans la barre rapide |
-| Commandes (commandes de site prédéfinies) | ✅ | FTP › Commandes de site ; `%1` demande un paramètre |
-| Concepteur de commandes | ✅ | Options › Interface › Commandes de site |
+| Commandes (commandes de site prédéfinies) | ✅ | FTP › Commandes de site et menu du clic droit des panneaux distants |
+| Concepteur de commandes | ✅ | Options › Commandes : dossiers, une touche par commande, `%f` `%p` `%c` `%d[…]` `%1`… `%all%` `%clearbuf%` `&window` |
 | Envoyer une commande RAW | ✅ | FTP › Envoyer une commande RAW (`Ctrl+R`) |
 | Comparer le contenu des dossiers (nom, taille, partiel, masquer les identiques) | ✅ | Menu FTP → Comparer les panneaux |
 | Voir le listing brut | ✅ | FTP : tel qu'envoyé par le serveur ; SFTP : lignes `ls -l` |

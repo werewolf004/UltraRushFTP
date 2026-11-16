@@ -3235,6 +3235,7 @@ impl UltraRushApp {
         let tab = &self.tabs[self.active];
         if tab.prompt.is_some()
             || tab.trust.is_some()
+            || self.raw.ask.is_some()
             || self.confirm.is_some()
             || self.unlock.is_some()
             || self.scripts.asking()
@@ -3282,6 +3283,14 @@ impl UltraRushApp {
         }
         let side = tab.focus;
         let mut out = Vec::new();
+        // Keys of the designer commands, before those of the list.
+        for (i, c) in self.options.settings.site_commands.iter().enumerate() {
+            if let Some(b) = input::parse_optional(&c.hotkey)
+                && ctx.input_mut(|inp| inp.consume_key(b.mods, b.key))
+            {
+                out.push(Action::SiteCommand(i));
+            }
+        }
         // The list commands, in the order of the table (more modifiers first).
         let file_at_cursor =
             tab.sides[side].cursor().row.and_then(|i| tab.sides[side].rows().get(i)).filter(|r| !r.is_dir).map(|r| r.name.clone());
@@ -3636,6 +3645,7 @@ impl eframe::App for UltraRushApp {
             let double_click = ui_opts.double_click_file;
             let dark = self.dark;
             let highlights = look::highlights(ui_opts, dark);
+            let site_commands = &self.options.settings.site_commands;
             let log_look = (look::log_colors(ui_opts, dark), ui_opts.log_text_size);
             let script_running = self.scripts.console_running(tab.id);
             let window_cols = (ui_opts.window_list_ftp, ui_opts.window_list_action);
@@ -3675,6 +3685,7 @@ impl eframe::App for UltraRushApp {
                 log_view,
                 double_click,
                 highlights: &highlights,
+                site_commands,
                 log_look,
                 script_running,
                 windows: &window_rows,
@@ -3697,6 +3708,7 @@ impl eframe::App for UltraRushApp {
         self.prompt_dialog(&ctx);
         self.tools_ui(&ctx);
         self.raw_dialog_window(&ctx);
+        self.command_ask_window(&ctx);
         self.confirm_dialog(&ctx);
         self.layout_dialog(&ctx);
         self.manual_window(&ctx);
@@ -3771,6 +3783,8 @@ struct PaneViewer<'a> {
     double_click: urftp_core::settings::FileDoubleClick,
     /// Colours of the names matching masks.
     highlights: &'a [(String, egui::Color32)],
+    /// Commands of the designer (menu of the remote panels).
+    site_commands: &'a [urftp_core::settings::SiteCommand],
     /// Colours (command, reply, status, error) and text size of the logs.
     log_look: (Option<[egui::Color32; 4]>, u32),
     /// A script of the console of this tab is running.
@@ -4018,6 +4032,7 @@ impl PaneViewer<'_> {
 
         let rows: Vec<FileRow> = self.sides[side].rows().to_vec();
         let marks = self.sides[side].list().marks.clone();
+        let site_commands = self.site_commands;
         let remote_panel = self.sides[side].is_remote();
         // Items the skip list would skip, for their colour.
         let panel_dir = match &self.sides[side] {
@@ -4234,6 +4249,9 @@ impl PaneViewer<'_> {
                                 }
                                 ui.separator();
                                 fileops::context_menu(ui, side, remote_panel, f, &mut menu);
+                                if remote_panel {
+                                    ui.menu_button(t!("raw.menu_commands"), |ui| raw::commands_tree(ui, site_commands, &mut menu));
+                                }
                                 ui.separator();
                                 if ui.button(t!("files.ctx_rename")).clicked() {
                                     menu.push(Action::Rename(side));

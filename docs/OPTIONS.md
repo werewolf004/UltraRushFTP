@@ -137,8 +137,8 @@ immediately, running transfers included. They are greyed out while no limit is s
 active panel, to both panels or to every connected site; `Ctrl+Enter` sends. The replies
 are listed below the commands and in the FTP log.
 
-**FTP → Site commands**: the commands of *Options › Interface* (`SITE WHO`, `SITE NEW`...).
-A command with `%1` opens in the RAW dialog to be completed first.
+**FTP → Site commands**: the commands of the designer (*Options › Commands*, `SITE WHO`,
+`SITE NEW`...), in their folders; a command that asks questions opens a dialog first.
 
 ### Manual download
 
@@ -491,7 +491,6 @@ downloaded program.
 | Double-click on a tab | Nothing | New tab of the same sites, or close the tab |
 | Double-click on a queue item | Nothing | Edit, try again (failed or stopped item) or remove it |
 | Confirmations | exit, close a busy tab: on; remove queue items: off | Quitting while items are still to transfer; closing a tab with connections or a queue; removing queue items |
-| Site commands | `SITE HELP`, `SITE WHO`, `SITE NEW`, `SITE SEARCH %1`, `SITE STAT`, `SYST` + `FEAT` | Name and commands (one per line) of the FTP › Site commands menu |
 
 ### Shortcuts
 
@@ -526,6 +525,32 @@ given to several commands are listed. `F1` shows the keys in use. The arrows, `E
 | Back up the configuration each day | off | At the first start of the day, into `backup` of the data folder; 4 kept |
 | ShellExecuteCommand | Ask each time | What a script asking to start a program gets: a question showing the script's origin, the program, its parameters and folder (*Start it*, *Always allow this program*, *Refuse*); *Start them without asking*; *Never start a program*. Scripts evaluated by `Invoke` cannot ask: they only start the programs allowed |
 | Programs always allowed | none | Programs allowed with *Always allow this program*; `✕` stops allowing one |
+
+### Commands
+
+![Commands](images/options-commands.en.png)
+
+The command designer (FTPRush *FTP Command Designer*). Each command has a **name**, a
+**folder** (sub-folders separated by `/`: `glftpd/Users`) that makes a sub-menu, a
+**key** that runs it directly (`Ctrl+Alt+W`; keys taken twice, or by a key of the
+program, are reported) and its **FTP commands**, one per line. The commands are in
+*FTP › Site commands* and in the right-click menu of the remote panels; the name of a
+command that asks questions ends with `…`.
+
+| Parameter | Value |
+|---|---|
+| `%f` | Selected name; the line is sent once per selected item (nothing selected: the command is refused) |
+| `%p` | Current folder of the remote panel |
+| `%c` | Text of the clipboard |
+| `%d[caption]` | Asks for a text when the command runs, with this caption (one field per `%d`, in order) |
+| `%1` … `%9` | Answer to the Nth question (a number without its `%d` asks too) |
+| `%all%` | Sends to every connected site instead of the active panel |
+| `%clearbuf%` | Clears the directory cache and lists the folder again |
+| `&window` | Shows the replies in the *Send RAW command* window |
+| `%%` | A `%` sign |
+
+Defaults: `SITE HELP`, `SITE WHO`, `SITE NEW`, `SITE SEARCH %d[Search]`, `SITE STAT`,
+`SYST` + `FEAT`.
 
 ### Backups
 

@@ -15,6 +15,7 @@
 pub mod backup;
 pub mod browsing;
 pub mod checksum;
+pub mod commands;
 pub mod exists;
 pub mod export;
 pub mod import;

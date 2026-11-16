@@ -35,10 +35,13 @@ pub(crate) enum Page {
     Shortcuts,
     Notifications,
     Security,
+    Commands,
 }
 
 impl Page {
-    pub(crate) const ALL: [Page; 17] = [
+    /// Pages in the order of the list; the new ones at the end (the screenshots open a
+    /// page by its index).
+    pub(crate) const ALL: [Page; 18] = [
         Page::General,
         Page::Transfers,
         Page::Speed,
@@ -56,6 +59,7 @@ impl Page {
         Page::Shortcuts,
         Page::Notifications,
         Page::Security,
+        Page::Commands,
     ];
 
     pub(crate) fn label(self) -> String {
@@ -77,6 +81,7 @@ impl Page {
             Page::Shortcuts => t!("options.page_shortcuts"),
             Page::Notifications => t!("options.page_notifications"),
             Page::Security => t!("options.page_security"),
+            Page::Commands => t!("options.page_commands"),
         }
     }
 }
@@ -306,11 +311,8 @@ impl OptionsWindow {
             Page::Shortcuts => shortcuts_ui(ui, &mut s.interface),
             Page::Notifications => notifications_ui(ui, &mut s.notify),
             Page::Security => security_ui(ui, s, &mut self.master),
-            Page::Interface => {
-                interface_ui(ui, &mut s.interface);
-                ui.add_space(8.0);
-                commands_ui(ui, &mut s.site_commands);
-            }
+            Page::Interface => interface_ui(ui, &mut s.interface),
+            Page::Commands => commands_ui(ui, s),
             Page::Ident => {
                 let id = &mut s.ident;
                 ui.checkbox(&mut id.enabled, t!("options.ident_enable"));
@@ -1257,29 +1259,48 @@ fn shortcuts_ui(ui: &mut egui::Ui, s: &mut urftp_core::settings::InterfaceSettin
     }
 }
 
-/// Predefined site commands of the FTP menu ("Command designer").
-fn commands_ui(ui: &mut egui::Ui, list: &mut Vec<urftp_core::settings::SiteCommand>) {
-    ui.label(RichText::new(t!("options.ui_commands_section")).strong());
+/// "Commands" page: the command designer (FTPRush "FTP Command Designer").
+fn commands_ui(ui: &mut egui::Ui, s: &mut Settings) {
+    use crate::app::input;
+    use urftp_core::settings::SiteCommand;
+    ui.label(RichText::new(t!("options.ui_commands_intro")).weak());
+    ui.add_space(4.0);
+    let list = &mut s.site_commands;
     let mut remove = None;
     let mut up = None;
-    egui::Grid::new("opt-commands").num_columns(4).spacing([8.0, 6.0]).show(ui, |ui| {
-        ui.label(RichText::new(t!("common.name")).weak());
-        ui.label(RichText::new(t!("options.ui_command_lines")).weak());
-        ui.end_row();
-        for (i, c) in list.iter_mut().enumerate() {
-            let r = ui.add(theme::single_line(&mut c.name).desired_width(140.0));
-            theme::name(&r, format!("{} {}", t!("common.name"), i + 1));
-            let r = ui.add(egui::TextEdit::multiline(&mut c.lines).font(egui::TextStyle::Monospace).desired_rows(1).desired_width(300.0));
-            theme::name(&r, format!("{} {}", t!("options.ui_command_lines"), i + 1));
-            if theme::icon_button(ui, "⏶", t!("common.move_up")).clicked() && i > 0 {
-                up = Some(i);
-            }
-            if theme::icon_button(ui, "✕", t!("common.remove")).clicked() {
-                remove = Some(i);
-            }
-            ui.end_row();
-        }
-    });
+    let error = theme::colors(ui).error;
+    for (i, c) in list.iter_mut().enumerate() {
+        ui.push_id(("command", i), |ui| {
+            egui::Frame::group(ui.style()).show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    let l = ui.label(t!("common.name"));
+                    let r = ui.add(theme::single_line(&mut c.name).desired_width(110.0)).labelled_by(l.id);
+                    theme::name(&r, format!("{} {}", t!("common.name"), i + 1));
+                    let l = ui.label(t!("options.ui_command_folder"));
+                    let r = ui.add(theme::single_line(&mut c.folder).desired_width(90.0)).labelled_by(l.id);
+                    theme::name(&r, format!("{} {}", t!("options.ui_command_folder"), i + 1));
+                    let l = ui.label(t!("options.ui_command_key"));
+                    let valid = c.hotkey.trim().is_empty() || input::parse_optional(&c.hotkey).is_some();
+                    let mut field = theme::single_line(&mut c.hotkey).desired_width(80.0);
+                    if !valid {
+                        field = field.text_color(error);
+                    }
+                    let r = ui.add(field).labelled_by(l.id);
+                    theme::name(&r, format!("{} {}", t!("options.ui_command_key"), i + 1));
+                    if theme::icon_button(ui, "⏶", t!("common.move_up")).clicked() && i > 0 {
+                        up = Some(i);
+                    }
+                    if theme::icon_button(ui, "✕", t!("common.remove")).clicked() {
+                        remove = Some(i);
+                    }
+                });
+                let r = ui.add(
+                    egui::TextEdit::multiline(&mut c.lines).font(egui::TextStyle::Monospace).desired_rows(2).desired_width(f32::INFINITY),
+                );
+                theme::name(&r, format!("{} {}", t!("options.ui_command_lines"), i + 1));
+            });
+        });
+    }
     if let Some(i) = up {
         list.swap(i, i - 1);
     }
@@ -1288,13 +1309,61 @@ fn commands_ui(ui: &mut egui::Ui, list: &mut Vec<urftp_core::settings::SiteComma
     }
     ui.horizontal(|ui| {
         if ui.button(t!("options.browse_add")).clicked() {
-            list.push(urftp_core::settings::SiteCommand { name: t!("options.ui_command_new"), lines: "SITE ".into() });
+            list.push(SiteCommand::new(&t!("options.ui_command_new"), "SITE "));
         }
         if ui.button(t!("common.defaults")).clicked() {
             *list = urftp_core::settings::default_site_commands();
         }
     });
-    ui.label(RichText::new(t!("options.ui_commands_hint")).weak());
+    // Keys not understood, or taken by another command or by a key of the list.
+    let bad: Vec<&str> = list
+        .iter()
+        .filter(|c| !c.hotkey.trim().is_empty() && input::parse_optional(&c.hotkey).is_none())
+        .map(|c| c.name.as_str())
+        .collect();
+    if !bad.is_empty() {
+        ui.colored_label(error, t!("options.keys_invalid", names = bad.join(", ")));
+    }
+    for (key, names) in command_key_conflicts(list, &s.interface.shortcuts) {
+        ui.colored_label(error, t!("options.ui_command_conflict", key = key, names = names.join(", ")));
+    }
+    ui.add_space(6.0);
+    ui.label(RichText::new(t!("options.ui_commands_params")).strong());
+    for k in ["f", "p", "c", "d", "n", "all", "clearbuf", "window", "percent"] {
+        ui.label(RichText::new(urftp_i18n::text(&format!("options.ui_command_param_{k}"))).monospace());
+    }
+}
+
+/// Keys used twice: by two commands, or by a command and a key of the program.
+fn command_key_conflicts(
+    list: &[urftp_core::settings::SiteCommand],
+    shortcuts: &std::collections::BTreeMap<String, String>,
+) -> Vec<(String, Vec<String>)> {
+    use crate::app::input;
+    let mut by_key: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+    for (cmd, b) in input::table(shortcuts) {
+        let names = by_key.entry(input::format(&b)).or_default();
+        let name = urftp_i18n::text(&cmd.label_key()).to_string();
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    let builtin: std::collections::BTreeSet<String> = by_key.keys().cloned().collect();
+    let mut used: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+    for c in list {
+        if let Some(b) = input::parse_optional(&c.hotkey) {
+            used.entry(input::format(&b)).or_default().push(c.name.clone());
+        }
+    }
+    used.into_iter()
+        .filter(|(k, v)| v.len() > 1 || builtin.contains(k))
+        .map(|(k, mut v)| {
+            if let Some(b) = by_key.get(&k) {
+                v.extend(b.iter().cloned());
+            }
+            (k, v)
+        })
+        .collect()
 }
 
 /// "Browsing" page: directory cache and the programs of the remote files.
@@ -1485,4 +1554,26 @@ fn proxy_global_ui(ui: &mut egui::Ui, g: &mut GlobalProxy) {
         ui.checkbox(&mut p.data_channel, t!("options.proxy_data"));
         ui.checkbox(&mut g.bypass_local, t!("options.proxy_bypass_local"));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command_key_conflicts;
+    use urftp_core::settings::SiteCommand;
+
+    #[test]
+    fn command_keys_taken_twice_are_reported() {
+        let mut a = SiteCommand::new("Who", "SITE WHO");
+        a.hotkey = "F5".into();
+        let mut b = SiteCommand::new("Stat", "SITE STAT");
+        b.hotkey = "ctrl+alt+s".into();
+        let mut c = SiteCommand::new("New", "SITE NEW");
+        c.hotkey = "Ctrl+Alt+S".into();
+        let free = SiteCommand::new("Help", "SITE HELP");
+        let found = command_key_conflicts(&[a, b, c, free], &Default::default());
+        let keys: Vec<&str> = found.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, ["Ctrl+Alt+S", "F5"], "{found:?}");
+        assert_eq!(found[0].1, ["Stat", "New"]);
+        assert!(found[1].1.len() >= 2 && found[1].1[0] == "Who", "F5 is also Refresh: {found:?}");
+    }
 }

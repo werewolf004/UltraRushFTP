@@ -703,18 +703,28 @@ impl Default for FolderMonitor {
     }
 }
 
-/// A predefined command: one FTP command per line; `%1` is a parameter typed before
-/// sending.
+/// A command of the command designer: one FTP command per line, with the parameters of
+/// [`crate::commands`] (`%f`, `%p`, `%c`, `%d[caption]`, `%1`…, `%all%`, `%clearbuf%`,
+/// `&window`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct SiteCommand {
     pub name: String,
     pub lines: String,
+    /// Folder of the menus, sub-folders separated by `/` (empty: top level).
+    pub folder: String,
+    /// Keyboard shortcut (`Ctrl+Alt+W`; empty: none).
+    pub hotkey: String,
 }
 
 impl SiteCommand {
-    fn new(name: &str, lines: &str) -> Self {
-        Self { name: name.into(), lines: lines.into() }
+    pub fn new(name: &str, lines: &str) -> Self {
+        Self { name: name.into(), lines: lines.into(), ..Self::default() }
+    }
+
+    /// Folders of the menus, from the top.
+    pub fn folders(&self) -> Vec<&str> {
+        self.folder.split('/').map(str::trim).filter(|f| !f.is_empty()).collect()
     }
 }
 
@@ -724,7 +734,7 @@ pub fn default_site_commands() -> Vec<SiteCommand> {
         SiteCommand::new("SITE HELP", "SITE HELP"),
         SiteCommand::new("SITE WHO", "SITE WHO"),
         SiteCommand::new("SITE NEW", "SITE NEW"),
-        SiteCommand::new("SITE SEARCH", "SITE SEARCH %1"),
+        SiteCommand::new("SITE SEARCH", "SITE SEARCH %d[Search]"),
         SiteCommand::new("SITE STAT", "SITE STAT"),
         SiteCommand::new("SYST + FEAT", "SYST\nFEAT"),
     ]

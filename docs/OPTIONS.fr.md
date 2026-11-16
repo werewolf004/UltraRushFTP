@@ -141,8 +141,9 @@ réglée.
 envoyées au panneau actif, aux deux panneaux ou à tous les sites connectés ;
 `Ctrl+Entrée` envoie. Les réponses sont listées sous les commandes et dans le journal FTP.
 
-**FTP → Commandes de site** : les commandes d'*Options › Interface* (`SITE WHO`,
-`SITE NEW`…). Une commande avec `%1` s'ouvre dans la boîte RAW pour être complétée.
+**FTP → Commandes de site** : les commandes du concepteur (*Options › Commandes*,
+`SITE WHO`, `SITE NEW`…), dans leurs dossiers ; une commande qui pose des questions ouvre
+d'abord une boîte de dialogue.
 
 ### Téléchargement manuel
 
@@ -504,7 +505,6 @@ pourrait lancer un programme téléchargé.
 | Double-clic sur un onglet | Rien | Nouvel onglet des mêmes sites, ou fermer l'onglet |
 | Double-clic sur un élément de la file | Rien | Le modifier, le réessayer (élément en échec ou arrêté) ou le retirer |
 | Confirmations | quitter, fermer un onglet occupé : activé ; retirer de la file : désactivé | Quitter quand des éléments restent à transférer ; fermer un onglet avec des connexions ou une file ; retirer des éléments de la file |
-| Commandes de site | `SITE HELP`, `SITE WHO`, `SITE NEW`, `SITE SEARCH %1`, `SITE STAT`, `SYST` + `FEAT` | Nom et commandes (une par ligne) du menu FTP › Commandes de site |
 
 ### Raccourcis
 
@@ -540,6 +540,32 @@ montre les touches en vigueur. Les flèches, `Entrée`, `Échap`, `Tab`, `Ctrl+T
 | Sauvegarder la configuration chaque jour | désactivé | Au premier lancement du jour, dans `backup` du dossier de données ; 4 gardées |
 | ShellExecuteCommand | Demander à chaque fois | Ce que reçoit un script qui demande à lancer un programme : une question qui montre l'origine du script, le programme, ses paramètres et son dossier (*Le lancer*, *Toujours autoriser ce programme*, *Refuser*) ; *Les lancer sans demander* ; *Ne jamais lancer de programme*. Les scripts évalués par `Invoke` ne peuvent pas demander : ils ne lancent que les programmes autorisés |
 | Programmes toujours autorisés | aucun | Programmes autorisés par *Toujours autoriser ce programme* ; `✕` retire l'autorisation |
+
+### Commandes
+
+![Commandes](images/options-commands.fr.png)
+
+Le concepteur de commandes (*FTP Command Designer* de FTPRush). Chaque commande a un
+**nom**, un **dossier** (sous-dossiers séparés par `/` : `glftpd/Users`) qui fait un
+sous-menu, une **touche** qui la lance directement (`Ctrl+Alt+W` ; les touches prises
+deux fois, ou par une touche du programme, sont signalées) et ses **commandes FTP**, une
+par ligne. Les commandes sont dans *FTP › Commandes de site* et dans le menu du clic droit
+des panneaux distants ; le nom d'une commande qui pose des questions finit par `…`.
+
+| Paramètre | Valeur |
+|---|---|
+| `%f` | Nom sélectionné ; la ligne est envoyée pour chaque élément sélectionné (rien de sélectionné : la commande est refusée) |
+| `%p` | Dossier courant du panneau distant |
+| `%c` | Texte du presse-papiers |
+| `%d[libellé]` | Demande un texte au lancement, avec ce libellé (un champ par `%d`, dans l'ordre) |
+| `%1` … `%9` | Réponse à la Nᵉ question (un numéro sans son `%d` la demande aussi) |
+| `%all%` | Envoie à tous les sites connectés au lieu du panneau actif |
+| `%clearbuf%` | Vide le cache des dossiers et liste à nouveau le dossier |
+| `&window` | Affiche les réponses dans la fenêtre *Envoyer une commande RAW* |
+| `%%` | Un signe `%` |
+
+Par défaut : `SITE HELP`, `SITE WHO`, `SITE NEW`, `SITE SEARCH %d[Search]`, `SITE STAT`,
+`SYST` + `FEAT`.
 
 ### Sauvegardes
 

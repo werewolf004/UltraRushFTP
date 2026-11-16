@@ -155,6 +155,12 @@ pub(crate) fn parse(text: &str) -> Option<Binding> {
     key.map(|key| Binding { mods, key })
 }
 
+/// The key of a designer command: `None` when the field is empty.
+pub(crate) fn parse_optional(text: &str) -> Option<Binding> {
+    let t = text.trim();
+    if t.is_empty() { None } else { parse(t) }
+}
+
 /// Several keys separated by commas; `None` when one of them is not understood.
 pub(crate) fn parse_list(text: &str) -> Option<Vec<Binding>> {
     text.split(',').map(str::trim).filter(|t| !t.is_empty()).map(parse).collect()
@@ -216,6 +222,9 @@ mod tests {
         assert_eq!(parse("Ctrl+Nothing"), None);
         assert_eq!(parse_list("Space, Insert").map(|v| v.len()), Some(2));
         assert_eq!(parse_list("Space, ???"), None);
+        // An empty key field is no key (`parse` alone would read `+`).
+        assert_eq!(parse_optional("  "), None);
+        assert_eq!(parse_optional(" Alt+W ").map(|b| format(&b)).as_deref(), Some("Alt+W"));
     }
 
     #[test]
