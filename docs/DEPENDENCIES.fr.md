@@ -67,6 +67,16 @@ générée par `scripts/generate-dependencies.ps1` dans
 
 « / » signifie « ou » (la crate laisse le choix de la licence).
 
+## Pack de rendu logiciel
+
+Pas une dépendance du programme : un téléchargement optionnel de chaque version pour les
+Windows sans Direct3D 12. `scripts/package-software-render.ps1` prend `opengl32.dll` chez
+[mmozeiko/build-mesa](https://github.com/mmozeiko/build-mesa) (Mesa llvmpipe 26.3.0, LLVM
+inclus), vérifie le SHA-256 écrit dans le script et le zippe avec
+`packaging/software-render/` (instructions, licence MIT de Mesa, Apache-2.0 avec exceptions
+LLVM de LLVM). La DLL n'est jamais dans le dépôt, ni dans le zip ou l'installateur du
+programme.
+
 ## Outillage
 
 | Outil | Usage |

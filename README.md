@@ -50,7 +50,10 @@ uninstalling); start with `-f` to keep them next to the program instead (portabl
 
 Requirements: Windows 10 or later, 64-bit. No 3D acceleration is needed: without a usable
 graphics card (virtual machine, remote server) the window is drawn by the software renderer
-of Windows (WARP), which `ULTRARUSHFTP_SOFTWARE_RENDER=1` also forces. The releases are not code-signed: Windows
+of Windows (WARP), which `ULTRARUSHFTP_SOFTWARE_RENDER=1` also forces. Windows without
+Direct3D 12 (Windows Server 2016 in a virtual machine) needs the optional *software
+rendering pack* of the release (`…-software-render.zip`): its `opengl32.dll` (Mesa
+llvmpipe) goes next to `UltraRushFTP.exe`. The releases are not code-signed: Windows
 SmartScreen may ask for confirmation on first start (*More info › Run anyway*); the
 `.sha256` file published with each release checks the download.
 

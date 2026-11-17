@@ -1,8 +1,11 @@
 //! Choice of the graphics adapter. A graphics card first (Direct3D 12 or Vulkan), then the
 //! software renderer of Windows (WARP, "Microsoft Basic Render Driver"), OpenGL last:
 //! virtual machines without 3D acceleration often expose an OpenGL driver that cannot draw.
-//! When the window still cannot open, the program starts again with the software renderer
-//! only ([`SOFTWARE_ENV`], which a user can also set by hand).
+//! When the window still cannot open, the program starts again with the software renderers
+//! only ([`SOFTWARE_ENV`], which a user can also set by hand): WARP, then Mesa llvmpipe
+//! (OpenGL drawn by the processor) when its `opengl32.dll` is next to the program — the
+//! *software rendering pack* of the releases, for Windows without Direct3D 12 such as
+//! Windows Server 2016.
 
 use std::sync::Arc;
 
@@ -21,7 +24,11 @@ pub(crate) fn software_forced() -> bool {
 fn rank(backend: wgpu::Backend, device: wgpu::DeviceType, software_only: bool) -> Option<u8> {
     let software = device == wgpu::DeviceType::Cpu;
     if software_only {
-        return (software && backend == wgpu::Backend::Dx12).then_some(0);
+        return match (software, backend) {
+            (true, wgpu::Backend::Dx12) => Some(0),
+            (true, wgpu::Backend::Gl) => Some(1),
+            _ => None,
+        };
     }
     let gl = backend == wgpu::Backend::Gl;
     Some(match (gl, device) {
@@ -40,7 +47,7 @@ pub(crate) fn wgpu_options() -> WgpuConfiguration {
     let software_only = software_forced();
     let mut setup = WgpuSetupCreateNew::without_display_handle();
     if software_only {
-        setup.instance_descriptor.backends = wgpu::Backends::DX12;
+        setup.instance_descriptor.backends = wgpu::Backends::DX12 | wgpu::Backends::GL;
     }
     setup.native_adapter_selector = Some(Arc::new(move |adapters: &[wgpu::Adapter], surface: Option<&wgpu::Surface<'_>>| {
         adapters
@@ -54,7 +61,10 @@ pub(crate) fn wgpu_options() -> WgpuConfiguration {
             .map(|(_, a)| a.clone())
             .ok_or_else(|| {
                 let found: Vec<String> = adapters.iter().map(|a| a.get_info()).map(|i| format!("{} ({:?})", i.name, i.backend)).collect();
-                format!("no usable graphics adapter (found: {})", if found.is_empty() { "none".to_string() } else { found.join(", ") })
+                format!(
+                    "no usable graphics adapter (found: {}). Without 3D acceleration (virtual machine, Windows Server 2016),                      copy the opengl32.dll file of the software rendering pack (UltraRushFTP-…-software-render.zip,                      on the release page) next to UltraRushFTP.exe.",
+                    if found.is_empty() { "none".to_string() } else { found.join(", ") }
+                )
             })
     }));
     WgpuConfiguration { wgpu_setup: WgpuSetup::CreateNew(setup), ..Default::default() }
@@ -85,10 +95,11 @@ mod tests {
     }
 
     #[test]
-    fn software_mode_keeps_warp_only() {
+    fn software_mode_keeps_warp_then_llvmpipe() {
         assert_eq!(rank(Backend::Dx12, DeviceType::Cpu, true), Some(0));
         assert_eq!(rank(Backend::Dx12, DeviceType::DiscreteGpu, true), None);
-        assert_eq!(rank(Backend::Gl, DeviceType::Cpu, true), None);
+        assert_eq!(rank(Backend::Gl, DeviceType::Cpu, true), Some(1), "Mesa llvmpipe after WARP");
+        assert_eq!(rank(Backend::Gl, DeviceType::IntegratedGpu, true), None);
         assert_eq!(rank(Backend::Vulkan, DeviceType::Cpu, true), None);
     }
 }

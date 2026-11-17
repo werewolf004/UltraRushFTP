@@ -67,6 +67,11 @@ jobs:
           SIGN_TIMESTAMP_URL: ${{ vars.SIGN_TIMESTAMP_URL }}
         run: ./scripts/package.ps1 -Version '${{ steps.meta.outputs.version }}' | Set-Content -Encoding utf8 release-files.txt
 
+      # Optional pack for Windows without Direct3D 12 (Mesa llvmpipe, SHA-256 pinned in the script).
+      - name: Software rendering pack
+        shell: pwsh
+        run: ./scripts/package-software-render.ps1 -Version '${{ steps.meta.outputs.version }}' | Add-Content -Encoding utf8 release-files.txt
+
       - name: Publish GitHub release
         shell: pwsh
         env:

@@ -10,6 +10,14 @@ la traduction.
 
 ## [Non publié]
 
+### Ajouté
+
+- **Pack de rendu logiciel** (`UltraRushFTP-X.Y.Z-windows-x64-software-render.zip`,
+  optionnel, publié avec chaque version) : `opengl32.dll` Mesa llvmpipe pour les Windows
+  sans Direct3D 12, comme Windows Server 2016 en machine virtuelle sans accélération 3D, où
+  la fenêtre ne s'ouvrait pas (« no usable graphics adapter »). Le mode logiciel essaie
+  maintenant WARP, puis ce moteur OpenGL ; le message d'erreur indique où trouver le pack.
+
 ## [0.15.0] - 2026-11-16
 
 Concepteur de commandes (dossiers, une touche par commande, paramètres de FTPRush) et

@@ -9,6 +9,15 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Added
+
+- **Software rendering pack** (`UltraRushFTP-X.Y.Z-windows-x64-software-render.zip`,
+  optional, published with each release): Mesa llvmpipe `opengl32.dll` for Windows
+  without Direct3D 12, such as Windows Server 2016 in a virtual machine without 3D
+  acceleration, where the window could not open ("no usable graphics adapter"). The
+  software mode now tries WARP, then this OpenGL renderer; the error message says where
+  to find the pack.
+
 ## [0.15.0] - 2026-11-16
 
 Command designer (folders, a key per command, FTPRush parameters) and a window that
