@@ -590,6 +590,27 @@ pub struct Settings {
     pub script_shell: ShellPolicy,
     /// Programs the user allowed for good ("Always allow"), as written by the scripts.
     pub script_programs: Vec<String>,
+    /// Check of the new versions on GitHub.
+    pub updates: UpdateSettings,
+}
+
+/// Check of the new versions published on GitHub.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateSettings {
+    /// Check by itself, a minute after the start, when `frequency` has passed.
+    pub check: bool,
+    pub frequency: crate::update::UpdateFrequency,
+    /// Last check that got an answer (Unix seconds, 0: never).
+    pub last_check: u64,
+    /// Version the user chose to skip ("Skip this version"): not announced again.
+    pub skipped: String,
+}
+
+impl Default for UpdateSettings {
+    fn default() -> Self {
+        Self { check: true, frequency: crate::update::UpdateFrequency::default(), last_check: 0, skipped: String::new() }
+    }
 }
 
 /// What `ShellExecuteCommand` does when a script asks to start a program.
@@ -1198,6 +1219,7 @@ impl Default for Settings {
             master_hash: String::new(),
             script_shell: ShellPolicy::Ask,
             script_programs: Vec::new(),
+            updates: UpdateSettings::default(),
         }
     }
 }

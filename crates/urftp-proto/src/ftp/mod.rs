@@ -18,6 +18,7 @@ pub use features::Features;
 pub use fxp::{FxpMode, FxpOptions, FxpOutcome, FxpSecurity, fxp};
 pub use listing::{EntryKind, FtpTime, ListFormat, RemoteEntry};
 pub use reply::Reply;
+pub(crate) use tls::crypto_provider;
 pub use tls::{Security, TlsOptions, TlsVerify, fingerprint_sha256};
 
 /// Generic network stream (TCP, TLS, proxy tunnel...).

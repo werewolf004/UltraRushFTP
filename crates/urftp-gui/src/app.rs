@@ -50,6 +50,7 @@ mod scripting;
 #[cfg(test)]
 mod shots;
 mod tasks;
+mod updates;
 mod windows;
 
 use fileops::{ListState, Op, Parts};
@@ -1432,6 +1433,7 @@ pub struct UltraRushApp {
     /// The next queue removals were confirmed.
     queue_remove_confirmed: bool,
     notifier: notify::Notifier,
+    updates: updates::UpdateState,
     /// Saved layouts of the panels.
     layouts: Vec<look::SavedLayout>,
     /// Name being typed for a layout to save.
@@ -1639,6 +1641,7 @@ impl UltraRushApp {
             exit_confirmed: false,
             queue_remove_confirmed: false,
             notifier: notify::Notifier::default(),
+            updates: updates::UpdateState::default(),
             layouts: look::load_layouts(),
             layout_name: None,
             zoom_applied: false,
@@ -2705,6 +2708,10 @@ impl UltraRushApp {
                     ui.close();
                 }
                 ui.separator();
+                if ui.button(t!("menu.check_updates")).clicked() {
+                    self.check_updates(true);
+                    ui.close();
+                }
                 if ui.button(t!("menu.about")).clicked() {
                     self.about_open = true;
                     ui.close();
@@ -3542,6 +3549,7 @@ impl eframe::App for UltraRushApp {
             t.poll_edits(&self.options.settings.browse, &self.rt, ctx);
         }
         self.notify_tick(ctx);
+        self.updates_tick(ctx);
         if self.logs_flushed.elapsed() >= Duration::from_secs(1) || ctx.input(|i| i.viewport().close_requested()) {
             self.logs_flushed = std::time::Instant::now();
             if let Err(e) = logs::flush() {
@@ -3717,6 +3725,7 @@ impl eframe::App for UltraRushApp {
         self.trust_dialog(&ctx);
         self.help_window(&ctx);
         self.about_window(&ctx);
+        self.updates_window(&ctx);
         self.queue_edit_dialog(&ctx);
         self.task_dialog(&ctx);
         self.ip_tool_window(&ctx);

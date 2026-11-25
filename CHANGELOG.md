@@ -9,6 +9,13 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Added
+
+- **Update check** (*Options › General*, on by default): a minute after the start, every
+  day, week or month, asks GitHub for the latest version and announces a newer one with
+  its release page (*Later*, *Skip this version*); *Help › Check for updates* checks at
+  once. Nothing is downloaded or installed by itself.
+
 ### Security
 
 - `url` 2.5.9 (RUSTSEC-2026-0592, stack overflow on nested `blob:` URLs; pulled by egui

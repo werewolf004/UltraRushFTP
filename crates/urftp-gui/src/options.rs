@@ -10,6 +10,7 @@ use urftp_core::settings::{
 };
 use urftp_core::site::ProxyType;
 use urftp_core::skiplist::{RuleAction, RuleTarget};
+use urftp_core::update::UpdateFrequency;
 
 /// Conversions shared with the `urftp` tool.
 pub use urftp_proto::profile::engine_options;
@@ -247,6 +248,27 @@ impl OptionsWindow {
                         .labelled_by(l.id);
                     ui.end_row();
                 });
+                ui.horizontal(|ui| {
+                    let check = ui.checkbox(&mut s.updates.check, t!("options.update_check"));
+                    let label = |f: UpdateFrequency| match f {
+                        UpdateFrequency::Daily => t!("options.update_daily"),
+                        UpdateFrequency::Weekly => t!("options.update_weekly"),
+                        UpdateFrequency::Monthly => t!("options.update_monthly"),
+                    };
+                    ui.add_enabled_ui(s.updates.check, |ui| {
+                        egui::ComboBox::from_id_salt("opt-update-frequency")
+                            .selected_text(label(s.updates.frequency))
+                            .show_ui(ui, |ui| {
+                                for f in UpdateFrequency::ALL {
+                                    ui.selectable_value(&mut s.updates.frequency, f, label(f));
+                                }
+                            })
+                            .response
+                            .labelled_by(check.id)
+                            .on_hover_text(t!("options.update_frequency"));
+                    });
+                });
+                ui.label(RichText::new(t!("options.update_note")).weak());
                 ui.checkbox(&mut s.ftprush_dll_window, t!("options.ftprush_dll_window"));
                 ui.label(RichText::new(t!("options.ftprush_dll_window_note")).weak());
                 ui.add_space(8.0);

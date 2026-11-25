@@ -35,6 +35,11 @@ the *Security* section of the [changelog](CHANGELOG.md).
 - **Active mode** accepts a data connection only from the server address.
 - Commands containing line breaks are refused (no command injection through file names);
   passwords are masked in every log (`PASS ****`).
+- **Update check** (on by default, *Options › General*): one HTTPS request to
+  `api.github.com` (certificates checked against the Windows store), sending only the
+  program name and version. A newer version is only announced; the link opened is built
+  from the version number, never taken from the answer, and nothing is downloaded or
+  installed by itself.
 
 ### Data at rest
 - Site and proxy passwords are stored as `dpapi:<base64>` in `sites.json` /

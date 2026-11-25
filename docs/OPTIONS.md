@@ -39,6 +39,7 @@ Every setting of UltraRushFTP, with its default value. Contents:
 | View → Light theme / Dark theme | Switches the theme (also stored in the options) |
 | Help → Help (F1) | This documentation, built in: index of the sections, search, keyboard shortcuts |
 | Help → Keyboard shortcuts | The help on the shortcuts below |
+| Help → Check for updates | Asks GitHub at once for the latest version and shows the answer |
 | Help → About UltraRushFTP | Version, build and licence |
 | `★ Favourites ▾` | Recent sites (10), quick connections (10, without their password: an anonymous one connects at once, else the password field waits), every site of the site manager, *Manual download*: connects the active panel. Split (options): `★ <last site>` connects to it, `⏷` opens the menu |
 | `➕` after Connect | Saves the quick connection as a site of the site manager (with its password) |
@@ -258,6 +259,7 @@ Saved automatically in `settings.json` one second after a change.
 | E-mail for anonymous logins | `urftp@` | Password sent by the sites set to *anonymous* |
 | Default download folder | user folder | Folder the local panels start in, and come back to on disconnection; the user folder when it does not exist |
 | Unfinished queue at startup | Ask | Ask, Load it or Discard it (see *Queue*) |
+| Check for updates (every day / once a week / once a month) | on, once a week | A minute after the start, when that interval has passed, asks GitHub for the latest version (only the program name and version are sent). A newer one opens a window: *Open the release page*, *Later*, or *Skip this version* (not announced again). Nothing is downloaded or installed by itself; the answer is also written in the log |
 | Compatibility with the mIRC DLL of FTPRush (TfmRush window) | off | See *mIRC DLL*; while it is on, FTPRush v2 cannot start next to UltraRushFTP |
 
 ### Transfers

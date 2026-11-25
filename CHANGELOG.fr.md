@@ -10,6 +10,14 @@ la traduction.
 
 ## [Non publié]
 
+### Ajouté
+
+- **Recherche des mises à jour** (*Options › Général*, activée par défaut) : une minute
+  après le lancement, tous les jours, semaines ou mois, demande à GitHub la dernière
+  version et annonce une version plus récente avec sa page (*Plus tard*, *Ignorer cette
+  version*) ; *Aide › Rechercher les mises à jour* vérifie tout de suite. Rien n'est
+  téléchargé ni installé tout seul.
+
 ### Sécurité
 
 - `url` 2.5.9 (RUSTSEC-2026-0592, débordement de pile sur des URL `blob:` imbriquées ;

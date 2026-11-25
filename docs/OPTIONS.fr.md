@@ -39,6 +39,7 @@ Tous les réglages d'UltraRushFTP, avec leur valeur par défaut. Sommaire :
 | Affichage → Thème clair / Thème sombre | Change le thème (enregistré aussi dans les options) |
 | Aide → Aide (F1) | Cette documentation, intégrée : index des sections, recherche, raccourcis clavier |
 | Aide → Raccourcis clavier | L'aide sur les raccourcis ci-dessous |
+| Aide → Rechercher les mises à jour | Demande tout de suite à GitHub la dernière version et affiche la réponse |
 | Aide → À propos d'UltraRushFTP | Version, compilation et licence |
 | `★ Favoris ▾` | Sites récents (10), connexions rapides (10, sans leur mot de passe : une anonyme se connecte aussitôt, sinon le champ mot de passe attend), tous les sites du gestionnaire, *Téléchargement manuel* : connecte le panneau actif. Scindé (options) : `★ <dernier site>` s'y connecte, `⏷` ouvre le menu |
 | `➕` après Connexion | Enregistre la connexion rapide comme site du gestionnaire (avec son mot de passe) |
@@ -271,6 +272,7 @@ Enregistrée automatiquement dans `settings.json` une seconde après une modific
 | E-mail des connexions anonymes | `urftp@` | Mot de passe envoyé par les sites réglés en *anonyme* |
 | Dossier de téléchargement par défaut | dossier de l'utilisateur | Dossier où démarrent les panneaux locaux, et où ils reviennent à la déconnexion ; le dossier de l'utilisateur quand il n'existe pas |
 | File non terminée au démarrage | Demander | Demander, La charger ou L'abandonner (voir *File d'attente*) |
+| Vérifier les mises à jour (tous les jours / une fois par semaine / une fois par mois) | oui, une fois par semaine | Une minute après le lancement, quand cet intervalle est passé, demande à GitHub la dernière version (seuls le nom et la version du programme sont envoyés). Une version plus récente ouvre une fenêtre : *Ouvrir la page de la version*, *Plus tard* ou *Ignorer cette version* (plus annoncée). Rien n'est téléchargé ni installé tout seul ; la réponse est aussi écrite dans le journal |
 | Compatibilité avec la DLL mIRC de FTPRush (fenêtre TfmRush) | non | Voir *DLL mIRC* ; tant que c'est coché, FTPRush v2 ne peut pas démarrer à côté d'UltraRushFTP |
 
 ### Transferts

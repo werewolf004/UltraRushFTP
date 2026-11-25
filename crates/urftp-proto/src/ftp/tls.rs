@@ -163,7 +163,7 @@ impl SignatureVerificationAlgorithm for RsaLegacy {
 
 /// *ring* provider completed with ECDSA P-521 verification and 1024-bit RSA keys (built
 /// once).
-fn crypto_provider() -> Arc<CryptoProvider> {
+pub(crate) fn crypto_provider() -> Arc<CryptoProvider> {
     static PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
     PROVIDER
         .get_or_init(|| {

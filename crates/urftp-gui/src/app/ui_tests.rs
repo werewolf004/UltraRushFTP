@@ -2075,3 +2075,27 @@ fn right_click_menus_select_everything() {
     act(&mut ui, super::Action::QueueSelectAll);
     assert_eq!(ui.app().tabs[0].queue_sel.iter().copied().collect::<Vec<_>>(), ids);
 }
+
+#[test]
+fn update_outcomes_open_the_right_window() {
+    let mut ui = Ui::start(Lang::En, true);
+    let ctx = ui.harness.ctx.clone();
+    let app = ui.app();
+    app.options.settings.updates.skipped = "v99.0.0".into();
+    // Automatic: a skipped version is only logged.
+    app.update_outcome(Ok("v99.0.0".into()), false, &ctx);
+    assert_eq!(app.updates.dialog, None);
+    assert!(app.options.settings.updates.last_check > 0, "an answer records the check");
+    // Asked from the menu: shown anyway.
+    app.update_outcome(Ok("v99.0.0".into()), true, &ctx);
+    assert_eq!(app.updates.dialog, Some(super::updates::UpdateDialog::Available("v99.0.0".into())));
+    app.updates.dialog = None;
+    app.update_outcome(Ok("v0.0.1".into()), false, &ctx);
+    assert_eq!(app.updates.dialog, None, "nothing newer, nothing shown");
+    app.update_outcome(Ok("v0.0.1".into()), true, &ctx);
+    assert_eq!(app.updates.dialog, Some(super::updates::UpdateDialog::UpToDate));
+    app.update_outcome(Err("offline".into()), false, &ctx);
+    assert_eq!(app.updates.dialog, Some(super::updates::UpdateDialog::UpToDate), "an automatic failure is only logged");
+    app.update_outcome(Err("offline".into()), true, &ctx);
+    assert_eq!(app.updates.dialog, Some(super::updates::UpdateDialog::Failed("offline".into())));
+}

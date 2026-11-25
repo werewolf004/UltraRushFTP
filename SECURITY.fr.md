@@ -40,6 +40,11 @@ corrective et listés dans la section *Sécurité* du
 - Les commandes contenant un saut de ligne sont refusées (pas d'injection de commande par
   les noms de fichiers) ; les mots de passe sont masqués dans tous les journaux
   (`PASS ****`).
+- **Recherche des mises à jour** (activée par défaut, *Options › Général*) : une requête
+  HTTPS vers `api.github.com` (certificats vérifiés avec le magasin de Windows), qui
+  n'envoie que le nom et la version du programme. Une version plus récente est seulement
+  annoncée ; le lien ouvert est construit à partir du numéro de version, jamais repris de
+  la réponse, et rien n'est téléchargé ni installé tout seul.
 
 ### Données enregistrées
 - Les mots de passe des sites et des proxys sont enregistrés sous la forme
