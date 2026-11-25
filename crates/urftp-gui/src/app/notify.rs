@@ -184,7 +184,7 @@ impl UltraRushApp {
             return;
         }
         ctx.request_repaint_after(Duration::from_millis(500));
-        egui::Area::new(egui::Id::new("toasts")).anchor(egui::Align2::RIGHT_BOTTOM, [-16.0, -40.0]).show(ctx, |ui| {
+        egui::Area::new(egui::Id::unique("toasts")).anchor(egui::Align2::RIGHT_BOTTOM, [-16.0, -40.0]).show(ctx, |ui| {
             for t in &self.notifier.toasts {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(320.0);

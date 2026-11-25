@@ -476,7 +476,7 @@ impl UltraRushApp {
         }
         if let Some(q) = self.scripts.inputs.front_mut() {
             let mut answer: Option<Option<String>> = None;
-            egui::Modal::new(egui::Id::new(("script-input", q.job))).show(ctx, |ui| {
+            egui::Modal::new(egui::Id::unique(("script-input", q.job))).show(ctx, |ui| {
                 ui.set_min_width(360.0);
                 let title = if q.title.trim().is_empty() { t!("script.input_title") } else { q.title.clone() };
                 ui.heading(title);
@@ -507,7 +507,7 @@ impl UltraRushApp {
         if let Some(q) = self.scripts.shells.front() {
             // 0 = refuse, 1 = run once, 2 = always allow this program.
             let mut choice: Option<u8> = None;
-            egui::Modal::new(egui::Id::new(("script-shell", q.job))).show(ctx, |ui| {
+            egui::Modal::new(egui::Id::unique(("script-shell", q.job))).show(ctx, |ui| {
                 ui.set_min_width(420.0);
                 ui.heading(t!("script.shell_title"));
                 ui.add_space(4.0);

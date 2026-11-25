@@ -16,6 +16,12 @@ GitHub release with the same tag.
   its release page (*Later*, *Skip this version*); *Help › Check for updates* checks at
   once. Nothing is downloaded or installed by itself.
 
+### Changed
+
+- Interface libraries: egui / eframe 0.37 and egui_dock 0.22 (the migration waited for
+  egui_dock); also `russh-sftp` 4, `rfd` 0.18, `md-5` 0.11 and the compatible updates of
+  `Cargo.lock`. No visible change.
+
 ### Security
 
 - `url` 2.5.9 (RUSTSEC-2026-0592, stack overflow on nested `blob:` URLs; pulled by egui

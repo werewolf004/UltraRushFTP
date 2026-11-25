@@ -18,6 +18,12 @@ la traduction.
   version*) ; *Aide › Rechercher les mises à jour* vérifie tout de suite. Rien n'est
   téléchargé ni installé tout seul.
 
+### Modifié
+
+- Bibliothèques de l'interface : egui / eframe 0.37 et egui_dock 0.22 (la migration
+  attendait egui_dock) ; aussi `russh-sftp` 4, `rfd` 0.18, `md-5` 0.11 et les mises à jour
+  compatibles du `Cargo.lock`. Aucun changement visible.
+
 ### Sécurité
 
 - `url` 2.5.9 (RUSTSEC-2026-0592, débordement de pile sur des URL `blob:` imbriquées ;

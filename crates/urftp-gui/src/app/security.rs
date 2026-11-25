@@ -87,7 +87,7 @@ impl UltraRushApp {
         let hash = self.options.settings.master_hash.clone();
         let Some(u) = &mut self.unlock else { return };
         let mut done = None;
-        egui::Modal::new(egui::Id::new("unlock")).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique("unlock")).show(ctx, |ui| {
             ui.set_min_width(360.0);
             let h = ui.heading(if u.target == UnlockFor::Window { t!("lock.locked") } else { t!("lock.title") });
             ui.label(t!("lock.prompt"));

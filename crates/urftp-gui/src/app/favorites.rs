@@ -260,9 +260,11 @@ impl UltraRushApp {
         let mut open = true;
         let mut queue = false;
         let m = &mut self.manual;
-        egui::Window::new(t!("fav.manual_title")).id(egui::Id::new("manual-download")).default_size([600.0, 360.0]).open(&mut open).show(
-            ctx,
-            |ui| {
+        egui::Window::new(t!("fav.manual_title"))
+            .id(egui::Id::unique("manual-download"))
+            .default_size([600.0, 360.0])
+            .open(&mut open)
+            .show(ctx, |ui| {
                 let h = ui.label(t!("fav.manual_urls"));
                 let r = ui.add(
                     egui::TextEdit::multiline(&mut m.text).font(egui::TextStyle::Monospace).desired_rows(6).desired_width(f32::INFINITY),
@@ -287,8 +289,7 @@ impl UltraRushApp {
                 if ui.add_enabled(ok, egui::Button::new(t!("fav.manual_queue"))).clicked() {
                     queue = true;
                 }
-            },
-        );
+            });
         if !open {
             self.manual.open = false;
         }

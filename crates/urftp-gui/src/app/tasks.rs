@@ -307,7 +307,7 @@ impl UltraRushApp {
     pub(super) fn task_dialog(&mut self, ctx: &egui::Context) {
         let Some(form) = &mut self.tasks.form else { return };
         let mut done: Option<Outcome> = None;
-        egui::Modal::new(egui::Id::new("task-dialog")).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique("task-dialog")).show(ctx, |ui| {
             ui.set_min_width(560.0);
             ui.heading(if form.id.is_some() { t!("tasks.edit_title") } else { t!("tasks.new_title") });
             ui.add_space(4.0);

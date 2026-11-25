@@ -234,7 +234,7 @@ impl SiteManager {
         }
         let mut open = true;
         egui::Window::new(t!("sites.title"))
-            .id(egui::Id::new("site-manager"))
+            .id(egui::Id::unique("site-manager"))
             .open(&mut open)
             .default_size([900.0, 600.0])
             // Below the menu and connection bars, which stay usable.
@@ -565,7 +565,7 @@ impl SiteManager {
                 Selection::Group(_) => t!("sites.delete_folder"),
             };
             let mut answer = None;
-            egui::Modal::new(egui::Id::new("confirm-delete-site")).show(ctx, |ui| {
+            egui::Modal::new(egui::Id::unique("confirm-delete-site")).show(ctx, |ui| {
                 ui.heading(t!("sites.delete_title"));
                 ui.label(t!("sites.delete_confirm", what = what));
                 ui.add_space(8.0);
@@ -607,7 +607,7 @@ impl SiteManager {
         }
         if let Some(r) = &self.report {
             let mut close = false;
-            egui::Modal::new(egui::Id::new("site-report")).show(ctx, |ui| {
+            egui::Modal::new(egui::Id::unique("site-report")).show(ctx, |ui| {
                 ui.set_max_width(560.0);
                 let p = theme::colors(ui);
                 let mark = if r.error { "⚠" } else { "✔" };
@@ -666,7 +666,7 @@ fn drag_feedback(ui: &egui::Ui, r: &egui::Response, label: &str, before: bool) {
     if r.dragged()
         && let Some(pos) = ui.ctx().pointer_interact_pos()
     {
-        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("site-drag")));
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("site-drag")));
         let text = painter.layout_no_wrap(label.to_string(), egui::TextStyle::Body.resolve(ui.style()), ui.visuals().strong_text_color());
         let rect = egui::Rect::from_min_size(pos + egui::vec2(14.0, 6.0), text.size()).expand(4.0);
         painter.rect_filled(rect, 4.0, ui.visuals().window_fill);

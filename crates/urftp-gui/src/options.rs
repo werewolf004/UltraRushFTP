@@ -156,7 +156,7 @@ impl OptionsWindow {
         if self.open {
             let mut open = true;
             egui::Window::new(t!("options.title"))
-                .id(egui::Id::new("options-window"))
+                .id(egui::Id::unique("options-window"))
                 .open(&mut open)
                 .default_size([760.0, 520.0])
                 // Below the menu and connection bars, which stay usable.
@@ -533,7 +533,7 @@ pub(crate) fn exists_ui(ui: &mut egui::Ui, e: &mut ExistsSet) {
 pub(crate) fn skiplist_ui(ui: &mut egui::Ui, k: &mut SkipSettings) {
     ui.checkbox(&mut k.enabled, t!("options.skip_enable"));
     ui.horizontal(|ui| {
-        let note = ui.id().with("skip-file-note");
+        let note = ui.scope_id().with("skip-file-note");
         if ui.button(t!("options.skip_export")).clicked()
             && let Some(p) = rfd::FileDialog::new().set_file_name("skiplist.json").add_filter("JSON", &["json"]).save_file()
         {

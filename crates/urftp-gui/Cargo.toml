@@ -21,9 +21,9 @@ urftp-proto.workspace = true
 urftp-script.workspace = true
 urftp-sys.workspace = true
 urftp-i18n.workspace = true
-eframe = "0.36"
-egui_dock = { version = "0.21.1", features = ["serde"] }
-egui_extras = "0.36"
+eframe = "0.37"
+egui_dock = { version = "0.22.0", features = ["serde"] }
+egui_extras = "0.37"
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "fs", "time"] }
 rfd = "0.18.0"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -32,7 +32,7 @@ serde_json = "1.0.154"
 [dev-dependencies]
 crc32fast = "1.5.0"
 # `wgpu`: off-screen rendering of the documentation screenshots (tests only).
-egui_kittest = { version = "0.36.2", features = ["eframe", "wgpu"] }
+egui_kittest = { version = "0.37.0", features = ["eframe", "wgpu"] }
 
 [lints]
 workspace = true

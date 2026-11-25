@@ -58,7 +58,9 @@ impl Ui {
         let mut app = UltraRushApp::new(rt.handle().clone(), StartupOptions::default());
         app.ipc_enabled = false;
         urftp_i18n::set_language(lang);
-        let harness = Harness::builder().with_size(WINDOW).build_eframe(move |cc| {
+        // kittest's own check also lists the splitters of egui_dock, which has no way to name
+        // them; `assert_all_named` checks every control of the screens instead.
+        let harness = Harness::builder().with_size(WINDOW).with_accessibility_check(false).build_eframe(move |cc| {
             crate::theme::install_fonts(&cc.egui_ctx);
             crate::theme::apply(&cc.egui_ctx, dark);
             app

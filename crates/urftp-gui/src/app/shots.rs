@@ -49,7 +49,8 @@ fn render_screenshot() {
     let mut app = UltraRushApp::new(rt.handle().clone(), startup);
     // No mIRC link window: the screenshots must not disturb a running FTPRush.
     app.ipc_enabled = false;
-    let mut harness = Harness::builder().with_size(WINDOW).wgpu().build_eframe(move |cc| {
+    // No accessibility check here (see `ui_tests`): these are pictures.
+    let mut harness = Harness::builder().with_size(WINDOW).with_accessibility_check(false).wgpu().build_eframe(move |cc| {
         crate::theme::install_fonts(&cc.egui_ctx);
         crate::theme::apply(&cc.egui_ctx, app.is_dark());
         app

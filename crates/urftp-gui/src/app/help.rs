@@ -230,7 +230,7 @@ impl UltraRushApp {
             .filter(|&i| query.is_empty() || docs[i].title.to_lowercase().contains(&query) || docs[i].body.to_lowercase().contains(&query))
             .collect();
         egui::Window::new(t!("help.title"))
-            .id(egui::Id::new("shortcuts-window"))
+            .id(egui::Id::unique("shortcuts-window"))
             .default_pos([200.0, 90.0])
             .default_size([960.0, 620.0])
             .open(&mut open)

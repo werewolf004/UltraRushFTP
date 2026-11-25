@@ -1733,7 +1733,7 @@ impl UltraRushApp {
     fn saved_queue_dialog(&mut self, ctx: &egui::Context) {
         let Some((saved, ticks)) = &mut self.saved_queue else { return };
         let mut answer = None;
-        egui::Modal::new(egui::Id::new("saved-queue")).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique("saved-queue")).show(ctx, |ui| {
             ui.set_max_width(560.0);
             ui.heading(t!("queue.saved_title"));
             ui.label(t!("queue.saved_text", n = saved.item_count(), tabs = saved.tabs.len()));
@@ -2181,7 +2181,7 @@ impl UltraRushApp {
         let Some((action, when)) = self.queue_end else { return };
         let left = when.saturating_duration_since(std::time::Instant::now()).as_secs() + 1;
         let mut choice: Option<bool> = None;
-        egui::Modal::new(egui::Id::new("queue-end")).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique("queue-end")).show(ctx, |ui| {
             ui.set_min_width(380.0);
             ui.heading(t!("queue_end.title"));
             ui.label(t!("queue_end.countdown", action = queue_end_label(action), n = left));
@@ -2252,7 +2252,7 @@ impl UltraRushApp {
             }
         }
         let mut done: Option<bool> = None;
-        egui::Modal::new(egui::Id::new(("queue-edit", tab.id))).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique(("queue-edit", tab.id))).show(ctx, |ui| {
             ui.set_min_width(520.0);
             ui.heading(t!("queue.edit_title"));
             ui.add_space(4.0);
@@ -2334,7 +2334,7 @@ impl UltraRushApp {
         // None: open; Some(None): cancel; Some(Some(start)): queue, then start or not.
         let mut done: Option<Option<bool>> = None;
         let mut schemes_changed = false;
-        egui::Modal::new(egui::Id::new(("conditional", tab.id))).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique(("conditional", tab.id))).show(ctx, |ui| {
             ui.set_min_width(560.0);
             ui.heading(t!("cond.title"));
             let f = &mut dlg.form;
@@ -2473,7 +2473,7 @@ impl UltraRushApp {
         let st = tab.queue.lock().stats();
         let mut open = true;
         egui::Window::new(t!("queue.info_title"))
-            .id(egui::Id::new(("queue-info", tab.id)))
+            .id(egui::Id::unique(("queue-info", tab.id)))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
@@ -2789,7 +2789,7 @@ impl UltraRushApp {
         let mut open = true;
         let mut close = false;
         egui::Window::new(t!("about.title"))
-            .id(egui::Id::new("about-window"))
+            .id(egui::Id::unique("about-window"))
             .default_pos([380.0, 160.0])
             .open(&mut open)
             .collapsible(false)
@@ -3386,7 +3386,7 @@ impl UltraRushApp {
         let tab = &mut self.tabs[self.active];
         let Some(prompt) = &mut tab.prompt else { return };
         let mut done: Option<bool> = None;
-        egui::Modal::new(egui::Id::new(("prompt", tab.id))).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique(("prompt", tab.id))).show(ctx, |ui| {
             ui.set_min_width(380.0);
             let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
             let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
@@ -3448,7 +3448,7 @@ impl UltraRushApp {
         let tab = &mut self.tabs[self.active];
         let Some(prompt) = &tab.trust else { return };
         let mut decision = None;
-        egui::Modal::new(egui::Id::new(("trust", tab.id))).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique(("trust", tab.id))).show(ctx, |ui| {
             ui.set_max_width(520.0);
             let what = match prompt.kind {
                 TrustKind::TlsCertificate => t!("trust.tls"),
@@ -3705,7 +3705,7 @@ impl eframe::App for UltraRushApp {
             };
             let style = DockStyle::from_egui(ui.style().as_ref());
             DockArea::new(dock)
-                .id(egui::Id::new(("dock", *id)))
+                .id(egui::Id::unique(("dock", *id)))
                 .style(style)
                 .show_close_buttons(false)
                 .show_leaf_close_all_buttons(false)
@@ -3898,7 +3898,7 @@ impl TabViewer for PaneViewer<'_> {
     }
 
     fn id(&mut self, tab: &mut Pane) -> egui::Id {
-        egui::Id::new(*tab as u8)
+        egui::Id::unique(*tab as u8)
     }
 
     /// Name of the title for screen readers; double-click on the title of a file panel

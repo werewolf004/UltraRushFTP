@@ -167,7 +167,7 @@ impl UltraRushApp {
     pub(super) fn command_ask_window(&mut self, ctx: &egui::Context) {
         let Some(ask) = &mut self.raw.ask else { return };
         let mut done = None;
-        egui::Modal::new(egui::Id::new("command-ask")).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique("command-ask")).show(ctx, |ui| {
             ui.set_min_width(380.0);
             ui.heading(&ask.name);
             for (i, (caption, answer)) in ask.captions.iter().zip(ask.answers.iter_mut()).enumerate() {
@@ -206,48 +206,51 @@ impl UltraRushApp {
         let mut open = true;
         let mut send = false;
         let d = &mut self.raw;
-        egui::Window::new(t!("raw.title")).id(egui::Id::new("raw-dialog")).default_size([560.0, 420.0]).open(&mut open).show(ctx, |ui| {
-            let h = ui.label(t!("raw.commands"));
-            let r = ui.add(
-                egui::TextEdit::multiline(&mut d.text)
-                    .font(egui::TextStyle::Monospace)
-                    .desired_rows(4)
-                    .desired_width(f32::INFINITY)
-                    .hint_text("SITE WHO"),
-            );
-            let r = r.labelled_by(h.id);
-            if std::mem::take(&mut d.focus) {
-                r.request_focus();
-            }
-            // Ctrl+Enter sends (Enter adds a line).
-            if r.has_focus() && ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter)) {
-                send = true;
-            }
-            ui.label(RichText::new(t!("raw.hint")).weak());
-            ui.horizontal(|ui| {
-                ui.radio_value(&mut d.target, RawTarget::Active, t!("raw.to_active"));
-                ui.radio_value(&mut d.target, RawTarget::Both, t!("raw.to_both"));
-                ui.radio_value(&mut d.target, RawTarget::All, t!("raw.to_all"));
-            });
-            ui.horizontal(|ui| {
-                if theme::primary_button(ui, t!("raw.send")).clicked() {
+        egui::Window::new(t!("raw.title")).id(egui::Id::unique("raw-dialog")).default_size([560.0, 420.0]).open(&mut open).show(
+            ctx,
+            |ui| {
+                let h = ui.label(t!("raw.commands"));
+                let r = ui.add(
+                    egui::TextEdit::multiline(&mut d.text)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_rows(4)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("SITE WHO"),
+                );
+                let r = r.labelled_by(h.id);
+                if std::mem::take(&mut d.focus) {
+                    r.request_focus();
+                }
+                // Ctrl+Enter sends (Enter adds a line).
+                if r.has_focus() && ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter)) {
                     send = true;
                 }
-                if ui.button(t!("raw.clear")).clicked() {
-                    d.history.clear();
-                }
-            });
-            ui.separator();
-            let p = theme::colors(ui);
-            egui::ScrollArea::vertical().auto_shrink(false).stick_to_bottom(true).show(ui, |ui| {
-                for (site, cmd, lines, ok) in &d.history {
-                    ui.label(RichText::new(format!("[{site}] {cmd}")).monospace().color(p.command));
-                    for l in lines {
-                        ui.label(RichText::new(l).monospace().color(if *ok { p.success } else { p.error }));
+                ui.label(RichText::new(t!("raw.hint")).weak());
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut d.target, RawTarget::Active, t!("raw.to_active"));
+                    ui.radio_value(&mut d.target, RawTarget::Both, t!("raw.to_both"));
+                    ui.radio_value(&mut d.target, RawTarget::All, t!("raw.to_all"));
+                });
+                ui.horizontal(|ui| {
+                    if theme::primary_button(ui, t!("raw.send")).clicked() {
+                        send = true;
                     }
-                }
-            });
-        });
+                    if ui.button(t!("raw.clear")).clicked() {
+                        d.history.clear();
+                    }
+                });
+                ui.separator();
+                let p = theme::colors(ui);
+                egui::ScrollArea::vertical().auto_shrink(false).stick_to_bottom(true).show(ui, |ui| {
+                    for (site, cmd, lines, ok) in &d.history {
+                        ui.label(RichText::new(format!("[{site}] {cmd}")).monospace().color(p.command));
+                        for l in lines {
+                            ui.label(RichText::new(l).monospace().color(if *ok { p.success } else { p.error }));
+                        }
+                    }
+                });
+            },
+        );
         if !open {
             self.raw.open = false;
         }

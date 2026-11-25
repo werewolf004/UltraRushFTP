@@ -277,7 +277,7 @@ impl UltraRushApp {
     pub(super) fn layout_dialog(&mut self, ctx: &egui::Context) {
         let Some(name) = &mut self.layout_name else { return };
         let mut done = None;
-        egui::Modal::new(egui::Id::new("layout-name")).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique("layout-name")).show(ctx, |ui| {
             ui.set_min_width(320.0);
             let h = ui.heading(t!("look.layout_save_title"));
             let r = ui.add(theme::single_line(name).desired_width(f32::INFINITY)).labelled_by(h.id);

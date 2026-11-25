@@ -131,7 +131,7 @@ impl UltraRushApp {
         let mut open = true;
         let mut close = false;
         egui::Window::new(t!("update.title"))
-            .id(egui::Id::new("update-window"))
+            .id(egui::Id::unique("update-window"))
             .default_pos([380.0, 160.0])
             .open(&mut open)
             .collapsible(false)

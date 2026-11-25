@@ -957,7 +957,7 @@ impl UltraRushApp {
         let tab = &mut self.tabs[self.active];
         let Some(dialog) = &mut tab.tools.dialog else { return };
         let mut done: Option<bool> = None;
-        egui::Modal::new(egui::Id::new(("op-dialog", tab.id))).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique(("op-dialog", tab.id))).show(ctx, |ui| {
             ui.set_min_width(420.0);
             let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
             let mut valid = true;
@@ -1116,7 +1116,7 @@ impl UltraRushApp {
         let Some((site, dir, text)) = &tab.tools.raw else { return };
         let mut open = true;
         egui::Window::new(t!("ops.raw_title", site = site, dir = dir))
-            .id(egui::Id::new(("raw-listing", tab.id)))
+            .id(egui::Id::unique(("raw-listing", tab.id)))
             .default_size([640.0, 380.0])
             .open(&mut open)
             .show(ctx, |ui| {
@@ -1152,7 +1152,7 @@ impl UltraRushApp {
             let mut open = true;
             let title = if job.tree.is_some() { t!("ops.tree_title") } else { t!("ops.space_title") };
             egui::Window::new(format!("{title} — {}", job.root))
-                .id(egui::Id::new(("walk", tab.id, job.id)))
+                .id(egui::Id::unique(("walk", tab.id, job.id)))
                 .default_size([520.0, 360.0])
                 .open(&mut open)
                 .show(ctx, |ui| {
@@ -1345,7 +1345,7 @@ impl UltraRushApp {
             }
         }
         let mut open = true;
-        egui::Window::new(t!("ops.find_title")).id(egui::Id::new(("find", tab.id))).default_size([720.0, 520.0]).open(&mut open).show(
+        egui::Window::new(t!("ops.find_title")).id(egui::Id::unique(("find", tab.id))).default_size([720.0, 520.0]).open(&mut open).show(
             ctx,
             |ui| {
                 egui::Grid::new("find-form").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
@@ -1511,7 +1511,7 @@ impl UltraRushApp {
         }
         let mut open = true;
         let (mut remove, mut upload) = (None, None);
-        egui::Window::new(t!("ops.edits_title")).id(egui::Id::new(("edits", tab.id))).default_size([560.0, 240.0]).open(&mut open).show(
+        egui::Window::new(t!("ops.edits_title")).id(egui::Id::unique(("edits", tab.id))).default_size([560.0, 240.0]).open(&mut open).show(
             ctx,
             |ui| {
                 if tab.tools.edits.is_empty() {

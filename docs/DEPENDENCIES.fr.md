@@ -51,15 +51,15 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `base64` | 0.23 | MIT / Apache-2.0 | core | Codage des secrets, imports |
 | `windows-sys` | 0.61 | MIT / Apache-2.0 | sys | API Win32 (fenêtres, mémoire partagée, DPAPI, alimentation, espace disque, presse-papiers, état des touches, zone de notification, sons, heure locale) |
 | `windows` | 0.62 | MIT / Apache-2.0 | sys | Interfaces COM du shell Windows (menu de l'Explorateur des panneaux locaux : `IShellFolder`, `IContextMenu`), absentes de `windows-sys` |
-| `eframe` | 0.36 | MIT / Apache-2.0 | gui | Fenêtre native et rendu pour egui |
-| `egui_extras` | 0.36 | MIT / Apache-2.0 | gui | Tableaux des panneaux de fichiers et de la file |
-| `egui_dock` | 0.21 | MIT | gui | Panneaux réorganisables dans chaque onglet (fonctionnalité `serde` : dispositions enregistrées) |
+| `eframe` | 0.37 | MIT / Apache-2.0 | gui | Fenêtre native et rendu pour egui |
+| `egui_extras` | 0.37 | MIT / Apache-2.0 | gui | Tableaux des panneaux de fichiers et de la file |
+| `egui_dock` | 0.22 | MIT | gui | Panneaux réorganisables dans chaque onglet (fonctionnalité `serde` : dispositions enregistrées) |
 | `rfd` | 0.18 | MIT | gui | Dialogues de fichiers et boîtes de message natifs |
 | `sys-locale` | 0.3 | MIT / Apache-2.0 | i18n | Langue de l'interface de Windows |
 | `rand` | 0.10 | MIT / Apache-2.0 | proto (tests) | Données de test |
 | `rcgen` | 0.14 | MIT / Apache-2.0 | proto (tests) | Certificats de test du serveur FTPS de test |
 | `embed-resource` | 3.0 | MIT | gui, cli, rushmirc (compilation) | Compile et lie les ressources Windows (icône, informations de version, manifeste ; `build/winres.rs`) |
-| `egui_kittest` | 0.36 | MIT / Apache-2.0 | gui (tests) | Tests de l'interface par l'arbre AccessKit (clavier, noms, taille des cibles) ; captures de la documentation dessinées hors écran (`wgpu`) |
+| `egui_kittest` | 0.37 | MIT / Apache-2.0 | gui (tests) | Tests de l'interface par l'arbre AccessKit (clavier, noms, taille des cibles) ; captures de la documentation dessinées hors écran (`wgpu`) |
 
 « / » signifie « ou » (la crate laisse le choix de la licence).
 

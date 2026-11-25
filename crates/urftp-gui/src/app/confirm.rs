@@ -92,7 +92,7 @@ impl UltraRushApp {
             ),
         };
         let mut answer = None;
-        egui::Modal::new(egui::Id::new("confirm")).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique("confirm")).show(ctx, |ui| {
             ui.set_max_width(460.0);
             ui.heading(title);
             ui.add_space(6.0);
