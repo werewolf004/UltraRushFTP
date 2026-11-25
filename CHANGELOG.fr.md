@@ -10,6 +10,10 @@ la traduction.
 
 ## [Non publié]
 
+## [0.16.0] - 2026-11-25
+
+Recherche des mises à jour sur GitHub, egui 0.37, et toutes les dépendances mises à jour.
+
 ### Ajouté
 
 - **Recherche des mises à jour** (*Options › Général*, activée par défaut) : une minute
@@ -633,7 +637,8 @@ réels.
 - Alerte connue acceptée : `RUSTSEC-2023-0071` dans `rsa` (utilisée pour les clés SSH
   RSA) ; voir [SECURITY.fr.md](SECURITY.fr.md).
 
-[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.15.1...HEAD
+[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/werewolf004/UltraRushFTP/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.0...v0.14.1
