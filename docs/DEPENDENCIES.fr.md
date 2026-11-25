@@ -47,7 +47,7 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `flate2` | 1.1 | MIT / Apache-2.0 | proto | `MODE Z` (compression zlib du canal de données), moteur en Rust pur |
 | `socket2` | 0.6 | MIT / Apache-2.0 | proto | Taille des tampons des connexions de données |
 | `crc32fast` | 1.5 | MIT / Apache-2.0 | core ; proto, gui (tests) | CRC32 des fichiers SFV et des vérifications |
-| `md-5` | 0.10 | MIT / Apache-2.0 | core | MD5 des fichiers `.md5` |
+| `md-5` | 0.11 | MIT / Apache-2.0 | core | MD5 des fichiers `.md5` |
 | `thiserror` | 2.0 | MIT / Apache-2.0 | core, proto, script, sys, cli, gui | Erreurs typées |
 | `parking_lot` | 0.12 | MIT / Apache-2.0 | proto, cli, gui | Verrous sans empoisonnement (pas d'`unwrap` sur les verrous) |
 | `serde` | 1.0 | MIT / Apache-2.0 | core, gui | Sérialisation des sites et des options |
@@ -60,7 +60,7 @@ générée par `scripts/generate-dependencies.ps1` dans
 | `eframe` | 0.36 | MIT / Apache-2.0 | gui | Fenêtre native et rendu pour egui |
 | `egui_extras` | 0.36 | MIT / Apache-2.0 | gui | Tableaux des panneaux de fichiers et de la file |
 | `egui_dock` | 0.21 | MIT | gui | Panneaux réorganisables dans chaque onglet (fonctionnalité `serde` : dispositions enregistrées) |
-| `rfd` | 0.17 | MIT | gui | Dialogues de fichiers et boîtes de message natifs |
+| `rfd` | 0.18 | MIT | gui | Dialogues de fichiers et boîtes de message natifs |
 | `sys-locale` | 0.3 | MIT / Apache-2.0 | i18n | Langue de l'interface de Windows |
 | `rand` | 0.10 | MIT / Apache-2.0 | proto (tests) | Données de test |
 | `rcgen` | 0.14 | MIT / Apache-2.0 | proto (tests) | Certificats de test du serveur FTPS de test |
