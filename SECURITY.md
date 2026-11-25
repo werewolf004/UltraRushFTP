@@ -4,11 +4,10 @@
 
 ## Reporting a vulnerability
 
-The repository is private, so its issues are only visible to its collaborators. Open an
-issue labelled `security` (or contact the owner, `werewolf004`, directly) with the version,
-the steps to reproduce and the impact you observed; never paste real passwords, keys or
-server addresses. If the repository becomes public, GitHub private vulnerability reporting
-will be enabled and must be used instead.
+Do not open a public issue. Use GitHub private vulnerability reporting
+(*Security › Report a vulnerability* on the repository) with the version, the steps to
+reproduce and the impact you observed; never paste real passwords, keys or server
+addresses. GitHub secret scanning and push protection are enabled on the repository.
 You will get an answer within 7 days; fixes are released as a patch version and listed in
 the *Security* section of the [changelog](CHANGELOG.md).
 

@@ -4,12 +4,11 @@
 
 ## Signaler une vulnérabilité
 
-Le dépôt est privé : ses tickets ne sont visibles que par ses collaborateurs. Ouvrir un
-ticket avec l'étiquette `security` (ou contacter directement le propriétaire,
-`werewolf004`) en indiquant la version, les étapes pour reproduire et l'impact constaté ;
-ne jamais y coller de vrais mots de passe, clés ou adresses de serveurs. Si le dépôt
-devient public, le signalement privé de vulnérabilités de GitHub sera activé et devra être
-utilisé à la place.
+Ne pas ouvrir de ticket public. Utiliser le signalement privé de vulnérabilités de GitHub
+(*Security › Report a vulnerability* sur le dépôt) en indiquant la version, les étapes pour
+reproduire et l'impact constaté ; ne jamais y coller de vrais mots de passe, clés ou
+adresses de serveurs. Le scan des secrets et la protection au push de GitHub sont activés
+sur le dépôt.
 Une réponse est donnée sous 7 jours ; les correctifs sont publiés dans une version
 corrective et listés dans la section *Sécurité* du
 [journal des changements](CHANGELOG.fr.md).
