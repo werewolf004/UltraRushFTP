@@ -20,7 +20,9 @@ GitHub release with the same tag.
 
 - `url` 2.5.9 (RUSTSEC-2026-0592, stack overflow on nested `blob:` URLs; pulled by egui
   to open links). `russh-sftp` 4 replaces `chrono`, reported unmaintained
-  (RUSTSEC-2026-0543), with `jiff`. Dependency updates: `regex` 1.13.2, `russh` 0.65.4, `rand` 0.10.4, `cargo-deny-action` 2.1.3.
+  (RUSTSEC-2026-0543), with `jiff`. The `rsa` crate used by `russh` (0.10) is no longer
+  affected by the Marvin timing attack (RUSTSEC-2023-0071): its exception is removed.
+  Dependency updates: `regex` 1.13.2, `russh` 0.65.4, `rand` 0.10.4, `cargo-deny-action` 2.1.3.
 
 ## [0.15.1] - 2026-11-17
 

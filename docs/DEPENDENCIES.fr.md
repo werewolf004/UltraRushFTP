@@ -20,10 +20,6 @@ générée par `scripts/generate-dependencies.ps1` dans
   documentées dans `deny.toml` :
   - `RUSTSEC-2024-0436` — `paste` n'est plus maintenue ; macro de compilation d'`egui_dock`,
     aucun code à l'exécution.
-  - `RUSTSEC-2023-0071` — `rsa` (attaque temporelle « Marvin »), utilisée par `russh` pour
-    les clés SSH RSA ; aucune version corrigée n'existe. Seule la signature avec une clé RSA
-    locale est concernée ; les clés ed25519 et ECDSA ne le sont pas. Conservée par décision
-    du 2026-11-05 ; préférer les clés ed25519.
 - **Sources** : crates.io uniquement (ni git ni autre registre).
 - **Versions** : `Cargo.lock` est versionné et les compilations utilisent `--locked` ;
   Dependabot propose les mises à jour chaque semaine.

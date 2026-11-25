@@ -80,9 +80,6 @@ corrective et listés dans la section *Sécurité* du
 
 ## Limites connues
 
-- `RUSTSEC-2023-0071` (`rsa`, attaque temporelle « Marvin ») : aucune version corrigée
-  n'existe. Elle concerne la signature avec une clé SSH **RSA** ; les clés ed25519 et
-  ECDSA ne sont pas concernées. Préférer une clé ed25519 pour SFTP.
 - Les binaires ne sont pas signés (aucun certificat n'est prévu) : vérifier le fichier
   `.sha256` publié avec chaque version.
 - Pas encore audité par un tiers, ni validé sur des serveurs réels.

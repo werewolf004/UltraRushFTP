@@ -15,11 +15,6 @@ ignore = [
     # `paste` (compile-time macro, pulled by egui_dock): unmaintained, no runtime code.
     # Revisit when egui_dock drops it.
     { id = "RUSTSEC-2024-0436", reason = "build-time proc-macro of egui_dock, no runtime exposure" },
-    # `rsa` (via russh, feature "rsa"): Marvin timing side channel, no patched version.
-    # Only used to sign with a local RSA SSH key; ed25519/ECDSA keys are not affected.
-    # Decision (2026-11-05): keep RSA key support, many users still have RSA keys.
-    # Recommend ed25519 keys in the documentation; drop the exception once rsa is fixed.
-    { id = "RUSTSEC-2023-0071", reason = "no fix upstream; RSA SSH client keys only; kept by decision of 2026-11-05" },
 ]
 
 [licenses]

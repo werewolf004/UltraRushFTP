@@ -22,7 +22,9 @@ la traduction.
 
 - `url` 2.5.9 (RUSTSEC-2026-0592, débordement de pile sur des URL `blob:` imbriquées ;
   utilisée par egui pour ouvrir les liens). `russh-sftp` 4 remplace `chrono`, signalée
-  comme non maintenue (RUSTSEC-2026-0543), par `jiff`. Mises à jour : `regex` 1.13.2, `russh` 0.65.4, `rand` 0.10.4, `cargo-deny-action` 2.1.3.
+  comme non maintenue (RUSTSEC-2026-0543), par `jiff`. La crate `rsa` utilisée par
+  `russh` (0.10) n'est plus concernée par l'attaque temporelle « Marvin »
+  (RUSTSEC-2023-0071) : son exception est retirée. Mises à jour : `regex` 1.13.2, `russh` 0.65.4, `rand` 0.10.4, `cargo-deny-action` 2.1.3.
 
 ## [0.15.1] - 2026-11-17
 
