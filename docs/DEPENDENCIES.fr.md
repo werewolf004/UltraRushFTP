@@ -24,6 +24,8 @@ générée par `scripts/generate-dependencies.ps1` dans
     les clés SSH RSA ; aucune version corrigée n'existe. Seule la signature avec une clé RSA
     locale est concernée ; les clés ed25519 et ECDSA ne le sont pas. Conservée par décision
     du 2026-11-05 ; préférer les clés ed25519.
+  - `RUSTSEC-2026-0543` — `chrono` n'est plus maintenue (aucune faille connue), utilisée par
+    `russh-sftp` pour les dates des listes SFTP ; aucune version de remplacement.
 - **Sources** : crates.io uniquement (ni git ni autre registre).
 - **Versions** : `Cargo.lock` est versionné et les compilations utilisent `--locked` ;
   Dependabot propose les mises à jour chaque semaine.

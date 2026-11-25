@@ -58,7 +58,7 @@ Total: 400 — runtime (normal dependencies, Windows x64 / dépendances normales
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 | runtime |
 | crc32fast | 1.5.5 | MIT OR Apache-2.0 | runtime |
 | crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 | runtime |
-| crypto-bigint | 0.7.10 | Apache-2.0 OR MIT | runtime |
+| crypto-bigint | 0.7.11 | Apache-2.0 OR MIT | runtime |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 | runtime |
 | crypto-common | 0.2.2 | MIT OR Apache-2.0 | runtime |
 | crypto-primes | 0.7.2 | Apache-2.0 OR MIT | runtime |
@@ -115,7 +115,7 @@ Total: 400 — runtime (normal dependencies, Windows x64 / dépendances normales
 | flate2 | 1.1.11 | MIT OR Apache-2.0 | runtime |
 | foldhash | 0.2.0 | Zlib | runtime |
 | font-types | 0.12.7 | MIT OR Apache-2.0 | runtime |
-| form_urlencoded | 1.2.2 | MIT OR Apache-2.0 | runtime |
+| form_urlencoded | 1.2.3 | MIT OR Apache-2.0 | runtime |
 | futures | 0.3.34 | MIT OR Apache-2.0 | runtime |
 | futures-channel | 0.3.34 | MIT OR Apache-2.0 | runtime |
 | futures-core | 0.3.34 | MIT OR Apache-2.0 | runtime |
@@ -229,7 +229,7 @@ Total: 400 — runtime (normal dependencies, Windows x64 / dépendances normales
 | phf_macros | 0.11.3 | MIT | build/test |
 | phf_shared | 0.11.3 | MIT | build/test |
 | pin-project-lite | 0.2.17 | Apache-2.0 OR MIT | runtime |
-| pkcs1 | 0.8.0-rc.4 | Apache-2.0 OR MIT | runtime |
+| pkcs1 | 0.8.0 | Apache-2.0 OR MIT | runtime |
 | pkcs5 | 0.8.1 | Apache-2.0 OR MIT | runtime |
 | pkcs8 | 0.11.0 | Apache-2.0 OR MIT | runtime |
 | pkg-config | 0.3.34 | MIT OR Apache-2.0 | build/test |
@@ -249,7 +249,7 @@ Total: 400 — runtime (normal dependencies, Windows x64 / dépendances normales
 | pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 | runtime |
 | quick-error | 2.0.1 | MIT/Apache-2.0 | runtime |
 | quote | 1.0.47 | MIT OR Apache-2.0 | runtime |
-| rand | 0.10.3 | MIT OR Apache-2.0 | runtime |
+| rand | 0.10.4 | MIT OR Apache-2.0 | runtime |
 | rand | 0.8.8 | MIT OR Apache-2.0 | build/test |
 | rand_core | 0.10.1 | MIT OR Apache-2.0 | runtime |
 | rand_core | 0.6.4 | MIT OR Apache-2.0 | build/test |
@@ -257,16 +257,16 @@ Total: 400 — runtime (normal dependencies, Windows x64 / dépendances normales
 | raw-window-handle | 0.6.2 | MIT OR Apache-2.0 OR Zlib | runtime |
 | rcgen | 0.14.10 | MIT OR Apache-2.0 | build/test |
 | read-fonts | 0.41.0 | MIT OR Apache-2.0 | runtime |
-| regex | 1.13.1 | MIT OR Apache-2.0 | runtime |
-| regex-automata | 0.4.18 | MIT OR Apache-2.0 | runtime |
-| regex-syntax | 0.8.11 | MIT OR Apache-2.0 | runtime |
+| regex | 1.13.2 | MIT OR Apache-2.0 | runtime |
+| regex-automata | 0.4.19 | MIT OR Apache-2.0 | runtime |
+| regex-syntax | 0.8.12 | MIT OR Apache-2.0 | runtime |
 | renderdoc-sys | 1.1.0 | MIT OR Apache-2.0 | runtime |
 | rfc6979 | 0.6.0 | Apache-2.0 OR MIT | runtime |
 | rfd | 0.17.2 | MIT | runtime |
 | ring | 0.17.14 | Apache-2.0 AND ISC | runtime |
 | roxmltree | 0.21.2 | MIT OR Apache-2.0 | runtime |
-| rsa | 0.10.0-rc.18 | MIT OR Apache-2.0 | runtime |
-| russh | 0.65.1 | Apache-2.0 | runtime |
+| rsa | 0.10.0 | MIT OR Apache-2.0 | runtime |
+| russh | 0.65.2 | Apache-2.0 | runtime |
 | russh-cryptovec | 0.62.0 | Apache-2.0 | runtime |
 | russh-sftp | 3.0.1 | Apache-2.0 | runtime |
 | russh-util | 0.52.0 | Apache-2.0 | runtime |
@@ -312,7 +312,7 @@ Total: 400 — runtime (normal dependencies, Windows x64 / dépendances normales
 | sponge-cursor | 0.1.0 | MIT OR Apache-2.0 | runtime |
 | ssh-cipher | 0.3.0 | Apache-2.0 OR MIT | runtime |
 | ssh-encoding | 0.3.0 | Apache-2.0 OR MIT | runtime |
-| ssh-key | 0.7.0-rc.11 | Apache-2.0 OR MIT | runtime |
+| ssh-key | 0.7.0-rc.12 | Apache-2.0 OR MIT | runtime |
 | stable_deref_trait | 1.2.1 | MIT OR Apache-2.0 | runtime |
 | static_assertions | 1.1.0 | MIT OR Apache-2.0 | runtime |
 | subtle | 2.6.1 | BSD-3-Clause | runtime |
@@ -349,7 +349,7 @@ Total: 400 — runtime (normal dependencies, Windows x64 / dépendances normales
 | unicode-width | 0.2.3 | MIT OR Apache-2.0 | runtime |
 | universal-hash | 0.6.1 | MIT OR Apache-2.0 | runtime |
 | untrusted | 0.9.0 | ISC | runtime |
-| url | 2.5.8 | MIT OR Apache-2.0 | runtime |
+| url | 2.5.9 | MIT OR Apache-2.0 | runtime |
 | utf_types | 1.0.0 | Apache-2.0 OR MIT | runtime |
 | utf8_iter | 1.1.0 | Apache-2.0 OR MIT | runtime |
 | uuid | 1.29.0 | Apache-2.0 OR MIT | runtime |

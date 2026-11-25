@@ -10,6 +10,13 @@ la traduction.
 
 ## [Non publié]
 
+### Sécurité
+
+- `url` 2.5.9 (RUSTSEC-2026-0592, débordement de pile sur des URL `blob:` imbriquées ;
+  utilisée par egui pour ouvrir les liens). `chrono` (via `russh-sftp`) est signalée comme
+  non maintenue (RUSTSEC-2026-0543) : acceptée dans `deny.toml`, aucune faille connue.
+  Mises à jour : `regex` 1.13.2, `russh` 0.65.2, `rand` 0.10.4, `cargo-deny-action` 2.1.2.
+
 ## [0.15.1] - 2026-11-17
 
 Pack de rendu logiciel optionnel pour les Windows sans Direct3D 12 (Windows Server 2016
