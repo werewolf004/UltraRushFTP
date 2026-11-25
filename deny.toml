@@ -20,9 +20,6 @@ ignore = [
     # Decision (2026-11-05): keep RSA key support, many users still have RSA keys.
     # Recommend ed25519 keys in the documentation; drop the exception once rsa is fixed.
     { id = "RUSTSEC-2023-0071", reason = "no fix upstream; RSA SSH client keys only; kept by decision of 2026-11-05" },
-    # `chrono` (via russh-sftp, file dates of SFTP listings): unmaintained, no replacement
-    # version and no known vulnerability. Drop the exception when russh-sftp moves away.
-    { id = "RUSTSEC-2026-0543", reason = "unmaintained only; pulled by russh-sftp, no alternative version" },
 ]
 
 [licenses]

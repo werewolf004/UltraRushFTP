@@ -8,7 +8,7 @@ use std::time::Duration;
 use russh::keys::{Algorithm, HashAlg, PrivateKey, PublicKey};
 use russh::server::{Auth, ChannelOpenHandle, Msg, Session, VerifiedPublicKey};
 use russh::{Channel, ChannelId};
-use russh_sftp::protocol::{Attrs, Data, File, FileAttributes, Handle, Name, OpenFlags, Status, StatusCode, Version};
+use russh_sftp::protocol::{Attrs, Data, File, FileAttributes, Handle, Name, OpenFlags, SftpHandle, Status, StatusCode, Version};
 use tokio::net::TcpListener;
 
 #[derive(Default)]
@@ -245,10 +245,11 @@ impl russh_sftp::server::Handler for SftpHandler {
         if !self.fs.lock().unwrap().dirs.contains(&p) {
             return Err(StatusCode::NoSuchFile);
         }
-        Ok(Handle { id, handle: self.handle(OpenItem::Dir { path: p, done: false }) })
+        Ok(Handle { id, handle: self.handle(OpenItem::Dir { path: p, done: false }).into() })
     }
 
-    async fn readdir(&mut self, id: u32, handle: String) -> Result<Name, Self::Error> {
+    async fn readdir(&mut self, id: u32, handle: SftpHandle) -> Result<Name, Self::Error> {
+        let handle = key(&handle);
         let Some(OpenItem::Dir { path, done }) = self.handles.get_mut(&handle) else {
             return Err(StatusCode::Failure);
         };
@@ -283,10 +284,11 @@ impl russh_sftp::server::Handler for SftpHandler {
                 f.clear();
             }
         }
-        Ok(Handle { id, handle: self.handle(OpenItem::File { path: p }) })
+        Ok(Handle { id, handle: self.handle(OpenItem::File { path: p }).into() })
     }
 
-    async fn read(&mut self, id: u32, handle: String, offset: u64, len: u32) -> Result<Data, Self::Error> {
+    async fn read(&mut self, id: u32, handle: SftpHandle, offset: u64, len: u32) -> Result<Data, Self::Error> {
+        let handle = key(&handle);
         let Some(OpenItem::File { path }) = self.handles.get(&handle) else {
             return Err(StatusCode::Failure);
         };
@@ -300,7 +302,8 @@ impl russh_sftp::server::Handler for SftpHandler {
         Ok(Data { id, data: content[start..end].to_vec() })
     }
 
-    async fn write(&mut self, id: u32, handle: String, offset: u64, data: Vec<u8>) -> Result<Status, Self::Error> {
+    async fn write(&mut self, id: u32, handle: SftpHandle, offset: u64, data: Vec<u8>) -> Result<Status, Self::Error> {
+        let handle = key(&handle);
         let Some(OpenItem::File { path }) = self.handles.get(&handle) else {
             return Err(StatusCode::Failure);
         };
@@ -314,7 +317,8 @@ impl russh_sftp::server::Handler for SftpHandler {
         Ok(ok(id))
     }
 
-    async fn fstat(&mut self, id: u32, handle: String) -> Result<Attrs, Self::Error> {
+    async fn fstat(&mut self, id: u32, handle: SftpHandle) -> Result<Attrs, Self::Error> {
+        let handle = key(&handle);
         match self.handles.get(&handle) {
             Some(OpenItem::File { path }) => {
                 let n = self.fs.lock().unwrap().files.get(path).map_or(0, Vec::len);
@@ -325,7 +329,8 @@ impl russh_sftp::server::Handler for SftpHandler {
         }
     }
 
-    async fn close(&mut self, id: u32, handle: String) -> Result<Status, Self::Error> {
+    async fn close(&mut self, id: u32, handle: SftpHandle) -> Result<Status, Self::Error> {
+        let handle = key(&handle);
         self.handles.remove(&handle);
         Ok(ok(id))
     }
@@ -366,4 +371,9 @@ impl russh_sftp::server::Handler for SftpHandler {
         fs.files.insert(to, content);
         Ok(ok(id))
     }
+}
+
+/// Key of an open handle in the table (the handles made by `handle` are text).
+fn key(handle: &SftpHandle) -> String {
+    String::from_utf8_lossy(handle.as_bytes()).into_owned()
 }
