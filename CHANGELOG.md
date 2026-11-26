@@ -9,6 +9,14 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+### Changed
+
+- New application icon: a dark folder with an upload and a download arrow on a blue
+  rounded square, with a simpler drawing at 16 and 24 px. Drawn in code
+  (`crates/urftp-gui/src/icon/art.rs`); `assets/UltraRushFTP.ico` (executables,
+  installer, notification area) is written from it by
+  `cargo run -p urftp-gui --example write_icon`, and a test checks it is up to date.
+
 ## [0.16.0] - 2026-11-25
 
 Update check on GitHub, egui 0.37, and every dependency brought up to date.

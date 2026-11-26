@@ -5,6 +5,7 @@
 mod app;
 mod browser;
 mod cmdline;
+mod icon;
 mod options;
 mod render;
 mod sites;
@@ -63,10 +64,8 @@ fn run() -> Result<(), StartupError> {
 
     let mut viewport =
         egui::ViewportBuilder::default().with_title("UltraRushFTP").with_inner_size([1320.0, 820.0]).with_min_inner_size([900.0, 560.0]);
-    // Title bar and taskbar icon; the system's default one if the image cannot be read.
-    if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon-256.png")) {
-        viewport = viewport.with_icon(icon);
-    }
+    // Title bar and taskbar icon, drawn in code (`icon`).
+    viewport = viewport.with_icon(icon::window_icon());
     let options = eframe::NativeOptions { viewport, wgpu_options: render::wgpu_options(), ..Default::default() };
     eframe::run_native(
         "UltraRushFTP",

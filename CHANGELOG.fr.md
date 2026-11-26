@@ -10,6 +10,14 @@ la traduction.
 
 ## [Non publié]
 
+### Modifié
+
+- Nouvelle icône : un dossier sombre avec une flèche d'envoi et une de réception sur un
+  carré arrondi bleu, avec un dessin simplifié en 16 et 24 px. Dessinée par le code
+  (`crates/urftp-gui/src/icon/art.rs`) ; `assets/UltraRushFTP.ico` (exécutables,
+  installateur, zone de notification) en est généré par
+  `cargo run -p urftp-gui --example write_icon`, et un test vérifie qu'il est à jour.
+
 ## [0.16.0] - 2026-11-25
 
 Recherche des mises à jour sur GitHub, egui 0.37, et toutes les dépendances mises à jour.
