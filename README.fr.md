@@ -9,7 +9,7 @@ DLL compatible avec la `rushmirc.dll` de FTPRush.
 
 ![Fenêtre principale](docs/images/main.fr.png)
 
-> **État — 0.16.0 (pré-version).** Le moteur (FTP, FTPS, SFTP, FXP, proxys, Ident, file
+> **État — 0.16.1 (pré-version).** Le moteur (FTP, FTPS, SFTP, FXP, proxys, Ident, file
 > d'attente), l'interface à onglets, le gestionnaire de sites, les options, les scripts
 > Pascal, la liaison mIRC et la ligne de commande sont en place et couverts par des tests
 > automatiques contre des serveurs de test locaux. Ils ont été vérifiés sur **glftpd** ;

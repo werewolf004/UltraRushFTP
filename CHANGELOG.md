@@ -9,6 +9,10 @@ GitHub release with the same tag.
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-26
+
+New application icon.
+
 ### Changed
 
 - New application icon: a dark folder with an upload and a download arrow on a blue
@@ -592,7 +596,8 @@ link and command line. Not yet validated against real-world servers.
 - Known advisory accepted: `RUSTSEC-2023-0071` in `rsa` (used for SSH RSA keys); see
   [SECURITY.md](SECURITY.md).
 
-[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/werewolf004/UltraRushFTP/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/werewolf004/UltraRushFTP/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/werewolf004/UltraRushFTP/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.1...v0.15.0

@@ -10,6 +10,10 @@ la traduction.
 
 ## [Non publié]
 
+## [0.16.1] - 2026-11-26
+
+Nouvelle icône de l'application.
+
 ### Modifié
 
 - Nouvelle icône : un dossier sombre avec une flèche d'envoi et une de réception sur un
@@ -645,7 +649,8 @@ réels.
 - Alerte connue acceptée : `RUSTSEC-2023-0071` dans `rsa` (utilisée pour les clés SSH
   RSA) ; voir [SECURITY.fr.md](SECURITY.fr.md).
 
-[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.16.0...HEAD
+[Non publié]: https://github.com/werewolf004/UltraRushFTP/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/werewolf004/UltraRushFTP/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/werewolf004/UltraRushFTP/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/werewolf004/UltraRushFTP/compare/v0.14.1...v0.15.0
